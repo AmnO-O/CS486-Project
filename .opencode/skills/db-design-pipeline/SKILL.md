@@ -14,7 +14,7 @@ Use this skill when the user asks to transform business requirements into a data
 Before assuming anything, inspect the project:
 
 1. Run `ls -la`.
-2. Locate requirement files under `req/`, `docs/`, or files passed by the user.
+2. Locate requirement files under `req/`, `outputs/`, or files passed by the user.
 3. Read the relevant requirement files fully before designing.
 4. If the requirement is incomplete, continue with explicit assumptions, but also create an unresolved questions section.
 
@@ -22,8 +22,8 @@ Before assuming anything, inspect the project:
 
 Create or update the following files:
 
-1. `docs/01-business-requirement-analysis.md`
-2. `docs/02-conceptual-design-erd.md`
+1. `outputs/01-business-requirement-analysis.md`
+2. `outputs/02-conceptual-design-erd.md`
 
 Do not skip any Markdown file.
 
@@ -33,7 +33,7 @@ Do not skip any Markdown file.
 
 Save to:
 
-`docs/01-business-requirement-analysis.md`
+`outputs/01-business-requirement-analysis.md`
 
 The document must include:
 
@@ -47,7 +47,7 @@ The ERD should be based on the document from the prior step: Step 1: Business Re
 
 Save to:
 
-`docs/02-conceptual-design-erd.md`
+`outputs/02-conceptual-design-erd.md`
 
 The document must include:
 
