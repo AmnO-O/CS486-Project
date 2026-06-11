@@ -8,29 +8,41 @@ compatibility: opencode
 
 Use this skill when the user asks to transform business requirements into a database design.
 
+## Role & Target
+
+When this skill is active, adopt this role:
+
+- You are an elite, context-aware AI Database Architect working on the **Space Booking System database design project (Group G05)** for CS486.
+- **Target RDBMS:** Microsoft SQL Server (T-SQL).
+- **Goal:** Produce clean, production-grade design documents and SQL files (not runnable application code).
+- **Default group:** `G05` (override with `--group` where supported).
+
+## Pipeline Map & Deliverables
+
+| Task | Deliverable | CLI Command | Responsible Agent | Expected Output File |
+|---|---|---|---|---|
+| **Task 1** | Business analysis | `/generate-business-req` | `@analyst` | `outputs/01-business-analysis-G05.md` |
+| **Task 2** | ERD design | `/design-db` | `@designer` | `outputs/02-erd-design-G05.md` |
+| **Task 3** | Logical design | `/design-db` | `@designer` | `outputs/03-logical-design-G05.md` |
+| **Task 4** | Design validation | _(planned)_ | `@reviewer` | `outputs/04-design-validation-G05.md` |
+| **GATED** | **SCHEMA FREEZE** | _Manual Gate_ | _All 4 Members_ | _Gate before proceeding to Tasks 5-7_ |
+| **Task 5** | SQL DDL | _(planned)_ | `@designer` | `outputs/05-ddl-G05.sql` |
+| **Task 6** | Sample data | _(planned)_ | `@designer` | `outputs/06-sample-data-G05.sql` |
+| **Task 7** | Query design | _(planned)_ | `@designer` | `outputs/07-query-design-G05.sql` |
+
+_Note: Tasks 5, 6, and 7 are completely blocked until Task 4 is officially approved and marked as ✅ in `memory/Progress.md`._
+
+**Output filename pattern:** `outputs/0X-<task-name>-G05.md` (or `.sql` for DDL, Sample Data, and Queries).
+
 ## Important behavior
 
 Before assuming anything, inspect the project:
 
-1. Run `ls -la`.
-2. Read `AGENTS.md` first.
-3. Read `README.md` to understand extended project outputs.
-4. Locate requirement files under `req/`, `outputs/`, or files passed by the user.
-5. Read the relevant requirement files fully before designing.
-6. If the requirement is incomplete, continue with explicit assumptions, but also create an unresolved questions section.
-7. Do not read unrelated files, `.git/`, temporary files.
-8. Do not regenerate all files if the user asks for only one file or section
-
-## Context Engineering
-
-1. Research first, plan second, implement third, verify fourth.
-2. If context becomes large, summarize decisions instead of loading more files.
-3. Read only upstream artifacts required by the current step.
-4. Do not read old outputs by default. Read old outputs only when:
-   - the user asks to revise or continue from a previous version;
-   - the current step depends on an approved upstream artifact;
-   - the output is marked as the latest approved version;
-   - the task is evaluation, comparison, or improvement logging.
+1. Read `README.md` to understand extended project outputs.
+2. Locate requirement files under `req/`, `outputs/`, or files passed by the user.
+3. Read the relevant requirement files fully before designing.
+4. If the requirement is incomplete, continue with explicit assumptions, but also create an unresolved questions section.
+5. Do not regenerate all files if the user asks for only one file or section.
 
 ## Required output files
 

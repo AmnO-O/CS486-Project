@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DATE=$(date +%Y-%m-%d)
+
+# Parse flags
+TASK_ID=""
+AGENT_NAME=""
+OUTPUT=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --task) TASK_ID="$2"; shift 2 ;;
+    --agent) AGENT_NAME="$2"; shift 2 ;;
+    --output) OUTPUT="$2"; shift 2 ;;
+    *)
+      echo "Usage: outputs-evaluation --task <id> --agent <name> [--output <path>]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Validate
+if [ -z "$TASK_ID" ] || [ -z "$AGENT_NAME" ]; then
+  echo "Usage: outputs-evaluation --task <id> --agent <name> [--output <path>]" >&2
+  exit 1
+fi
+
+# Map task ID to canonical task name
+case "$TASK_ID" in
+  01) TASK="01-business-req-analysis" ;;
+  02) TASK="02-technical-design" ;;
+  *)
+    echo "Unknown task id: $TASK_ID (supported: 01, 02)" >&2
+    exit 1
+    ;;
+esac
+
+# Default draft path
+if [ -z "$OUTPUT" ]; then
+  OUTPUT="outputs/${TASK}-draft.md"
+fi
+
+LOG_DIR="logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/${DATE}-${TASK}-${AGENT_NAME}-evaluation.log"
+
+# Write header
+exec > >(tee "$LOG_FILE") 2>&1
+
+echo "============================================"
+echo " outputs-evaluation"
+echo "============================================"
+echo " Task:   $TASK"
+echo " Agent:  $AGENT_NAME"
+echo " Date:   $DATE"
+echo " Draft:  $OUTPUT"
+echo " Log:    $LOG_FILE"
+echo "============================================"
+echo ""
+
+# Validate draft exists
+if [ ! -f "$OUTPUT" ]; then
+  echo "ERROR: Output file not found: $OUTPUT"
+  exit 1
+fi
+
+# Locate existing baseline(s) for the same task
+BASELINES=()
+while IFS= read -r f; do
+  BASELINES+=("$f")
+done < <(find outputs/ -maxdepth 1 -name "${TASK}*" ! -name "*-draft*" 2>/dev/null | sort)
+
+echo "--- Draft review ---"
+echo "Evaluating: $OUTPUT"
+wc -l "$OUTPUT"
+echo ""
+
+if [ ${#BASELINES[@]} -gt 0 ]; then
+  echo "--- Baseline comparison ---"
+  for bl in "${BASELINES[@]}"; do
+    echo "Comparing with: $bl"
+    if command -v git &>/dev/null && git rev-parse --git-dir &>/dev/null; then
+      git diff --no-index --stat "$bl" "$OUTPUT" 2>/dev/null || true
+    else
+      diffstat "$bl" "$OUTPUT" 2>/dev/null || diff -q "$bl" "$OUTPUT" 2>/dev/null || true
+    fi
+    echo ""
+  done
+else
+  echo "--- Baseline ---"
+  echo "(no existing baseline found — this is a first draft)"
+  echo ""
+fi
+
+echo "--- Section inventory (draft) ---"
+grep -n '^## ' "$OUTPUT" || echo "(no ## sections)"
+echo ""
+
+echo "--- Validation checks ---"
+ERRORS=0
+
+# Check minimum actors
+ACTOR_COUNT=$(grep -cP '^\| *\w+' "$OUTPUT" 2>/dev/null || true)
+if [ "$ACTOR_COUNT" -lt 1 ]; then
+  echo "  FAIL: Expected at least 1 actor."
+  ERRORS=$((ERRORS + 1))
+else
+  echo "  PASS: Actor entries found."
+fi
+
+# Check minimum entities
+ENTITY_COUNT=$(grep -cP '^\| *[A-Z]\w+' "$OUTPUT" 2>/dev/null || true)
+if [ "$ENTITY_COUNT" -lt 3 ]; then
+  echo "  FAIL: Expected at least 3 entities."
+  ERRORS=$((ERRORS + 1))
+else
+  echo "  PASS: Entities found."
+fi
+
+# Check business rules
+if grep -qP '^\d+\.\s' "$OUTPUT" 2>/dev/null; then
+  echo "  PASS: Business rules found."
+else
+  echo "  FAIL: No numbered business rules."
+  ERRORS=$((ERRORS + 1))
+fi
+
+echo ""
+echo "--- Summary ---"
+echo " Errors: $ERRORS"
+echo " Status: $([ "$ERRORS" -eq 0 ] && echo 'PASS' || echo 'FAIL')"
+echo ""
+echo "============================================"
+echo " Evaluation complete. Log written to: $LOG_FILE"
+echo "============================================"
+
+exit "$ERRORS"

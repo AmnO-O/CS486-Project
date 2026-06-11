@@ -6,4 +6,6 @@ node_modules/
 pipeline.docx
 pipeline.pdf
 .opencode/commands/run-evaluation.md
-.opencode/evaluations/rubric.md
+.opencode/skills/evaluations/rubric.md
+.claude/
+untrack
