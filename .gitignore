@@ -4,3 +4,6 @@ node_modules/
 .opencode/.gitignore
 **/.DS_Store
 pipeline.docx
+pipeline.pdf
+.opencode/commands/run-evaluation.md
+.opencode/evaluations/rubric.md
