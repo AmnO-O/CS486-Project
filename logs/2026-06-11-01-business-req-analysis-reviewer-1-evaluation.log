@@ -1,0 +1,39 @@
+============================================
+ outputs-evaluation
+============================================
+ Task:   01-business-req-analysis
+ Agent:  reviewer-1
+ Date:   2026-06-11
+ Draft:  outputs/01-business-req-analysis-draft.md
+ Log:    logs/2026-06-11-01-business-req-analysis-reviewer-1-evaluation.log
+============================================
+
+--- Draft review ---
+Evaluating: outputs/01-business-req-analysis-draft.md
+92 outputs/01-business-req-analysis-draft.md
+
+--- Baseline comparison ---
+Comparing with: outputs/01-business-req-analysis-G05.md
+
+--- Section inventory (draft) ---
+3:## Purpose
+7:## Actors
+18:## Entities
+31:## Relationships
+46:## Business Rules
+57:## Assumptions
+67:## Open Questions
+77:## Suggested Table Mapping
+
+--- Validation checks ---
+  PASS: Actor entries found.
+  PASS: Entities found.
+  PASS: Business rules found.
+
+--- Summary ---
+ Errors: 0
+ Status: PASS
+
+============================================
+ Evaluation complete. Log written to: logs/2026-06-11-01-business-req-analysis-reviewer-1-evaluation.log
+============================================

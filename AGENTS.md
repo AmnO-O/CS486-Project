@@ -37,3 +37,12 @@ Use Microsoft SQL Server unless the user specifies another DBMS.
 - Preserve traceability from requirement → entity → relationship → table → constraint.
 - Use Mermaid `erDiagram` for ERD.
 - Do not silently invent business rules.
+
+## Custom Commands
+
+- `outputs-evaluation` — Critique loop that compares a draft output against existing baseline(s), runs validation checks, and writes an evaluation log to `logs/`:
+  ```bash
+  ./outputs-evaluation --task 01 --agent reviewer-1
+  ./outputs-evaluation --task 01 --agent reviewer-1 --output outputs/01-business-req-analysis-draft.md
+  ```
+  Supported tasks: `01` (01-business-req-analysis), `02` (02-technical-design).
