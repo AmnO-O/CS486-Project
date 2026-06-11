@@ -4,3 +4,4 @@ node_modules/
 .opencode/.gitignore
 **/.DS_Store
 pipeline.docx
+untrack
