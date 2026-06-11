@@ -50,10 +50,13 @@ CS486-PROJECT/
 
 ## After completing a task
 
-1. Update `memory/progress.md` — change task status to ✅ or ⚠️
-2. Update `memory/activeContext.md` — rewrite for the next task
-3. Log any key decisions in the decisions table in `progress.md`
+Agent MUST NOT update `memory/progress.md` autonomously.
+Instead, after finishing output:
+1. Print a summary of what was done
+2. List any assumptions made
+3. Ask: "Ready to mark Task X as ✅? Or do you want revisions?"
 
+The user updates `memory/progress.md` and `memory/activeContext.md` manually.
 ---
 
 ## Pipeline overview
