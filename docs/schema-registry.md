@@ -1,12 +1,20 @@
 # Schema Registry — CS486 Database Schema (3NF)
 
-This document maintains the normalized relational schema that is locked after Task 4 (Design Validation) reaches SCHEMA FREEZE.
+Single source of truth for the **relational schema** (the *technical* view): tables,
+columns, PK/FK wiring, indexes, the 3NF proof, and business-rule coverage. Locked
+after Task 4 (Design Validation) reaches SCHEMA FREEZE.
+
+For conceptual entity/attribute definitions see `docs/entity-registry.md`; for the
+reasoning behind choices see `docs/design-decisions.md`.
+
+> Boundary: this file does **not** repeat business/role prose or candidate-key
+> analysis — those live in `entity-registry.md`.
 
 ## How to use this document
 
-- **During Tasks 1–3:** This section is drafted but not finalized
-- **During Task 4 (Design Validation):** Validate this schema against all business rules
-- **After Task 4 ✅ (SCHEMA FREEZE):** This becomes **LOCKED** and is the source of truth for Tasks 5, 6, 7 (DDL, sample data, queries)
+Per-task responsibilities (who populates/locks this file, and when) are defined once
+in the **Registry maintenance protocol** of
+`.opencode/skills/db-design-pipeline/SKILL.md`. Follow that; do not restate it here.
 
 ---
 
@@ -18,131 +26,69 @@ This document maintains the normalized relational schema that is locked after Ta
 
 ---
 
-## Table definitions (relational notation)
+## Format spec — canonical table block
 
-_(To be populated during Tasks 1–3. Fill in from `outputs/03-logical-design-G05.md` after Task 3 is marked ✅.)_
-
-### Expected tables (from requirement analysis)
-
-Typical tables for this domain:
+Each table MUST follow this relational-notation style:
 
 ```
-users
-  user_id INT PRIMARY KEY
-  email NVARCHAR(255) UNIQUE
-  name NVARCHAR(255)
-  role VARCHAR(50) CHECK(...)
-  department_id INT FK → departments
-  is_active BIT
-  created_at DATETIME2 DEFAULT GETDATE()
-  updated_at DATETIME2 DEFAULT GETDATE()
+<table_name>
+  <column> <TYPE> <PK | FK → other_table | UNIQUE | NULL | DEFAULT ...> [CHECK(...)]
+  ...
+  PRIMARY KEY (...)            ← only when composite
+```
 
-departments
-  department_id INT PRIMARY KEY
-  code NVARCHAR(50) UNIQUE
-  name NVARCHAR(255)
-  created_at DATETIME2 DEFAULT GETDATE()
+---
 
-spaces
-  space_id INT PRIMARY KEY
-  room_code NVARCHAR(50) UNIQUE
-  name NVARCHAR(255)
-  type VARCHAR(50) CHECK(...)
-  capacity INT
-  status VARCHAR(50) CHECK(...)
-  created_at DATETIME2 DEFAULT GETDATE()
-  updated_at DATETIME2 DEFAULT GETDATE()
+## Table definitions (relational notation)
 
-booking_requests
-  booking_id INT PRIMARY KEY
-  space_id INT FK → spaces
-  requester_id INT FK → users
-  approver_id INT FK → users (nullable)
-  requested_start_time DATETIME2
-  requested_end_time DATETIME2
-  actual_start_time DATETIME2 (nullable)
-  actual_end_time DATETIME2 (nullable)
-  status VARCHAR(50) CHECK(...)
-  purpose VARCHAR(50) CHECK(...)
-  notes NVARCHAR(MAX) (nullable)
-  is_deleted BIT DEFAULT 0
-  created_at DATETIME2 DEFAULT GETDATE()
-  updated_at DATETIME2 DEFAULT GETDATE()
+_(Populate from `outputs/03-logical-design-G05.md` after Task 3 is marked ✅.
+The block below is an EXAMPLE — delete it once real tables are filled in.)_
 
-facilities
-  facility_id INT PRIMARY KEY
-  name NVARCHAR(255)
-  created_at DATETIME2 DEFAULT GETDATE()
+> ⚠️ **EXAMPLE — DELETE WHEN POPULATING.** Illustrates the canonical table block.
+> Not a confirmed design decision.
 
-space_facilities
-  space_id INT FK → spaces
-  facility_id INT FK → facilities
-  PRIMARY KEY (space_id, facility_id)
-
-maintenance_records
-  maintenance_id INT PRIMARY KEY
-  space_id INT FK → spaces
-  reported_by_id INT FK → users
-  status VARCHAR(50) CHECK(...)
-  description NVARCHAR(MAX)
-  resolved_at DATETIME2 (nullable)
-  is_deleted BIT DEFAULT 0
-  created_at DATETIME2 DEFAULT GETDATE()
-  updated_at DATETIME2 DEFAULT GETDATE()
+```
+users  (example)
+  user_id INT PRIMARY KEY IDENTITY(1,1)
+  email NVARCHAR(255) UNIQUE NOT NULL
+  name NVARCHAR(255) NOT NULL
+  role VARCHAR(50) NOT NULL CHECK(role IN ('student','lecturer','teaching_assistant','facility_staff','department_admin','facility_manager'))
+  department_id INT NOT NULL FK → departments
+  is_active BIT NOT NULL
+  created_at DATETIME2 NOT NULL DEFAULT GETDATE()
+  updated_at DATETIME2 NOT NULL DEFAULT GETDATE()
 ```
 
 ---
 
 ## Indexes
 
-_(To be added during Task 5 (DDL) if performance analysis warrants them.)_
+_(Add during Task 3/5 only if a query or constraint warrants them. One row per index;
+state the table, columns, and why.)_
 
-Candidate indexes for query optimization:
-
-```
-idx_bookings_space_id ON booking_requests(space_id)
-idx_bookings_requester_id ON booking_requests(requester_id)
-idx_bookings_requested_time ON booking_requests(requested_start_time, requested_end_time)
-idx_bookings_status ON booking_requests(status)
-idx_maintenance_space_id ON maintenance_records(space_id)
-idx_maintenance_status ON maintenance_records(status)
-```
+| Index | Table (columns) | Rationale |
+|---|---|---|
+| _(populate later)_ | — | — |
 
 ---
 
 ## 3NF normalization proof
 
-_(To be filled in during Task 3.)_
+_(Fill in during Task 3 — one row per table.)_
 
 | Table | 1NF | 2NF | 3NF | Notes |
 |---|---|---|---|---|
-| users | ✓ | ✓ | ✓ | (To be verified) |
-| departments | ✓ | ✓ | ✓ | (To be verified) |
-| spaces | ✓ | ✓ | ✓ | (To be verified) |
-| booking_requests | ✓ | ✓ | ✓ | (To be verified) |
-| facilities | ✓ | ✓ | ✓ | (To be verified) |
-| space_facilities | ✓ | ✓ | ✓ | Junction table, by definition in 3NF |
-| maintenance_records | ✓ | ✓ | ✓ | (To be verified) |
+| _(populate in Task 3)_ | — | — | — | — |
 
 ---
 
-## Business rule coverage (from Task 4 validation)
+## Business rule coverage
 
-_(To be filled in during Task 4 Design Validation._
+_(Fill in during Task 4 — map each business rule from `outputs/01` to what enforces it.)_
 
-| Business Rule | Enforced by | Status |
+| Business Rule | Enforced by (table/column/constraint) | Status |
 |---|---|---|
-| (To be populated from requirement) | (Table/column/constraint) | ✓ Pass / ❌ Fail |
-
----
-
-## Known constraints and assumptions
-
-_(To be documented during Tasks 1–4.)_
-
-1. (Example) Soft deletes on `booking_requests` and `maintenance_records` for audit trail
-2. (Example) No cascade delete — referential integrity enforced via FK constraints
-3. (To be documented from tasks)
+| _(populate in Task 4)_ | — | ✓ Pass / ❌ Fail |
 
 ---
 
@@ -150,7 +96,7 @@ _(To be documented during Tasks 1–4.)_
 
 | Date | Change | By | Task |
 |---|---|---|---|
-| — | Schema template created | Copilot | Planning |
+| — | Schema template created | Planning | — |
 
 ---
 
@@ -160,9 +106,4 @@ _(To be documented during Tasks 1–4.)_
 1. Task 4 (Design Validation) is marked ✅ in `memory/Progress.md`
 2. All 4 group members have approved the schema
 
-**Once locked, changes require group consensus and documented approval.**
-
----
-
-_For detailed entity and attribute definitions, see `docs/entity-registry.md`._
-_For design rationale, see `docs/design-decisions.md`._
+**Once locked, changes require group consensus and a documented `design-decisions.md` entry.**

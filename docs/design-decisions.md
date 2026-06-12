@@ -33,6 +33,8 @@ This document records the rationale behind key design choices made during the da
 
 _(To be populated during Tasks 1–4.)_
 
+> ⚠️ **DRAFT — NOT YET CONFIRMED.** The decisions below were drafted during the Planning phase as candidate rationale. They have **not** been verified against the actual requirements (`req/business-requirement.md`, `docs/project-overview.md`). Treat them as suggestions only — they become official **only** when worked on during their corresponding Task, verified against requirements, and their `Date:` field is filled in. Do not rely on them as locked decisions until then.
+
 ### Decision: Soft deletes for bookings and maintenance
 
 **Task:** 3 (Logical Design)

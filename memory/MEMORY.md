@@ -4,8 +4,8 @@ Quick reference for all memory files. **Read in this order at the start of each 
 
 | File | Purpose | Read on |
 |---|---|---|
-| `ProductContext.md` | What is the project? Who uses it? | Every session start |
-| `TechStack.md` | Technology, naming conventions, constraints | Every session start |
+| `docs/project-overview.md` | What is the project? Who uses it? | Every session start |
+| `docs/tech-stack.md` | Technology, naming conventions, constraints | Every session start |
 | `Progress.md` | Which tasks are done / blocked / approved | Every session start |
 | `ActiveContext.md` | What task am I working on right now? | Every session start |
 
@@ -15,8 +15,8 @@ Quick reference for all memory files. **Read in this order at the start of each 
 
 Before starting any task:
 
-- [ ] Read `memory/ProductContext.md` — understand the domain
-- [ ] Read `memory/TechStack.md` — load naming rules and enum values
+- [ ] Read `docs/project-overview.md` — understand the domain
+- [ ] Read `docs/tech-stack.md` — load naming rules and enum values
 - [ ] Read `memory/Progress.md` — check which tasks are unblocked
 - [ ] Read `memory/ActiveContext.md` — get today's task assignment
 
@@ -27,7 +27,7 @@ Before starting any task:
 | Role | Key reads |
 |---|---|
 | **Group member reviewing output** | `memory/Progress.md` + task output + `docs/design-decisions.md` |
-| **Onboarding new session** | `memory/ProductContext.md` + `docs/README.md` |
+| **Onboarding new session** | `docs/project-overview.md` + `docs/README.md` |
 
 ---
 

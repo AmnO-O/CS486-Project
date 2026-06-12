@@ -4,7 +4,7 @@
 
 | Task | Deliverable | Output file | Status | Depends on |
 |---|---|---|---|---|
-| Task 1 | Business analysis | `outputs/01-business-analysis-G05.md` | ⬜ Not started | — |
+| Task 1 | Business analysis | `outputs/01-business-req-analysis-G05.md` | ⬜ Not started | — |
 | Task 2 | ERD design | `outputs/02-erd-design-G05.md` | ⬜ Not started | Task 1 |
 | Task 3 | Logical design | `outputs/03-logical-design-G05.md` | ⬜ Not started | Task 2 |
 | Task 4 | Design validation | `outputs/04-design-validation-G05.md` | ⬜ Not started | Task 3 |
