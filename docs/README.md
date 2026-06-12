@@ -1,16 +1,11 @@
 
 # CS486 Space Booking Database Design — Documentation Index
 
-Maintainer: G05 team
-Last updated: 2026-06-12
-Audience: CS486 students and reviewers
-Estimated read time: 5 minutes
-
 **Required reading order for onboarding:**
 
 1. **[project-overview.md](./project-overview.md)** — What this project is, who uses it, what problem it solves (5m)
 2. **[tech-stack.md](./tech-stack.md)** — Technology conventions and vocabulary (5m)
-3. **[db-design-pipeline.md](./db-design-pipeline.md)** — The 7-step workflow and task objectives (10m)
+
 4. **[entity-registry.md](./entity-registry.md)** — Entities and attributes (Tasks 1–7) (10m)
 5. **[schema-registry.md](./schema-registry.md)** — Normalized relational schema (Tasks 3–5) (10m)
 6. **[design-decisions.md](./design-decisions.md)** — Design rationale and trade-offs (5m)
@@ -21,7 +16,6 @@ Estimated read time: 5 minutes
 
 - project-overview.md: Product definition — update when scope changes
 - tech-stack.md: Vocabulary & standards — update when conventions change
-- db-design-pipeline.md: Workflow & gate criteria — update when tasks change
 - entity-registry.md: Entity definitions — update when entities are discovered
 - schema-registry.md: Final normalized schema — update when schema is finalized
 - design-decisions.md: Design rationale — update when decisions are made
@@ -38,7 +32,7 @@ Estimated read time: 5 minutes
 
 ## Session workflow
 
-1. **Start of session:** Read memory files in this order: `memory/MEMORY.md` → `memory/ActiveContext.md` → `memory/Progress.md`. If present, also review `memory/ProductContext.md` and `memory/TechStack.md`.
+1. **Start of session:** Read memory files in this order: `memory/MEMORY.md` → `memory/ActiveContext.md` → `memory/Progress.md`. If present, also review `docs/project-overview.md` and `docs/tech-stack.md`.
 2. **Begin task:** Open the docs file for the active pipeline step (see the reading order above).
 3. **During task:** Follow the procedural skill at `.opencode/skills/db-design-pipeline/` for detailed step-by-step guidance.
 4. **End of task:** Update `memory/Progress.md` and `memory/ActiveContext.md` with results and any open questions.

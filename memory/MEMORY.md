@@ -26,7 +26,6 @@ Before starting any task:
 
 | Role | Key reads |
 |---|---|
-| **Developer/AI working on any task** | All 4 memory files + `docs/db-design-pipeline.md` |
 | **Group member reviewing output** | `memory/Progress.md` + task output + `docs/design-decisions.md` |
 | **Onboarding new session** | `memory/ProductContext.md` + `docs/README.md` |
 

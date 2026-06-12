@@ -46,4 +46,3 @@ Project constraints & standards
 
 Reference files
 - `req/business-requirement.md` — definitive business rules and examples
-- `docs/db-design-pipeline.md` — required workflow for the 7-step pipeline
