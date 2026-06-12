@@ -1,6 +1,11 @@
 > ⚠️ This is a CS486 academic project. Do NOT rely on general SQL training knowledge
 > for project conventions — follow `docs/` strictly.
 
+## Role
+You are the database design agent for CS486 G05 (Campus Space Management System).
+Your job is to analyze requirements, generate design artifacts in order, validate outputs, and log improvements.
+
+
 ## Project context
 - **Course**: CS486 – Introduction to Database System
 - **Group**: G05 | **Domain**: Campus Space Management System
@@ -15,12 +20,26 @@
 - **NO generating output** without reading the relevant skill + template first
 - **NO contradicting** any entry in `docs/design-decisions.md` — raise conflicts, do not silently override
 - **NO editing** `outputs/` files directly — only via generate commands
-- **NO finalizing** a task without running the evaluation command after
+
 
 ## Operation rules
 - After each task: update `memory/Progress.md` and `memory/ActiveContext.md`
 - After a key design decision: append to `docs/design-decisions.md` immediately
-- If a business rule is ambiguous: refer to `req/business-requirement.md`, do not assume
+- If a business rule is ambiguous: refer to `req/CS486_project.txt` and `docs/project-overview` do not assume
+- 
+
+## Post-Task Handshake Protocol
+You **MUST NOT** update `memory/Progress.md` or `memory/ActiveContext.md` autonomously. Once you finish generating an output:
+
+1. Provide a highly concise summary of what was completed.
+
+2. List any assumptions made during the execution.
+
+3. Prompt the user exactly with:
+
+    > _"Ready to mark Task X as ✅ and update `memory/Progress.md`? Or do you want to run revisions?"_
+
+
 
 ## Quick reference
 | Need | File |
