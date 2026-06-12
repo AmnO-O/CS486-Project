@@ -12,16 +12,6 @@
 
 ---
 
-**Quick reference**
-
-- project-overview.md: Product definition — update when scope changes
-- tech-stack.md: Vocabulary & standards — update when conventions change
-- entity-registry.md: Entity definitions — update when entities are discovered
-- schema-registry.md: Final normalized schema — update when schema is finalized
-- design-decisions.md: Design rationale — update when decisions are made
-
----
-
 **Quick start (3-step checklist)**
 
 - Read the required docs above in order.
