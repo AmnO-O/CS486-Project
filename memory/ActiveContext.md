@@ -1,39 +1,28 @@
-# Active Context — CS486
-
-_Cập nhật file này mỗi khi chuyển sang task mới._
-
+---
+name: active-context
+description: Current task being worked on, blocking issues, and immediate next steps. Update at start and end of every session.
+metadata:
+  type: project
 ---
 
 ## Current task
+Task 02 — Conceptual ERD Design *(in progress)*
 
-**Task 1 — Business Analysis**
+## Status
+- Task 01 output: `outputs/01-business-req-analysis-G05.md` ✅
+- Entity registry: `docs/entity-registry.md` ✅ populated
 
-Generate `outputs/01-business-analysis-G05.md` from all files in `req/`.
-
-## What to do right now
-
-1. Read `req/business-requirement.md` and `req/CS486_Project.txt`
-2. Follow skill at `.opencode/skills/db-design-pipeline/SKILL.md`
-3. Follow sub-skill at `.opencode/skills/db-design-pipeline/01-business-req-analysis/SKILL.md`
-4. Extract: Purpose, Actors, Entities, Relationships, Business Rules, Assumptions, Open Questions, Suggested Table Mapping
-5. Write output to `outputs/01-business-analysis-G05.md`
-
-## What NOT to do
-
-- Do not start Task 2 (ERD design) until Task 1 is marked ✅ in `progress.md`
-- Do not read `outputs/` — no approved upstream artifacts yet
-- Do not generate any SQL or schema at this stage
-
-## Context from last session
-
-_No previous session. First run._
-
-## Blockers
-
+## Blocking issues
 - None
 
----
+## Notes from last session
+- Task 01 completed and evaluated
+- Entity registry populated with 6 entities and 10 relationships
+- Key business rules confirmed — especially no-overlap constraint for bookings
 
-_When this task is done:_
-_1. Update `memory/progress.md` Task 1 status to ✅_
-_2. Rewrite this file for Task 2 — ERD design_
+## Next steps
+1. Read `docs/entity-registry.md` to confirm entities
+2. Read `docs/project-overview.md` — key business rules section
+3. Run command `/02-generate-erd`
+4. Evaluate output with `file-evaluation.md`
+5. Update `Progress.md` and this file

@@ -1,92 +1,86 @@
 ---
 name: db-design-pipeline
-description: Analyze business requirements and produce conceptual ERD, logical database design, and DDL documents step by step.
-compatibility: opencode
+description: >
+  MANDATORY — load this skill before executing any of the 7 CS486 deliverables.
+  Triggers when user runs /generate-* or /evaluate commands, or asks to generate
+  business requirement analysis, ERD, logical design, design validation, DDL,
+  sample data, or SQL queries for the Campus Space Management System.
 ---
 
-# Database Design Pipeline Skill
+# DB Design Pipeline Skill
 
-Use this skill when the user asks to transform business requirements into a database design.
+## Before ANY task — required reading sequence
+1. `docs/README.md` → determine which files to read for this task
+2. `memory/MEMORY.md` → scan, open relevant memory files
+3. `docs/design-decisions.md` → never contradict past decisions
+4. Task-specific template in `templates/<task-number>-<task-name>/`
 
-## Role & Target
+## Quality standards
+- Entities and attributes → must match `docs/entity-registry.md` exactly
+- Table names and columns → must match `docs/schema-registry.md` (task 03+)
+- Naming → follow `docs/tech-stack.md` conventions
+- Ambiguity → refer to `req/business-requirement.md`, never assume
 
-When this skill is active, adopt this role:
-
-- You are an elite, context-aware AI Database Architect working on the **Space Booking System database design project (Group G05)** for CS486.
-- **Target RDBMS:** Microsoft SQL Server (T-SQL).
-- **Goal:** Produce clean, production-grade design documents and SQL files (not runnable application code).
-- **Default group:** `G05` (override with `--group` where supported).
-
-## Pipeline Map & Deliverables
-
-| Task | Deliverable | CLI Command | Responsible Agent | Expected Output File |
-|---|---|---|---|---|
-| **Task 1** | Business analysis | `/generate-business-req` | `@analyst` | `outputs/01-business-analysis-G05.md` |
-| **Task 2** | ERD design | `/design-db` | `@designer` | `outputs/02-erd-design-G05.md` |
-| **Task 3** | Logical design | `/design-db` | `@designer` | `outputs/03-logical-design-G05.md` |
-| **Task 4** | Design validation | _(planned)_ | `@reviewer` | `outputs/04-design-validation-G05.md` |
-| **GATED** | **SCHEMA FREEZE** | _Manual Gate_ | _All 4 Members_ | _Gate before proceeding to Tasks 5-7_ |
-| **Task 5** | SQL DDL | _(planned)_ | `@designer` | `outputs/05-ddl-G05.sql` |
-| **Task 6** | Sample data | _(planned)_ | `@designer` | `outputs/06-sample-data-G05.sql` |
-| **Task 7** | Query design | _(planned)_ | `@designer` | `outputs/07-query-design-G05.sql` |
-
-_Note: Tasks 5, 6, and 7 are completely blocked until Task 4 is officially approved and marked as ✅ in `memory/Progress.md`._
-
-**Output filename pattern:** `outputs/0X-<task-name>-G05.md` (or `.sql` for DDL, Sample Data, and Queries).
-
-## Important behavior
-
-Before assuming anything, inspect the project:
-
-1. Read `README.md` to understand extended project outputs.
-2. Locate requirement files under `req/`, `outputs/`, or files passed by the user.
-3. Read the relevant requirement files fully before designing.
-4. If the requirement is incomplete, continue with explicit assumptions, but also create an unresolved questions section.
-5. Do not regenerate all files if the user asks for only one file or section.
-
-## Required output files
-
-Create or update the following files:
-
-1. `outputs/01-business-req-analysis-G05.md`
-
-Do not skip any Markdown file.
+## After ANY task — required actions
+1. Save output to `outputs/<task>-G05.<ext>`
+2. Run `file-evaluation.md` on the output
+3. Update `memory/Progress.md`
+4. Update `memory/ActiveContext.md`
+5. If a key design decision was made → append to `docs/design-decisions.md`
 
 ---
 
-# Step 1: Business Requirement Analysis
+## Per-task guidance
 
-Save to:
+### Task 01 — Business Requirement Analysis
+**Minimum**: 6 entities, 10 relationships, 10 explicit business rules
+**Structure**: Business Purpose → Actors → Entities → Attributes → Relationships → Business Rules
+**After**: Populate `docs/entity-registry.md`
 
-`outputs/01-business-req-analysis-G05.md`
+### Task 02 — Conceptual ERD Design
+**Notation**: Chen or Crow's Foot — be consistent throughout
+**Must show**: cardinality + participation for every relationship
+**Special cases**:
+- APPROVAL: separate entity, 1:1 with BOOKING_REQUEST (partial on booking side)
+- USAGE_SESSION: separate entity, 1:1 with BOOKING_REQUEST
+- FACILITY: multi-valued attribute of SPACE → model as separate entity
+- Booking overlap: note as application-level constraint in the diagram
 
-For step 1, consult the sub-skill at `./01-business-req-analysis/SKILL.md` before generating the document. That sub-skill defines the exact behavior, expected sections, and validation checks for the business requirement analysis stage.
+### Task 03 — Logical Design
+**Document each mapping**: Entity X → Table Y (list attributes and key changes)
+**Conversion rules**:
+- Strong entity → relation, PK stays
+- Weak entity → composite PK (own partial key + owner FK)
+- 1:N → FK on N side
+- M:N → junction table with composite PK
+- 1:1 → FK with UNIQUE on one side (choose based on participation)
+- Multi-valued attribute → separate relation
+**After**: Populate `docs/schema-registry.md`
 
-The document must include at least the following sections:
+### Task 04 — Design Validation
+**Structure**: (1) ERD correctness, (2) Schema mapping correctness, (3) Business rule coverage, (4) Normalization check (1NF→3NF), (5) Gap analysis
+**For each business rule**: state which constraint/table enforces it — or explain why it's application-level
 
-- Purpose
-- Actors
-- Entities and attributes
-- Relationships and cardinalities
-- Business rules
-- Assumptions
-- Open questions
-- Suggested table mapping
+### Task 05 — DDL
+**Order**: Follow FK dependency order from `docs/schema-registry.md`
+**Every status column**: CHECK constraint with all enum values
+**Every FK**: explicit ON DELETE / ON UPDATE behavior
+**Booking overlap**: add a comment block explaining application-level enforcement
 
-Do not proceed to later steps until the step 1 output is complete and internally consistent.
+### Task 06 — Sample Data
+**INSERT order**: Follow FK dependency order
+**Use explicit column lists**: `INSERT INTO users (user_id, full_name, ...) VALUES (...)`
+**Coverage**: every enum value for status columns must appear at least once
+**Edge cases**: 1 booking for an unavailable space (rejected), 1 no-show, 1 cancelled
 
-## Step 1 behavior
-
-1. Read the input requirement file completely.
-2. Apply the step 1 sub-skill guidance from `./01-business-req-analysis/SKILL.md`.
-3. Extract actors, candidate entities, attributes, relationships, and business rules.
-4. Record any assumptions and open questions explicitly.
-5. Generate `outputs/01-business-req-analysis-G05.md` as a standalone, reviewer-friendly analysis.
-
----
-
-# General guidance
-
-- Treat the pipeline as sequential: Step 1 must be complete before Step 2.
-- Keep the output files concise, structured, and easy for a reviewer to validate.
-- If additional steps are needed later, add sub-skill references for each new step.
+### Task 07 — Query Design
+**Header format per query**:
+```sql
+-- ============================================================
+-- Query N: <title>
+-- Business question: <what business question this answers>
+-- Target user: <who uses this query>
+-- Why useful: <business value>
+-- ============================================================
+```
+**Required coverage**: JOIN, GROUP BY + aggregate, subquery/CTE, date filter, facility manager report

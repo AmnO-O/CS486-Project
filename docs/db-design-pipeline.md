@@ -1,226 +1,208 @@
-# Database Design Pipeline — 7-Step Workflow
+# DB Design Pipeline — 7-Task Workflow
 
-This document describes the workflow for Tasks 1–7 of the CS486 database design project.
-
-## Overview
-
-The pipeline transforms raw requirements into a complete, normalized database schema with sample data and queries. Each task has a specific objective, gate criteria, and upstream/downstream dependencies.
-
+## Dependency chain
 ```
-Task 1              Task 2        Task 3              Task 4
-Business      →     ERD      →    Logical      →      Design
-Analysis           Design        Design              Validation
-                                                          ↓
-                                                    [SCHEMA FREEZE]
-                                                      (Group approval)
-                                                          ↓
-Task 5              Task 6        Task 7
-DDL           ←     Sample    ←    Query
-              Data              Design
+01 Business Req → 02 ERD → 03 Logical Design → 04 Validation
+                                                      ↓
+07 Query Design ← 06 Sample Data ← 05 DDL  ←─────────┘
 ```
 
----
-
-## Tasks 1–4 (Design phase)
-
-### Task 1: Business Analysis
-
-**Objective:** Extract and document requirements in a structured format.
-
-**Inputs:**
-- `req/business-requirement.md`
-- `req/CS486_Project.txt`
-- `req/CS486_Project.pdf`
-
-**Outputs:**
-- `outputs/01-business-analysis-G05.md`
-
-**What to extract:**
-1. Purpose and scope
-2. Actors (6 user roles and their permissions)
-3. Entities and their attributes
-4. Relationships between entities
-5. Business rules and constraints
-6. Assumptions and open questions
-7. Suggested initial table mapping
-
-**Gate:** No gate before Task 2 can start. Task 1 must be marked ✅ in `memory/Progress.md`.
-
----
-
-### Task 2: Conceptual ERD Design
-
-**Objective:** Create an Entity-Relationship Diagram (ERD) showing all entities, attributes, and relationships.
-
-**Inputs:**
-- `outputs/01-business-analysis-G05.md` (Task 1 ✅)
-
-**Outputs:**
-- `outputs/02-erd-design-G05.md` (includes visual ERD + entity and relationship definitions)
-
-**What to produce:**
-1. Visual ERD (ASCII or image) showing all entities
-2. Entity definitions: name, description, candidate key(s)
-3. Relationship definitions: cardinality, optional vs. required, description
-4. Assumptions and design decisions from this phase
-
-**Gate:** No gate before Task 3 can start. Task 2 must be marked ✅ in `memory/Progress.md`.
-
----
-
-### Task 3: Logical Design
-
-**Objective:** Normalize the ERD into 3NF relational schema with complete column definitions.
-
-**Inputs:**
-- `outputs/02-erd-design-G05.md` (Task 2 ✅)
-
-**Outputs:**
-- `outputs/03-logical-design-G05.md` (includes normalized table definitions in relational notation)
-
-**What to produce:**
-1. All tables in relational notation: `TableName (PK, columns, constraints)`
-2. For each table:
-   - Surrogate primary key
-   - All columns with data types
-   - Foreign key references
-   - NOT NULL vs. NULL
-   - CHECK constraints for enums
-   - Default values
-3. Normalization proof: show that all tables are at least 3NF
-4. Assumptions and any deviations from the ERD
-
-**Gate:** No gate before Task 4 can start. Task 3 must be marked ✅ in `memory/Progress.md`.
-
----
-
-### Task 4: Design Validation
-
-**Objective:** Verify the logical schema against all business rules and constraints from the requirement.
-
-**Inputs:**
-- `outputs/03-logical-design-G05.md` (Task 3 ✅)
-- `req/business-requirement.md` (requirement source)
-
-**Outputs:**
-- `outputs/04-design-validation-G05.md` (includes validation matrix, business rule coverage checklist)
-
-**What to produce:**
-1. Validation matrix: Business rule → Schema element(s) that enforce it
-2. Checklist: ✅ Pass or ❌ Fail for each business rule
-3. Coverage analysis: Are all 6 user roles and their permissions represented?
-4. Completeness check: Are all entities and relationships from the requirement included?
-5. Any gaps, assumptions, or design decisions that differ from the requirement
-
-**Gate:** **SCHEMA FREEZE checkpoint**
-- All 4 group members must review and approve Task 4.
-- Once frozen, the schema in this output becomes **locked** and is the upstream input for Tasks 5, 6, 7.
-- Do NOT start Tasks 5, 6, 7 before SCHEMA FREEZE is reached.
-
----
-
-## Tasks 5–7 (Implementation phase)
-
-### Task 5: SQL DDL
-
-**Objective:** Generate executable SQL statements to create the database schema.
-
-**Inputs:**
-- `outputs/04-design-validation-G05.md` (Task 4 ✅ + SCHEMA FREEZE approved)
-
-**Outputs:**
-- `outputs/05-ddl-G05.sql` (executable T-SQL)
-
-**What to produce:**
-1. `CREATE TABLE` statements for all tables
-2. Primary key definitions (`IDENTITY` or `UNIQUEIDENTIFIER`)
-3. Foreign key constraints (`FOREIGN KEY ... REFERENCES`)
-4. NOT NULL / DEFAULT / CHECK constraints
-5. Comments explaining complex columns or constraints
-6. Execution order (if there are cascading dependencies)
-
-**Dialect:** Microsoft SQL Server T-SQL (MSSQL 2019+)
-
-**Gate:** Cannot start until SCHEMA FREEZE is reached.
-
----
-
-### Task 6: Sample Data
-
-**Objective:** Generate realistic sample data for testing and demonstration.
-
-**Inputs:**
-- `outputs/05-ddl-G05.sql` (Task 5 ✅)
-
-**Outputs:**
-- `outputs/06-sample-data-G05.sql` (executable T-SQL `INSERT` statements)
-
-**What to produce:**
-1. Sample data for all tables (at least 3–5 rows per table)
-2. Realistic data reflecting the use case (students, lecturers, spaces, bookings, etc.)
-3. Data that exercises all key relationships and constraints
-4. Comments explaining the data set (e.g., "Scenario: 2 students booking a classroom")
-
-**Dialect:** Microsoft SQL Server T-SQL (MSSQL 2019+)
-
-**Gate:** Cannot start until Task 5 (DDL) is complete.
-
----
-
-### Task 7: Query Design
-
-**Objective:** Generate SQL queries that answer key business questions.
-
-**Inputs:**
-- `outputs/05-ddl-G05.sql` (Task 5 ✅)
-
-**Outputs:**
-- `outputs/07-query-design-G05.sql` (executable T-SQL queries with comments)
-
-**What to produce:**
-1. At least 10 SQL queries answering business questions:
-   - List all bookings for a given space in a date range
-   - Find available spaces for a time slot
-   - Check if a space is under maintenance
-   - Get booking history per user
-   - Find spaces by equipment (e.g., "projector")
-   - List pending approvals
-   - Calculate facility utilization
-   - Detect booking conflicts (if any)
-   - Other domain-specific queries
-2. For each query:
-   - Clear comment describing the business question
-   - Query itself
-   - Expected result description
-
-**Dialect:** Microsoft SQL Server T-SQL (MSSQL 2019+)
-
-**Gate:** Cannot start until Task 5 (DDL) is complete.
-
----
-
-## Critical gates
-
-| Gate | Trigger | Impact |
+| Task | Input | Output used by |
 |---|---|---|
-| Task 1 ✅ | Business analysis complete | Unblocks Task 2 |
-| Task 2 ✅ | ERD design complete | Unblocks Task 3 |
-| Task 3 ✅ | Logical design complete | Unblocks Task 4 |
-| Task 4 ✅ | Design validation complete | Unblocks SCHEMA FREEZE |
-| **SCHEMA FREEZE** | All 4 group members approve Task 4 | Unblocks Tasks 5, 6, 7 |
-| Task 5 ✅ | DDL complete | Unblocks Tasks 6, 7 |
+| 01 Business Req | `req/` docs | 02 |
+| 02 ERD | 01 output + entity-registry | 03 |
+| 03 Logical Design | 02 output | 04, 05 |
+| 04 Validation | 02 + 03 outputs | review only |
+| 05 DDL | 03 output + schema-registry | 06 |
+| 06 Sample Data | 05 output | 07 |
+| 07 Query Design | 05 + 06 outputs | final deliverable |
 
 ---
 
-## Status tracking
+## Task 01 — Business Requirement Analysis
+**Command**: `/01-generate-business-req`
+**Output**: `outputs/01-business-req-analysis-G05.md`
+**Template**: `.opencode/skills/db-design-pipeline/templates/01-business-req-analysis/`
 
-Track progress in `memory/Progress.md`:
-- ⬜ Not started
-- 🔄 In progress
-- ✅ Approved
-- ⚠️ Needs revision (do not use as upstream input)
+### Before generating
+- [ ] Read `req/business-requirement.md` fully
+- [ ] Read `req/CS486_Project.pdf` section 1 and 2
+- [ ] Read `docs/project-overview.md`
 
-After completing each task:
-1. Update status in `memory/Progress.md`
-2. Rewrite `memory/ActiveContext.md` for the next task
-3. Add decisions to the decisions log in `memory/Progress.md`
+### Checklist
+- [ ] Business purpose — 1 paragraph explaining why this system exists
+- [ ] Actors — all 6 roles with their permissions
+- [ ] Entities — list with description (minimum 6 entities)
+- [ ] Attributes — per entity, with data type and constraint notes
+- [ ] Relationships — list with cardinality and participation
+- [ ] Business rules — explicit numbered list (minimum 10 rules)
+
+### After generating
+- [ ] Populate `docs/entity-registry.md` with confirmed entities
+- [ ] Run `file-evaluation.md`
+- [ ] Update `memory/Progress.md` task 01 → ✅ Done
+- [ ] Update `memory/ActiveContext.md` → next task is 02
+
+---
+
+## Task 02 — Conceptual ERD Design
+**Command**: `/02-generate-erd`
+**Output**: `outputs/02-erd-design-G05.md`
+**Template**: `.opencode/skills/db-design-pipeline/templates/02-erd-design/`
+
+### Before generating
+- [ ] Read `docs/entity-registry.md` (populated from task 01)
+- [ ] Read `docs/project-overview.md` — key business rules section
+
+### Checklist
+- [ ] All entities from entity-registry are present
+- [ ] Every entity has attributes (underline PK, double-ellipse multi-valued, dashed derived)
+- [ ] Every relationship has: name, cardinality (1:1 / 1:N / M:N), participation (partial/total)
+- [ ] Weak entities identified with double rectangle
+- [ ] Multi-valued attributes handled (e.g., facilities of a space)
+- [ ] APPROVAL relationship: shows staff decision, 1:1 with BOOKING
+- [ ] USAGE_SESSION: shown as separate entity, 1:1 with BOOKING
+- [ ] Conflict note: booking overlap constraint documented
+
+### After generating
+- [ ] Run `file-evaluation.md`
+- [ ] Update `memory/Progress.md` task 02 → ✅ Done
+- [ ] Update `memory/ActiveContext.md`
+
+---
+
+## Task 03 — Logical Database Design
+**Command**: `/03-generate-logical-design`
+**Output**: `outputs/03-logical-design-G05.md`
+**Template**: `.opencode/skills/db-design-pipeline/templates/03-logical-design/`
+
+### Before generating
+- [ ] Read `outputs/02-erd-design-G05.md`
+- [ ] Read `docs/entity-registry.md`
+
+### Checklist
+- [ ] Every entity → one relation (document the mapping explicitly)
+- [ ] Every M:N relationship → junction table with composite PK
+- [ ] Every 1:N relationship → FK on the N side
+- [ ] Every 1:1 relationship → FK with UNIQUE constraint
+- [ ] Weak entity → composite PK (weak entity PK + owner PK as FK)
+- [ ] Multi-valued attributes → separate relation
+- [ ] All candidate keys identified beyond PKs
+- [ ] All FK constraints listed explicitly
+
+### After generating
+- [ ] Populate `docs/schema-registry.md` with final schema
+- [ ] Run `file-evaluation.md`
+- [ ] Update `memory/Progress.md` task 03 → ✅ Done
+- [ ] Update `memory/ActiveContext.md`
+
+---
+
+## Task 04 — Design Validation
+**Command**: `/04-generate-design-validation`
+**Output**: `outputs/04-design-validation-G05.md`
+**Template**: `.opencode/skills/db-design-pipeline/templates/04-design-validation/`
+
+### Before generating
+- [ ] Read `outputs/02-erd-design-G05.md`
+- [ ] Read `outputs/03-logical-design-G05.md`
+- [ ] Read `docs/design-decisions.md`
+
+### Checklist (validate in this order)
+- [ ] **ERD completeness**: every business rule from task 01 is modeled
+- [ ] **ERD → Schema mapping**: no entity/attribute lost in conversion
+- [ ] **Key correctness**: PKs are minimal, FKs reference correct tables
+- [ ] **Candidate keys**: all uniqueness constraints identified
+- [ ] **Normalization**: check 1NF, 2NF, 3NF — document any violations
+- [ ] **Business rule coverage**: list each rule → which constraint enforces it
+- [ ] **Gaps**: explicitly state what is NOT enforced at DB level and why
+
+### After generating
+- [ ] Run `file-evaluation.md`
+- [ ] Update `memory/Progress.md` task 04 → ✅ Done
+- [ ] Update `memory/ActiveContext.md`
+
+---
+
+## Task 05 — Database Implementation (DDL)
+**Command**: `/05-generate-ddl`
+**Output**: `outputs/05-db-definition-G05.sql`
+**Template**: `.opencode/skills/db-design-pipeline/templates/05-ddl/`
+
+### Before generating
+- [ ] Read `docs/schema-registry.md`
+- [ ] Read `docs/tech-stack.md` — naming conventions
+- [ ] Read `docs/design-decisions.md`
+
+### Checklist
+- [ ] CREATE TABLE in FK dependency order (see schema-registry)
+- [ ] Every column has correct type and nullability
+- [ ] Every status column has CHECK constraint with all valid values
+- [ ] Every FK has ON DELETE / ON UPDATE rule documented
+- [ ] UNIQUE constraint on candidate keys (e.g., `email`, `space_code`)
+- [ ] DEFAULT values where appropriate (`created_at DEFAULT NOW()`)
+- [ ] Comments on complex constraints
+
+### After generating
+- [ ] Run `file-evaluation.md`
+- [ ] Update `memory/Progress.md` task 05 → ✅ Done
+- [ ] Update `memory/ActiveContext.md`
+
+---
+
+## Task 06 — Sample Data
+**Command**: `/06-generate-sample-data`
+**Output**: `outputs/06-sample-data-G05.sql`
+**Template**: `.opencode/skills/db-design-pipeline/templates/06-sample-data/`
+
+### Before generating
+- [ ] Read `outputs/05-db-definition-G05.sql` for exact table/column names
+
+### Checklist — coverage requirements
+- [ ] All 6 user roles represented (student, lecturer, TA, facility_staff, dept_admin, facility_manager)
+- [ ] All space types represented
+- [ ] All booking statuses covered (pending, approved, rejected, cancelled, checked_in, completed, no_show)
+- [ ] All space statuses covered (available, in_use, under_maintenance, temporarily_closed, retired)
+- [ ] Booking → approval chain: at least 3 approved, 2 rejected (with rejection_reason)
+- [ ] Check-in/check-out: at least 3 usage_sessions
+- [ ] Maintenance: at least 3 records covering different problem types
+- [ ] Edge cases: 1 no-show booking, 1 cancelled booking
+
+### Minimums
+- 6+ users, 5+ spaces, 10+ bookings, 3+ maintenance records
+
+### After generating
+- [ ] Run `file-evaluation.md`
+- [ ] Update `memory/Progress.md` task 06 → ✅ Done
+- [ ] Update `memory/ActiveContext.md`
+
+---
+
+## Task 07 — Query Design
+**Command**: `/07-generate-query-design`
+**Output**: `outputs/07-query-design-G05.sql`
+**Template**: `.opencode/skills/db-design-pipeline/templates/07-query-design/`
+
+### Before generating
+- [ ] Read `outputs/05-db-definition-G05.sql`
+- [ ] Read `outputs/06-sample-data-G05.sql`
+
+### Checklist — per query
+- [ ] `-- Business question: <question>`
+- [ ] `-- Target user: <role(s)>`
+- [ ] `-- Why useful: <explanation>`
+- [ ] SQL statement with meaningful aliases
+
+### Checklist — coverage (minimum 5 queries)
+- [ ] At least 1 query with JOIN (multi-table)
+- [ ] At least 1 query with GROUP BY + aggregate (COUNT, SUM, AVG)
+- [ ] At least 1 query with subquery or CTE
+- [ ] At least 1 query filtering by date/time range
+- [ ] At least 1 query useful for facility manager (utilization, no-shows, maintenance)
+
+### After generating
+- [ ] Verify each query runs without error against sample data
+- [ ] Run `file-evaluation.md`
+- [ ] Run `outputs-evaluation.md` — final overall evaluation
+- [ ] Update `memory/Progress.md` ALL tasks → ✅ Done
+- [ ] Update `memory/ActiveContext.md` → pipeline complete
