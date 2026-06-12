@@ -16,7 +16,6 @@
 
 - Read the required docs above in order.
 - Verify project memory files exist and read them: `memory/MEMORY.md`, `memory/ActiveContext.md`, `memory/Progress.md`.
-- When you finish a task, update `memory/Progress.md` and `memory/ActiveContext.md`.
 
 ---
 

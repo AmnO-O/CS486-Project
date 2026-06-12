@@ -9,8 +9,7 @@ For relational tables, FK wiring, indexes and the 3NF proof see
 
 ## How to use this document
 
-Per-task responsibilities (who populates/refines/locks this file, and when) are
-defined once in the **Registry maintenance protocol** of
+Per-task responsibilities (who populates/refines/locks this file, and when) are defined once in the **Registry maintenance protocol** of
 `.opencode/skills/db-design-pipeline/SKILL.md`. Follow that; do not restate it here.
 
 ---
@@ -47,23 +46,6 @@ Column rules:
 Discovery-status legend: ⬜ draft · 🔄 refining · 🔒 locked (post-Task 03).
 
 ---
-
-## Entity discovery status
-
-_(Add one row per entity during Task 01–02.)_
-
-| Entity | Maps to table | Task discovered | Status | Last updated |
-|---|---|---|---|---|
-| Departments | `departments` | Task 1 | ⬜ | 2026-06-12 |
-| Users | `users` | Task 1 | ⬜ | 2026-06-12 |
-| Spaces | `spaces` | Task 1 | ⬜ | 2026-06-12 |
-| Facilities | `facilities` | Task 1 | ⬜ | 2026-06-12 |
-| Space_Facilities | `space_facilities` | Task 1 | ⬜ | 2026-06-12 |
-| Bookings | `bookings` | Task 1 | ⬜ | 2026-06-12 |
-| Maintenance | `maintenance` | Task 1 | ⬜ | 2026-06-12 |
-
----
-
 ## Relationships registry
 
 _(Populate from `outputs/01` §Relationships; confirm cardinalities in Task 2.)_
