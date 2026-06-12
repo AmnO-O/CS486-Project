@@ -1,22 +1,387 @@
-## Business requirement description
-The School of Computer Science manages several shared physical spaces used for teaching, seminars, examinations, workshops, student projects, research activities, and academic events. These spaces include auditoriums, classrooms, computer laboratories, project laboratories, meeting rooms, and student workspaces.
+# CS486 – Introduction to Database System
 
-Currently, requests to use these spaces are handled manually. Lecturers, teaching assistants, students, and staff usually contact the school office or facility staff by email, phone, or in person. Facility staff then check spreadsheets or shared calendars to determine whether a room is available, whether the requester is allowed to use it, whether special equipment is needed, and whether the room is under maintenance.
 
-As the number of classes, student projects, workshops, seminars, and academic events increases, the manual process has become difficult to manage. The School wants to build a database system to manage space booking, approval, usage sessions, maintenance, incident reporting, and facility utilization.
+---
 
-The Facility Manager provides the following requirement summary:
+# 1. Business Requirement Description
+
+The School of Computer Science manages several shared physical spaces used for teaching, seminars, examinations, workshops, student projects, research activities, and academic events.
+
+These spaces include:
+
+* Auditoriums
+* Classrooms
+* Computer laboratories
+* Project laboratories
+* Meeting rooms
+* Student workspaces
+
+Currently, requests to use these spaces are handled manually. Lecturers, teaching assistants, students, and staff usually contact the school office or facility staff by email, phone, or in person.
+
+Facility staff then check spreadsheets or shared calendars to determine:
+
+* Whether a room is available
+* Whether the requester is allowed to use it
+* Whether special equipment is needed
+* Whether the room is under maintenance
+
+As the number of classes, student projects, workshops, seminars, and academic events increases, the manual process has become difficult to manage.
+
+The School wants to build a database system to manage:
+
+* Space booking
+* Approval workflows
+* Usage sessions
+* Maintenance activities
+* Incident reporting
+* Facility utilization
+
+---
+
+## Facility Manager Requirement Summary
+
 The School wants to develop a system to manage the booking and usage of shared campus spaces such as classrooms, computer laboratories, meeting rooms, and auditoriums.
-Each user must have a university account. The system stores basic user information, including user ID, full name, email, phone number, role, department, and account status. A user may be a student, lecturer, teaching assistant, facility staff, department administrator, or facility manager.
-The School manages many bookable spaces. For each space, the system stores a unique space code, space name, space type, building, floor, room number, capacity, current status, and usage policy. A space may be available, in use, under maintenance, temporarily closed, or retired.
-Each space may have several facilities, such as a projector, whiteboard, microphone, computer, livestreaming equipment, or air conditioner. The system should store the list of facilities available in each space.
-Users can submit booking requests by selecting a space, requested start time, requested end time, purpose of use, and expected number of participants. A booking may be for a lecture, examination, seminar, workshop, meeting, student activity, or administrative event.
-Each booking request has a status, such as pending, approved, rejected, cancelled, checked in, completed, or no-show. The system must prevent conflicting bookings. The same space cannot have two approved bookings with overlapping time periods. A space that is under maintenance, closed, or retired cannot be booked.
-A booking request may require approval from a facility staff member or manager. When a booking is approved or rejected, the system records the staff member who made the decision, the decision time, and a decision note. If the booking is rejected, the rejection reason should be stored.
-When the requester arrives, facility staff can check in the booking. The system records the actual start time, the person who checked in the booking, and the initial condition of the space. When the session ends, facility staff can complete the booking by recording the actual end time, the final condition of the space, and any usage notes.
-The system also supports basic maintenance management. A space may have maintenance records for problems such as broken projectors, air-conditioning failure, damaged furniture, cleaning issues, or network problems. Each maintenance record stores the related space, reporter, assigned staff member, problem description, start time, completion time, status, and result note. A space under maintenance cannot be booked.
-The system should keep historical records of bookings and maintenance activities. Staff should be able to view booking history, upcoming bookings, spaces under maintenance, and no-show bookings.
-The main goal of the system is to help the School manage shared campus spaces fairly, avoid overlapping bookings, prevent the use of unavailable spaces, and preserve usage history.
 
+### User Management
 
+Each user must have a university account.
 
+The system stores:
+
+* User ID
+* Full Name
+* Email
+* Phone Number
+* Role
+* Department
+* Account Status
+
+Possible user roles:
+
+* Student
+* Lecturer
+* Teaching Assistant
+* Facility Staff
+* Department Administrator
+* Facility Manager
+
+---
+
+### Space Management
+
+The School manages many bookable spaces.
+
+For each space, the system stores:
+
+* Space Code (unique)
+* Space Name
+* Space Type
+* Building
+* Floor
+* Room Number
+* Capacity
+* Current Status
+* Usage Policy
+
+Possible space statuses:
+
+* Available
+* In Use
+* Under Maintenance
+* Temporarily Closed
+* Retired
+
+---
+
+### Facility Management
+
+Each space may contain multiple facilities, such as:
+
+* Projector
+* Whiteboard
+* Microphone
+* Computer
+* Livestreaming Equipment
+* Air Conditioner
+
+The system stores the list of facilities available in each space.
+
+---
+
+### Booking Requests
+
+Users can submit booking requests by providing:
+
+* Selected Space
+* Requested Start Time
+* Requested End Time
+* Purpose of Use
+* Expected Number of Participants
+
+Possible booking purposes:
+
+* Lecture
+* Examination
+* Seminar
+* Workshop
+* Meeting
+* Student Activity
+* Administrative Event
+
+Each booking request has a status:
+
+* Pending
+* Approved
+* Rejected
+* Cancelled
+* Checked In
+* Completed
+* No-Show
+
+#### Booking Constraints
+
+The system must prevent conflicting bookings.
+
+Business rules:
+
+* The same space cannot have two approved bookings with overlapping time periods.
+* A space that is under maintenance, closed, or retired cannot be booked.
+
+---
+
+### Booking Approval
+
+A booking request may require approval from a facility staff member or facility manager.
+
+When a booking is approved or rejected, the system records:
+
+* Staff Member
+* Decision Time
+* Decision Note
+
+If rejected, the system also stores:
+
+* Rejection Reason
+
+---
+
+### Check-In and Session Completion
+
+When the requester arrives, facility staff can check in the booking.
+
+The system records:
+
+* Actual Start Time
+* Checked-In By
+* Initial Condition of Space
+
+When the session ends, facility staff can complete the booking.
+
+The system records:
+
+* Actual End Time
+* Final Condition of Space
+* Usage Notes
+
+---
+
+### Maintenance Management
+
+The system supports maintenance management.
+
+Possible maintenance issues:
+
+* Broken Projector
+* Air Conditioning Failure
+* Damaged Furniture
+* Cleaning Issues
+* Network Problems
+
+Each maintenance record stores:
+
+* Related Space
+* Reporter
+* Assigned Staff Member
+* Problem Description
+* Start Time
+* Completion Time
+* Status
+* Result Note
+
+#### Maintenance Constraint
+
+A space under maintenance cannot be booked.
+
+---
+
+### Historical Records and Reporting
+
+The system must keep historical records of:
+
+* Bookings
+* Maintenance Activities
+
+Staff should be able to view:
+
+* Booking History
+* Upcoming Bookings
+* Spaces Under Maintenance
+* No-Show Bookings
+
+---
+
+### Main Business Goal
+
+The system aims to:
+
+* Manage shared campus spaces fairly
+* Avoid overlapping bookings
+* Prevent the use of unavailable spaces
+* Preserve usage history
+
+---
+
+# 2. Phase 1
+
+## Task 1 — Business Requirement Analysis
+
+Analyze the requirements to identify:
+
+* Business Purpose
+* Actors
+* Entities
+* Attributes
+* Relationships
+* Cardinalities
+* Business Rules
+
+---
+
+## Task 2 — Conceptual Database Design
+
+Design an ERD showing:
+
+* Main Entities
+* Attributes
+* Relationships
+* Cardinalities
+* Participation Constraints
+
+---
+
+## Task 3 — Logical Database Design
+
+Convert the ERD into a relational schema containing:
+
+* Relations
+* Attributes
+* Primary Keys
+* Foreign Keys
+* Candidate Keys
+* Key Constraints
+
+---
+
+## Task 4 — Database Design Validation
+
+Evaluate whether the relational schema:
+
+* Correctly represents the ERD
+* Satisfies business rules
+* Uses appropriate keys
+* Uses appropriate relationships
+* Uses appropriate constraints
+
+---
+
+## Task 5 — Database Implementation
+
+Implement the database using SQL DDL.
+
+Include:
+
+* Tables
+* Primary Keys
+* Foreign Keys
+* Constraints
+* CHECK Constraints
+* Default Values
+
+---
+
+## Task 6 — Sample Data Preparation
+
+Insert realistic sample data supporting:
+
+* Normal operations
+* Important exceptional cases
+
+---
+
+## Task 7 — Query Design
+
+Each student must design and execute at least **5 meaningful SQL queries**.
+
+Each query must include:
+
+1. Business Question
+2. Target User(s)
+3. Explanation of Usefulness
+4. SQL Statement
+
+---
+
+# 3. Required Documents
+
+## 3.1 Group Report
+
+Submit a PDF report named:
+
+```text
+G<Group Number>_Report.pdf
+```
+
+Example:
+
+```text
+G01_Report.pdf
+```
+
+The report must include:
+
+* Student ID and Full Name of all group members
+* LLM Model(s) used by the group
+* A concise description of the agent improvement process
+* How the agent was evaluated
+* How the group refined or improved the agent based on evaluation results
+
+---
+
+## 3.2 Group Agent Git Repository
+
+The repository must include, at minimum:
+
+```text
+AGENT.md
+SKILL.md
+outputs/
+```
+
+### Required Outputs
+
+```text
+outputs/
+├── 01-business-req-analysis-G<Group Number>.md
+├── 02-erd-design-G<Group Number>.md
+├── 03-logical-design-G<Group Number>.md
+├── 04-design-validation-G<Group Number>.md
+├── 05-db-definition-G<Group Number>.sql
+├── 06-sample-data-G<Group Number>.sql
+└── 07-query-design-G<Group Number>.sql
+```
+
+### Example for Group 01
+
+```text
+01-business-req-analysis-G01.md
+```
