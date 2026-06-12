@@ -61,8 +61,10 @@ between them**: each fact lives in exactly one file (see the boundary below).
 ## After ANY task — required actions
 1. Save output to `outputs/<task>-G05.<ext>`
 2. Update the registries per the **Registry maintenance protocol** above
-3. Run `file-evaluation.md` on the output
-4. Update `memory/Progress.md`
-5. Update `memory/ActiveContext.md`
-6. If a key design decision was made → append to `docs/design-decisions.md`
+3. Write a trajectory file per `.opencode/skills/evaluations/trajectory-recording.md`
+   — the task is not complete until it exists
+4. Run `file-evaluation.md` on the output
+5. Update `memory/Progress.md`
+6. Update `memory/ActiveContext.md`
+7. If a key design decision was made → append to `docs/design-decisions.md`
 
