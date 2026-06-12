@@ -10,15 +10,15 @@ generate-business-req --group G05
 generate-business-req req/ --group G05
 ```
 
-Prompt: |
+Prompt:
   Generate a complete business requirement analysis for the Campus Space Management System, group G05.
 
   Input sources:
-  - docs/project-overview.md
-  - all requirement files under req/
+  - `docs/project-overview.md`
+  - all requirement files under `req/*.md`
 
   Output:
-  - A single markdown document suitable for outputs/01-business-req-analysis-G05.md
+  - A single markdown document suitable for `outputs/01-business-req-analysis-G05.md`
 
   Include these sections:
   1. Project overview and purpose
@@ -35,7 +35,7 @@ Prompt: |
   - assume the database design is finalized
   - invent unsupported requirements
 
-Notes: |
+Notes: 
   - Use `--group G05` as the default group.
   - If a directory is provided, read all requirement files under that directory.
   - This command file defines the invocation interface only; the skill contains the task behavior.
