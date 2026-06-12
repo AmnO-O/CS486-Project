@@ -39,15 +39,3 @@ You **MUST NOT** update `memory/Progress.md` or `memory/ActiveContext.md` autono
 
     > _"Ready to mark Task X as ✅ and update `memory/Progress.md`? Or do you want to run revisions?"_
 
-
-
-## Quick reference
-| Need | File |
-|---|---|
-| Workflow & checklist per task | `docs/db-design-pipeline.md` |
-| Entities & attributes | `docs/entity-registry.md` |
-| Relational schema | `docs/schema-registry.md` |
-| Past design decisions | `docs/design-decisions.md` |
-| Current task state | `memory/ActiveContext.md` |
-| Task progress | `memory/Progress.md` |
-| Skill + templates | `.opencode/skills/db-design-pipeline/SKILL.md` |
