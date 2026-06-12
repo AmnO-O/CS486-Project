@@ -3,48 +3,61 @@ Skill: db-design-pipeline:01-business-req-analysis
 Title: Business Requirement Analysis
 
 Purpose:
-Extract actors, entities, attributes, relationships, cardinalities, business rules, assumptions, and open questions from the requirement files under `req/` and produce a readable analysis artifact `outputs/01-business-req-analysis-G{{group}}.md`.
+Produce the business requirement analysis prompt and expected behavior for Task 01, generating outputs/01-business-req-analysis-G05.md from req/ and docs/project-overview.md.
 
 Inputs:
-- requirement files under `req/` (required)
-- `--group` (optional, default: G05)
+- requirement files under req/ (required)
+- docs/project-overview.md (required)
+- --group (optional, default: G05)
 
 Outputs:
-- `outputs/01-business-req-analysis-G{{group}}.md`
+- outputs/01-business-req-analysis-G{{group}}.md
 
 Behavior / Steps:
-1. Read all requirement files under `req/` (or the provided requirement path) and split content into logical sections (overview, actors, requirements, constraints).
-2. Identify and list actors with brief role descriptions.
-3. Identify candidate entities and their key attributes.
-4. Identify relationships between entities and note cardinalities and participation (mandatory/optional) where explicit.
-5. Extract hard business rules and convert them into explicit, numbered business rules.
-6. Record assumptions where the requirement is ambiguous and list open questions for follow-up.
-7. Produce a short mapping of entities -> suggested relation/table names.
-8. Output a Markdown file containing the above sections and a short summary for reviewers.
+1. Read docs/project-overview.md and all files under req/.
+2. Identify project purpose, actors, core domain objects, and key activities.
+3. Summarize booking request lifecycle, approval workflow, maintenance handling, and incident tracking.
+4. Extract explicit business rules and constraints.
+5. Record assumptions and unresolved ambiguities without assuming the database design is finalized.
+6. Format the result as a final markdown deliverable.
 
-Prompt template (internal to the skill):
-```
-You are a database design assistant. Read the following business requirement content from all files under req/ and extract:
-- a concise purpose statement (1-2 sentences)
-- a list of actors
-- a list of candidate entities with their important attributes
-- relationships and cardinalities (if stated)
-- explicit business rules (numbered)
-- assumptions and open questions
+Cognitive Rules / Guidelines:
 
-Input requirement:
-{{requirement_text}}
+- Role: act as a database design analyst and rule-enforcer (system-level persona).
+- Input sources: only `docs/project-overview.md` and all files under `req/`.
+- Output intent: produce a concise, reviewer-ready business requirement analysis in Markdown.
+- Do NOT embed a static, hardcoded prompt template in this skill file — templates/responses are provided by the runtime or a separate `templates/` asset when needed.
 
-Return the result in Markdown sections titled: Purpose, Actors, Entities, Relationships, Business Rules, Assumptions, Open Questions, Suggested Table Mapping.
-```
+Extraction priorities (in order):
+1. Project purpose and scope
+2. Actors / user roles and brief role descriptions
+3. Candidate domain objects and important attributes
+4. Key processes: booking lifecycle, approval workflow, maintenance, incidents
+5. Explicit business rules, constraints, and invariants
+6. Assumptions and unresolved ambiguities
+
+Formatting expectations:
+- Provide well-labelled Markdown sections matching the extraction priorities above.
+- Prefer short enumerated lists and numbered business rules for clarity.
+- Avoid prescribing table names, column names, or finalized schema details.
+
+Guardrails and prohibitions:
+- Do not invent capabilities, constraints, or actors not supported by the input sources.
+- Do not output runtime instructions, shell commands, or system orchestration details.
+- Do not assume the database design is finalized; record when design choices would be speculative.
+
+Interoperability:
+- The runtime/command should provide any output layout template if a specific visual format is required.
+- The skill must enforce validation checks (see below) and return a structured summary suitable for the runtime to render into the final document.
 
 Validation checks (post-generation):
-- Ensure the output contains at least one `Actors` item and at least three `Entities`.
-- Ensure at least one business rule is present.
+- Verify the output includes all required sections.
+- Verify the output is markdown-formatted.
+- Verify the output does not assume a finalized database design.
 
 Idempotency:
-- Overwrite `outputs/01-business-req-analysis-G{{group}}.md` if it exists.
+- Overwrite outputs/01-business-req-analysis-G{{group}}.md if it exists.
 
-Notes for implementers:
-- The skill is intentionally modular so teams can implement each step independently and test outputs incrementally.
-- Keep the prompt concise to reduce token usage; for long requirements, pre-process to extract only the relevant prose.
+Notes:
+- The skill should be prompt-focused and not include runtime shell behavior.
+- Use only the specified input documents and do not reference other design artifacts as required sources.
