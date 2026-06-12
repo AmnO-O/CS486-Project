@@ -4,7 +4,7 @@
 
 | Task | Deliverable | Output file | Status | Depends on |
 |---|---|---|---|---|
-| Task 1 | Business analysis | `outputs/01-business-analysis-G05.md` | ⬜ Not started | — |
+| Task 1 | Business analysis | `outputs/01-business-req-analysis-G05.md` | ✅ Approved | — |
 | Task 2 | ERD design | `outputs/02-erd-design-G05.md` | ⬜ Not started | Task 1 |
 | Task 3 | Logical design | `outputs/03-logical-design-G05.md` | ⬜ Not started | Task 2 |
 | Task 4 | Design validation | `outputs/04-design-validation-G05.md` | ⬜ Not started | Task 3 |
@@ -43,7 +43,10 @@ _(Record key decisions here so future sessions don't re-debate them)_
 
 | Date | Decision | Reason |
 |---|---|---|
-| — | — | — |
+| 2026-06-12 | Task 01 output filename: `01-business-req-analysis-G05.md` | Matches required naming in `req/business-requirement.md` §3.2 |
+| 2026-06-12 | 7 entities defined: Users, Departments, Spaces, Facilities, Space_Facilities, Bookings, Maintenance | Directly derived from requirement sections |
+| 2026-06-12 | Assumption: Users have unique emails | Natural business key |
+| 2026-06-12 | Assumption: Soft deletes for bookings/maintenance | Historical records requirement |
 
 ---
 
@@ -51,7 +54,10 @@ _(Record key decisions here so future sessions don't re-debate them)_
 
 _(Unresolved items — must answer before moving to next task)_
 
-- None recorded yet
+1. Rejection reason — separate column or part of decision note?
+2. Usage policy — free text or coded rules?
+3. Building/floor — reference tables or varchar fields?
+4. No-show detection — automatic or manual?
 
 ---
 

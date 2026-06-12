@@ -6,23 +6,22 @@ metadata:
 ---
 
 ## Current task
-Task 02 — Conceptual ERD Design *(in progress)*
+Task 01 — Business Requirement Analysis ✅ *(completed)*
 
 ## Status
-- Task 01 output: `outputs/01-business-req-analysis-G05.md` ✅
+- Task 01 output: `outputs/01-business-req-analysis-G05.md` ✅ (generated 2026-06-12)
 - Entity registry: `docs/entity-registry.md` ✅ populated
 
 ## Blocking issues
 - None
 
 ## Notes from last session
-- Task 01 completed and evaluated
-- Entity registry populated with 6 entities and 10 relationships
-- Key business rules confirmed — especially no-overlap constraint for bookings
+- Task 01 generated from `req/business-requirement.md`, `docs/project-overview.md`, `docs/tech-stack.md`, `docs/entity-registry.md`
+- 7 core entities identified: Users, Departments, Spaces, Facilities, Space_Facilities, Bookings, Maintenance
+- 14 business rules documented
+- 7 assumptions and 5 unresolved ambiguities recorded
 
 ## Next steps
-1. Read `docs/entity-registry.md` to confirm entities
-2. Read `docs/project-overview.md` — key business rules section
-3. Run command `/02-generate-erd`
-4. Evaluate output with `file-evaluation.md`
-5. Update `Progress.md` and this file
+1. Run command `/02-generate-erd` for Task 02 — Conceptual ERD Design
+2. Evaluate output with `file-evaluation.md`
+3. Update `Progress.md` and this file
