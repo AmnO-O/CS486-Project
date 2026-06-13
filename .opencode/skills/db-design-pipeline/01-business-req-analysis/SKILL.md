@@ -3,7 +3,7 @@ Skill: db-design-pipeline:01-business-req-analysis
 Title: Business Requirement Analysis
 
 Purpose:
-Produce the business requirement analysis prompt and expected behavior for Task 01, generating outputs/01-business-req-analysis-G05.md from req/ and docs/project-overview.md.
+Produce the business requirement analysis prompt and expected behavior for Task 01, generating `outputs/01-business-req-analysis-G05.md` from `req/` and `docs/project-overview.md.`
 
 Inputs:
 - requirement files under req/ (required)
