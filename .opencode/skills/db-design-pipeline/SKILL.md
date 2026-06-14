@@ -12,15 +12,22 @@ description: >
 ## Before ANY task — required reading sequence
 1. `docs/README.md` → determine which files to read for this task
 2. `memory/MEMORY.md` → scan, open relevant memory files
-3. `docs/design-decisions.md` → never contradict past decisions
-4. Task-specific sub-skill: `.opencode/skills/db-design-pipeline/<NN>-<task-name>/SKILL.md`
+3. `docs/templates/README.md` → to determine which templates to read
+4. `docs/design-decisions.md` → never contradict past decisions
+5. Task-specific sub-skill: `.opencode/skills/db-design-pipeline/<NN>-<task-name>/SKILL.md`
    (e.g. `01-business-req-analysis/`).
 
 ## Quality standards
-- Entities and attributes → must match `docs/entity-registry.md` exactly
+- **Task 01 only:** source of truth is `req/business-requirement.md` —
+  do NOT read `docs/entity-registry.md` before generating output;
+  write TO it after.
+
+- **Task 02+:** entities and attributes → must match `docs/entity-registry.md` exactly.
+
 - Table names and columns → must match `docs/schema-registry.md` (task 03+)
 - Naming → follow `docs/tech-stack.md` conventions
 - Ambiguity → refer to `req/business-requirement.md`, never assume
+
 
 ## Registry maintenance protocol
 
