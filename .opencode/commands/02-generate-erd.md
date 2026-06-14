@@ -15,7 +15,7 @@ Prompt:
   Generate the ERD for the Campus Space Management System, group G05.
 
   Input:  `docs/entity-registry.md`
-  Output: `outputs/02-erd-G{{group}}.md`
+  Output: `outputs/02-erd-design-G{{group}}.md`
 
 Notes:
   - Use `--group G05` as the default group.

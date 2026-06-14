@@ -23,5 +23,5 @@ Task 01 — Business Requirement Analysis ✅ *(completed)*
 
 ## Next steps
 1. Run command `/02-generate-erd` for Task 02 — Conceptual ERD Design
-2. Evaluate output with `file-evaluation.md`
+2. Evaluate output with `.opencode/commands/evaluate-task.md`
 3. Update `Progress.md` and this file
