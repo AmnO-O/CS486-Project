@@ -105,7 +105,7 @@ The demo Git repository include the following files and folders, your group coul
 | `.opencode/` | Stores OpenCode commands, skills, and related configuration. |
 | `.opencode/commands/design-db.md` | Defines the custom command used to run the database design pipeline. |
 | `.opencode/skills/db-design-pipeline/SKILL.md` | Defines the agent workflow, rules, design steps, and output requirements. |
-| `.opencode/skills/db-design-pipeline/templates/` | Stores templates used by the agent to generate consistent outputs. |
+| `.opencode/skills/db-design-pipeline/<task>/` | Stores templates used by the agent to generate consistent outputs. |
 | `req/business-requirement.md` | Contains the input business requirement. |
 | `outputs/` | Stores all generated project artifacts. |
 | `AGENTS.md` | Contains project-level instructions for the agent. |

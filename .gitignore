@@ -5,8 +5,8 @@ node_modules/
 **/.DS_Store
 pipeline.docx
 pipeline.pdf
-.opencode/commands/run-evaluation.md
-.opencode/skills/evaluations/rubric.md
 .claude/
 untrack
 eval.txt
+AI-agent-evaluation.docx
+test-database.sql
