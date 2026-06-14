@@ -24,7 +24,7 @@ logs/trajectory/task0X/<YYYY-MM-DD-HHMM>-trajectory.md
 | `plan` | PlanQuality |
 | `steps` | PlanAdherence, StepEfficiency |
 | `files_touched` | ToolCorrectness, ArgumentCorrectness |
-| `outcome` | TaskCompletion |
+| `outcome` | PlanAdherence, TaskCompletion |
 
 ---
 
@@ -77,12 +77,14 @@ revision_of: ""                 # filename of prior trajectory if this is a re-r
 - **Open questions raised:** Q1: ...        (or "none")
 - **Conflicts with docs/design-decisions.md:** none | <describe + how resolved>
 - **Deviations from plan:** none | <which step changed and why>
+- **Self-detected errors and fixes:** none | <error found, evidence/check that failed, and how it was fixed>
 
 ---
 
 ## Authoring rules
 
 - Be honest, not aspirational: section 2 records what actually happened, not the ideal path. A redundant re-read belongs in the log — that is exactly what StepEfficiency is meant to catch.
+- If a verification step fails, record it in section 2 as a `verify` action and summarize the failure/fix under `Self-detected errors and fixes` in section 4.
 - Keep it terse. The trajectory is read by the evaluator on every run, so bloat costs tokens. Aim for under one screen.
 - Do not paste artifact content into the trajectory; reference files by path.
 - `reason` rows have no file; use them only when a real decision was made.
