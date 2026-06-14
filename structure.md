@@ -1,80 +1,92 @@
-CS486/
-├── README.md
-├── AGENTS.md                          [KEEP] Always-loaded: quy tắc cứng, cross-tool
-├── .gitignore
-├── package.json
-├── package-lock.json
+CS486-Project/
+├── README.md                             # Setup, run guide, required outputs
+├── AGENTS.md                             # Agent rules and workflow constraints
+├── .gitignore                            # Ignored local/temp files
+├── CS486_Project.pdf                     # Original assignment brief
+├── improvement_logs.md                   # Agent improvement notes
+├── structure.md                          # Project structure draft
 │
-├── req/
-│   ├── CS486_Project.pdf
-│   ├── CS486_Project.txt
-│   └── business-requirement.md
+├── req/                                  # Source requirements
+│   └── business-requirement.md           # Main business requirements
 │
-├── docs/                              [NEW] Tầng 2 — chi tiết theo domain
-│   ├── README.md                      Index + required reading order
-│   ├── project-overview.md            (← từ memory/ProductContext.md)
-│   ├── tech-stack.md                  (← từ memory/TechStack.md)
-│   ├── db-design-pipeline.md          Quy trình 7 bước, workflow chi tiết
-│   ├── entity-registry.md             Entities & attributes (task 01→07)
-│   ├── schema-registry.md             Relational schema đã thống nhất
-│   └── design-decisions.md            Lý do các quyết định thiết kế
+├── docs/                                 # Project knowledge base
+│   ├── README.md                         # Docs index and reading order
+│   ├── project-overview.md               # Domain summary
+│   ├── tech-stack.md                     # SQL Server and naming rules
+│   ├── entity-registry.md                # Conceptual entities and relationships
+│   ├── schema-registry.md                # Relational schema source of truth
+│   └── design-decisions.md               # Design rationale and assumptions
 │
-├── memory/                            Tầng 4 — persistent session memory
-│   ├── MEMORY.md                      [NEW] Index — 1 dòng/entry, AI scan đầu session
-│   ├── ActiveContext.md               [KEEP] Task đang làm, trạng thái session
-│   └── Progress.md                    [KEEP] Task nào xong / chưa xong
+├── memory/                               # Agent session state
+│   ├── MEMORY.md                         # Memory index
+│   ├── ActiveContext.md                  # Current task and next steps
+│   └── Progress.md                       # Pipeline status and open issues
 │
-├── .opencode/
-│   ├── commands/
-│   │   ├── 01-generate-business-req.md
-│   │   ├── 02-generate-erd.md
-│   │   ├── 03-generate-logical-design.md
-│   │   ├── 04-generate-design-validation.md
-│   │   ├── 05-generate-ddl.md
-│   │   ├── 06-generate-sample-data.md
-│   │   ├── 07-generate-query-design.md
-│   │   ├── file-evaluation.md
-│   │   └── outputs-evaluation.md
+├── outputs/                              # Final deliverables
+│   ├── 01-business-req-analysis-G05.md   # Requirement analysis
+│   ├── 02-erd-design-G05.md              # Conceptual ERD
+│   ├── 03-logical-design-G05.md          # [Future] Logical schema
+│   ├── 04-design-validation-G05.md       # [Future] Schema validation
+│   ├── 05-db-definition-G05.sql          # [Future] T-SQL DDL
+│   ├── 06-sample-data-G05.sql            # [Future] Sample data
+│   └── 07-query-design-G05.sql           # [Future] Business queries
+│
+├── logs/                                 # Agent execution and evaluation logs
+│   ├── trajectory/                       # Task execution traces
+│   │   ├── task01/                       # [Future] Task 01 trace
+│   │   ├── task02/                       # Task 02 trace
+│   │   ├── task03/                       # [Future] Task 03 trace
+│   │   ├── task04/                       # [Future] Task 04 trace
+│   │   ├── task05/                       # [Future] Task 05 trace
+│   │   ├── task06/                       # [Future] Task 06 trace
+│   │   └── task07/                       # [Future] Task 07 trace
 │   │
-│   ├── skills/
-│   │   └── db-design-pipeline/
-│   │       ├── SKILL.md
-│   │       └── templates/
-│   │           ├── 01-business-req-analysis/
-│   │           ├── 02-erd-design/
-│   │           ├── 03-logical-design/
-│   │           ├── 04-design-validation/
-│   │           ├── 05-ddl/
-│   │           ├── 06-sample-data/
-│   │           └── 07-query-design/
-│   │
-│   └── evaluations/
-│       ├── rubric.md
-│       ├── improvement_logs.md
-│       ├── evaluations.md
-│       └── templates/
-│           ├── 01-business-req-analysis-eval.md
-│           ├── 02-conceptual-erd-eval.md
-│           ├── 03-logical-design-eval.md
-│           ├── 04-design-validation-eval.md
-│           ├── 05-ddl-eval.md
-│           ├── 06-sample-data-eval.md
-│           └── 07-query-design-eval.md
+│   └── eval/                             # Output evaluation logs
+│       ├── task01/                       # [Future] Task 01 evaluation
+│       ├── task02/                       # Task 02 evaluation
+│       ├── task03/                       # [Future] Task 03 evaluation
+│       ├── task04/                       # [Future] Task 04 evaluation
+│       ├── task05/                       # [Future] Task 05 evaluation
+│       ├── task06/                       # [Future] Task 06 evaluation
+│       ├── task07/                       # [Future] Task 07 evaluation
+│       └── pipeline/                     # [Future] Pipeline evaluation
 │
-├── outputs/
-│   ├── 01-business-req-analysis-G05.md   [DONE ✓]
-│   ├── 02-erd-design-G05.md
-│   ├── 03-logical-design-G05.md
-│   ├── 04-design-validation-G05.md
-│   ├── 05-db-definition-G05.sql
-│   ├── 06-sample-data-G05.sql
-│   └── 07-query-design-G05.sql
-│
-├── report/
-│   └── G05_Report.pdf
-│
-└── logs/
-    ├── file-eval/
-    │   └── YYYY-MM-DD-{task}-reviewer-N.log
-    └── output-eval/
-        └── YYYY-MM-DD-HHMM-overall-evaluation.log
+└── .opencode/                            # OpenCode agent configuration
+    ├── commands/                         # Slash commands
+    │   ├── design-db.md                  # Run full pipeline
+    │   ├── 01-generate-business-req.md   # Generate Task 01
+    │   ├── 02-generate-erd.md            # Generate Task 02
+    │   ├── 03-generate-logical-design.md # Generate Task 03
+    │   ├── 04-generate-design-validation.md # Generate Task 04
+    │   ├── 05-generate-ddl.md            # Generate Task 05
+    │   ├── 06-generate-sample-data.md    # Generate Task 06
+    │   ├── 07-generate-query-design.md   # Generate Task 07
+    │   ├── evaluate-task.md              # Evaluate one task
+    │   └── evaluate-pipeline.md          # [Future] Evaluate pipeline
+    |   
+    └── skills/
+        ├── db-design-pipeline/           # Main DB design workflow
+        │   ├── SKILL.md                  # Pipeline rules
+        │   ├── 01-business-req-analysis/ # Task 01 skill
+        │   │   └── SKILL.md
+        │   ├── 02-erd/                   # Task 02 skill
+        │   │   └── SKILL.md
+        │   ├── 03-logical-design/        # [Future] Task 03 skill
+        │   │   └── SKILL.md
+        │   ├── 04-design-validation/     # [Future] Task 04 skill
+        │   │   └── SKILL.md
+        │   ├── 05-ddl/                   # [Future] Task 05 skill
+        │   │   └── SKILL.md
+        │   ├── 06-sample-data/           # [Future] Task 06 skill
+        │   │   └── SKILL.md
+        │   └── 07-query-design/          # [Future] Task 07 skill
+        │       └── SKILL.md
+        │
+        └── evaluations/                  # Evaluation framework
+            ├── README.md                 # Evaluation guide
+            ├── rubric.md                 # Output rubric
+            ├── expected-files.md         # Required file list
+            ├── agent-metrics-rubric.md   # Agent quality metrics
+            ├── trajectory-recording.md   # Trace log rules
+            └── templates/
+                └── trajectory-template.md
