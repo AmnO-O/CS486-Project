@@ -10,3 +10,4 @@ untrack
 eval.txt
 AI-agent-evaluation.docx
 test-database.sql
+.env
