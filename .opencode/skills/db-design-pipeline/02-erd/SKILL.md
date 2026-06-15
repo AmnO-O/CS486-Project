@@ -63,7 +63,7 @@ For each entity block under `### <EntityName>`:
 ## 5. Output Format
 * Provide a brief analysis (under 3 sentences) explaining the core entities and their relationships.
 * Return exactly one `mermaid` code block containing the diagram.
-* outputs/01-business-req-analysis-G{{group}}.md
+* outputs/02-erd-design-G{{group}}.md
 
 
 ## 6. Example Output 

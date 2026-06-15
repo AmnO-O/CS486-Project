@@ -11,7 +11,7 @@
 | Task 5 | SQL DDL | `outputs/05-ddl-G05.sql` | ⬜ Not started | Task 4 ✅ freeze |
 | Task 6 | Sample data | `outputs/06-sample-data-G05.sql` | ⬜ Not started | Task 5 |
 | Task 7 | Query design | `outputs/07-query-design-G05.sql` | ⬜ Not started | Task 5 |
-| — | Logs agent improvement | `docs/changelog/` | ⬜ ongoing | — |
+| — | Logs agent improvement | `improvement_logs.md` | ⬜ ongoing | — |
 | — | Git repository | — | ⬜ Not started | — |
 | — | Report PDF | `outputs/report-G05.pdf` | ⬜ Not started | All tasks |
 | — | SCHEMA FREEZE | — | ⬜ Not started | Task 4 — all 4 must approve |
@@ -66,4 +66,4 @@ _(Unresolved items — must answer before moving to next task)_
 After completing each task:
 1. Change status to ✅ Approved or ⚠️ Needs revision
 2. Add key decisions to the decisions log
-3. Update `memory/activeContext.md` for the next task
+3. Update `memory/ActiveContext.md` for the next task

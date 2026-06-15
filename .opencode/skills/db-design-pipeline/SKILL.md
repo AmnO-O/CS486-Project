@@ -12,15 +12,22 @@ description: >
 ## Before ANY task — required reading sequence
 1. `docs/README.md` → determine which files to read for this task
 2. `memory/MEMORY.md` → scan, open relevant memory files
-3. `docs/design-decisions.md` → never contradict past decisions
-4. Task-specific sub-skill: `.opencode/skills/db-design-pipeline/<NN>-<task-name>/SKILL.md`
+3. `docs/templates/README.md` → to determine which templates to read
+4. `docs/design-decisions.md` → never contradict past decisions
+5. Task-specific sub-skill: `.opencode/skills/db-design-pipeline/<NN>-<task-name>/SKILL.md`
    (e.g. `01-business-req-analysis/`).
 
 ## Quality standards
-- Entities and attributes → must match `docs/entity-registry.md` exactly
+- **Task 01 only:** source of truth is `req/business-requirement.md` —
+  do NOT read `docs/entity-registry.md` before generating output;
+  write TO it after.
+
+- **Task 02+:** entities and attributes → must match `docs/entity-registry.md` exactly.
+
 - Table names and columns → must match `docs/schema-registry.md` (task 03+)
 - Naming → follow `docs/tech-stack.md` conventions
 - Ambiguity → refer to `req/business-requirement.md`, never assume
+
 
 ## Registry maintenance protocol
 
@@ -61,8 +68,10 @@ between them**: each fact lives in exactly one file (see the boundary below).
 ## After ANY task — required actions
 1. Save output to `outputs/<task>-G05.<ext>`
 2. Update the registries per the **Registry maintenance protocol** above
-3. Run `file-evaluation.md` on the output
-4. Update `memory/Progress.md`
-5. Update `memory/ActiveContext.md`
-6. If a key design decision was made → append to `docs/design-decisions.md`
+3. Write a trajectory file per `.opencode/skills/evaluations/trajectory-recording.md`
+   — the task is not complete until it exists
+4. Run `.opencode/commands/evaluate-task.md` on the output
+5. Update `memory/Progress.md`
+6. Update `memory/ActiveContext.md`
+7. If a key design decision was made → append to `docs/design-decisions.md`
 
