@@ -38,7 +38,7 @@ _(To be populated during Tasks 1–4.)_
 ### Decision: Soft deletes for bookings and maintenance
 
 **Task:** 3 (Logical Design)
-**Date:** [TO BE FILLED]
+**Date:** 2026-06-15
 
 **Problem:** Bookings and maintenance records need to remain in the database for audit and reporting purposes, even after they are "deleted" by users.
 
@@ -57,7 +57,7 @@ _(To be populated during Tasks 1–4.)_
 ### Decision: Surrogate keys (INT IDENTITY) vs. business keys
 
 **Task:** 3 (Logical Design)
-**Date:** [TO BE FILLED]
+**Date:** 2026-06-15
 
 **Problem:** Primary key strategy for each table.
 
@@ -79,7 +79,7 @@ _(To be populated during Tasks 1–4.)_
 ### Decision: Status columns as VARCHAR with CHECK vs. dedicated lookup tables
 
 **Task:** 3 (Logical Design)
-**Date:** [TO BE FILLED]
+**Date:** 2026-06-15
 
 **Problem:** How to represent enum values (booking_status, space_status, user_role, etc.)?
 
@@ -101,7 +101,7 @@ _(To be populated during Tasks 1–4.)_
 ### Decision: Junction table for space-facility many-to-many
 
 **Task:** 2 (ERD Design)
-**Date:** [TO BE FILLED]
+**Date:** 2026-06-15
 
 **Problem:** A space can have multiple facilities (projector, AC, whiteboard), and a facility can be in multiple spaces. How to model this?
 
@@ -120,7 +120,7 @@ _(To be populated during Tasks 1–4.)_
 ### Decision: DATETIME2 for all timestamps
 
 **Task:** 3 (Logical Design)
-**Date:** [TO BE FILLED]
+**Date:** 2026-06-15
 
 **Problem:** Which MSSQL date/time type to use?
 
@@ -136,9 +136,121 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
-## Assumptions documented during design
+### Decision: Building/floor as free-text VARCHAR fields
 
-_(To be filled in during Tasks 1–4.)_
+**Task:** 3 (Logical Design)
+**Date:** 2026-06-15
+
+**Problem:** Whether to model building and floor as separate reference tables or as free-text fields on the spaces table (Q5).
+
+**Options considered:**
+- Option A: Separate `buildings` and `floors` reference tables — pros: normalized, enforces consistency; cons: extra tables and joins with no corresponding query requirement
+- Option B: Free-text `NVARCHAR` fields on `spaces` — pros: simpler schema, sufficient for current requirements
+
+**Decision:** We chose Option B (free-text) because no requirement demands building/floor CRUD or cross-building reporting that would justify the extra normalization.
+
+**Impact:** Building and floor values may have minor inconsistencies (e.g., "Bldg A" vs "Building A"), but this is acceptable for the current scope.
+
+**Requirement reference:** Unresolved ambiguity Q5 in outputs/01 §8.
+
+---
+
+### Decision: Rejection reason as separate column
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-06-15
+
+**Problem:** Should the rejection reason be stored as a separate column or merged into the decision note (Q1)?
+
+**Options considered:**
+- Option A: Merge into `decision_note` — pros: fewer columns; cons: harder to query/validate separately
+- Option B: Separate `rejection_reason` column — pros: clear semantic distinction, easier to enforce BR7
+
+**Decision:** We chose Option B because Business Rule 7 explicitly requires "rejection reason must be stored" — a dedicated column makes enforcement and querying cleaner.
+
+**Impact:** The `bookings` table has an additional nullable `rejection_reason NVARCHAR(MAX)` column.
+
+**Requirement reference:** Business Rule 7, outputs/01 §7.3.
+
+---
+
+### Decision: Usage policy as free-text NVARCHAR(MAX)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-06-15
+
+**Problem:** How to represent usage policy for spaces — free text, coded rules, or document reference (Q2)?
+
+**Options considered:**
+- Option A: Coded rules (lookup table of policy types) — pros: queryable; cons: requirements do not define a fixed policy set
+- Option B: Free-text NVARCHAR(MAX) — pros: flexible, simple; cons: not structured
+
+**Decision:** We chose Option B (free-text) because no fixed set of policies is defined and the requirement does not call for policy-based querying.
+
+**Impact:** `usage_policy` on spaces is an optional free-text field.
+
+**Requirement reference:** Unresolved ambiguity Q2 in outputs/01 §8.
+
+---
+
+### Decision: Q3 — Maintenance completion auto-updates space status
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-06-15
+
+**Problem:** Can a space be booked after maintenance is resolved but before space status is manually updated to 'available' (Q3)?
+
+**Options considered:**
+- Option A: Manual only — staff must update space status separately (pros: human oversight; cons: gap window for errors)
+- Option B: Automatic trigger on maintenance completion — when maintenance status changes to 'resolved', auto-set space status to 'available' (pros: eliminates gap; cons: assumes maintenance completion always means space is usable)
+
+**Decision:** We chose Option B (automatic trigger) plus a cross-check trigger on booking insertion that checks for overlapping unresolved maintenance regardless of space status (defense-in-depth).
+
+**Impact:** Two triggers: `trg_maintenance_completion_space_status` (on maintenance UPDATE → resolved) and `trg_bookings_check_maintenance` (on bookings INSERT/UPDATE). Both documented in the logical design.
+
+**Requirement reference:** Business Rule 4, outputs/01 §6.4.
+
+---
+
+### Decision: Q4 — Automatic no-show detection
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-06-15
+
+**Problem:** Is no-show detection automatic or manual (Q4)?
+
+**Options considered:**
+- Option A: Manual — facility staff mark no-show (pros: human judgment; cons: may be forgotten)
+- Option B: Automatic scheduled job — periodically sets no-show for approved bookings without check-in past end time (pros: ensures all no-shows captured; cons: edge cases if check-in happens late)
+
+**Decision:** We chose Option B (automatic scheduled job) because the `no_show` status is part of the booking lifecycle and should not require manual intervention. The job runs periodically and transitions `approved` bookings with `actual_start_time IS NULL` and `requested_end_time < GETDATE()` to `no_show`.
+
+**Impact:** No schema changes; the scheduled job is an operational artifact external to the database. Documented in the logical design.
+
+**Requirement reference:** outputs/01 §4.2 (no_show status) and Assumption A5.
+
+---
+
+### Decision: Account status enum finalized
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-06-15
+
+**Problem:** The entity registry listed `account_status` as a "provisional enum" without specific values. The requirement (§2) mentions "Account Status" exists but does not enumerate values.
+
+**Options considered:**
+- Option A: Open-ended VARCHAR without CHECK — pros: flexible; cons: no integrity
+- Option B: CHECK constraint with standard values — pros: data integrity; cons: requires DDL change to add values
+
+**Decision:** We chose Option B with values `('active','inactive','suspended')` and DEFAULT `'active'` — reasonable for university account lifecycle management.
+
+**Impact:** `users.account_status` is `VARCHAR(50) NOT NULL DEFAULT 'active' CHECK (account_status IN ('active','inactive','suspended'))`.
+
+**Requirement reference:** outputs/01 §2 (Account Status as attribute).
+
+---
+
+## Assumptions documented during design
 
 1. **Assumption:** Users have unique email addresses.
    - **Rationale:** Email is the natural business key for user identification.
@@ -148,7 +260,9 @@ _(To be filled in during Tasks 1–4.)_
    - **Rationale:** Department list is relatively stable; not created on-the-fly.
    - **Task documented:** Task 1
 
-3. (To be added during tasks)
+3. **Assumption:** Building/floor as free-text fields is sufficient.
+   - **Rationale:** No requirement demands reference-table normalization for buildings/floors.
+   - **Task documented:** Task 3
 
 ---
 
@@ -178,7 +292,9 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 ## Revision log
 
 | Date | Change | By | Task |
-|---|---|---|---|
+|---|---|---|---|---|
+| 2026-06-15 | Revision 1: added Q3 (maintenance auto-status) and Q4 (auto no-show) decisions; filtered unique index for overlap | Copilot | Task 03 revision |
+| 2026-06-15 | Filled in dates for all Task 2/3 decisions; added account_status, building/floor, rejection_reason, usage_policy decisions | Copilot | Task 03 |
 | — | Template created | Copilot | Planning |
 
 ---
