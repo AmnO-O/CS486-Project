@@ -45,6 +45,8 @@ Column rules:
 
 Discovery-status legend: ⬜ draft · 🔄 refining · 🔒 locked (post-Task 03).
 
+> ✅ **All entities below are 🔒 locked as of Task 03 (2026-06-15).**
+
 ---
 ## Relationships registry
 
@@ -77,14 +79,14 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 **Candidate keys:**
 - `department_id` (surrogate, PK)
-- `name` (business, UNIQUE) — provisional
+- `name` (business, UNIQUE)
 
 **Attributes:**
 
 | Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
 |---|---|---|---|---|---|
 | department_id | INT | NO | PK | — | IDENTITY(1,1) |
-| name | NVARCHAR(255) | NO | UQ | UNIQUE | Provisional business key |
+| name | NVARCHAR(255) | NO | UQ | UNIQUE | Business key |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 
@@ -110,7 +112,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | phone_number | NVARCHAR(50) | YES | — | — | Optional (A7) |
 | role | VARCHAR(50) | NO | — | `CHECK IN ('student','lecturer','teaching_assistant','facility_staff','department_admin','facility_manager')` | |
 | department_id | INT | NO | FK | `FK → departments.department_id` | |
-| account_status | VARCHAR(50) | NO | — | provisional enum | "Account Status" in req |
+| account_status | VARCHAR(50) | NO | — | `CHECK IN ('active','inactive','suspended')` | DEFAULT 'active' |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 
@@ -134,12 +136,12 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | space_code | NVARCHAR(50) | NO | UQ | UNIQUE | Business key |
 | space_name | NVARCHAR(255) | NO | — | — | Display name |
 | space_type | VARCHAR(50) | NO | — | `CHECK IN ('auditorium','classroom','computer_lab','project_lab','meeting_room','student_workspace')` | |
-| building | NVARCHAR(100) | NO | — | — | See Q5 (table vs varchar) |
-| floor | NVARCHAR(50) | NO | — | — | See Q5 |
+| building | NVARCHAR(100) | NO | — | — | Free-text building identifier |
+| floor | NVARCHAR(50) | NO | — | — | Free-text floor identifier |
 | room_number | NVARCHAR(50) | NO | — | — | |
-| capacity | INT | NO | — | provisional `CHECK (capacity > 0)` | |
-| current_status | VARCHAR(50) | NO | — | `CHECK IN ('available','in_use','under_maintenance','temporarily_closed','retired')` | |
-| usage_policy | NVARCHAR(MAX) | YES | — | — | See Q2 (free text vs coded) |
+| capacity | INT | NO | — | `CHECK (capacity > 0)` | |
+| current_status | VARCHAR(50) | NO | — | `CHECK IN ('available','in_use','under_maintenance','temporarily_closed','retired')` | DEFAULT 'available' |
+| usage_policy | NVARCHAR(MAX) | YES | — | — | Free-text (Q2) |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 
@@ -153,7 +155,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 **Candidate keys:**
 - `facility_id` (surrogate, PK)
-- `name` (business, UNIQUE) — provisional
+- `name` (business, UNIQUE)
 
 **Attributes:**
 
@@ -173,7 +175,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 **Source:** outputs/01 §3.2
 
 **Candidate keys:**
-- `(space_id, facility_id)` (composite, PK) — provisional
+- `(space_id, facility_id)` (composite, PK)
 
 **Attributes:**
 
@@ -181,7 +183,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 |---|---|---|---|---|---|
 | space_id | INT | NO | PK, FK | `FK → spaces.space_id` | Part of composite PK |
 | facility_id | INT | NO | PK, FK | `FK → facilities.facility_id` | Part of composite PK |
-| quantity | INT | YES | — | provisional | Optional count per space |
+| quantity | INT | YES | — | — | Optional count per space |
 
 ---
 
@@ -202,9 +204,9 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | space_id | INT | NO | FK | `FK → spaces.space_id` | |
 | requester_id | INT | NO | FK | `FK → users.user_id` | Submitter (R2) |
 | requested_start_time | DATETIME2 | NO | — | — | |
-| requested_end_time | DATETIME2 | NO | — | provisional `CHECK (end > start)` | |
+| requested_end_time | DATETIME2 | NO | — | `CHECK (requested_end_time > requested_start_time)` | |
 | purpose | VARCHAR(50) | NO | — | `CHECK IN ('lecture','examination','seminar','workshop','meeting','student_activity','administrative_event')` | |
-| expected_participants | INT | NO | — | provisional | vs capacity (BR3) |
+| expected_participants | INT | NO | — | `CHECK (expected_participants > 0)` | vs capacity (BR3) |
 | status | VARCHAR(50) | NO | — | `CHECK IN ('pending','approved','rejected','cancelled','checked_in','completed','no_show')` | DEFAULT 'pending' |
 | approver_id | INT | YES | FK | `FK → users.user_id` | Set on decision (R3) |
 | decision_time | DATETIME2 | YES | — | — | |
@@ -253,7 +255,9 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 ## Revision log
 
 | Date | Change | Reason |
-|---|---|---|
+|---|---|---|---|
+| 2026-06-15 | Revision 1: no entity changes — trigger/index decisions captured in schema-registry | Task 03 revision |
+| 2026-06-15 | Finalized all attribute types, constraints, and locked (🔒) all entities | Task 03 registry maintenance — logical design |
 | 2026-06-13 | Confirmed and refined 9 relationships and 7 entities for ERD generation | Task 02 registry maintenance |
 | 2026-06-12 | Populated 7 entities, attributes, and 9 relationships from `outputs/01` | Task 01 registry maintenance |
 | — | Created registry template | Structural planning |

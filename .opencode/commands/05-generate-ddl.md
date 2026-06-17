@@ -1,0 +1,86 @@
+---
+description: Implement the database using SQL DDL with tables, keys, constraints, checks, and default values where appropriate.
+---
+
+Use skill in:
+
+- `.opencode/skills/db-design-pipeline/SKILL.md`
+- `.opencode/skills/db-design-pipeline/05-generate-ddl/SKILL.md`
+
+Required inputs:
+
+- `outputs/01-business-req-analysis-G05.md`
+- `outputs/02-erd-design-G05.md`
+- `outputs/03-logical-design-G05.md`
+- `outputs/04-design-validation-G05.md`
+- `docs/schema-registry.md`
+- `.env`
+
+Business requirements may be consulted for clarification only:
+* `req/business-requirement.md`
+* `docs/project-overview.md`
+
+
+Before generating SQL:
+1. Read memory files in order:
+   - `memory/Progress.md` → verify Task 04 status
+   - `memory/ActiveContext.md` → check for blockers
+
+2. Load environment variables:
+   - Read `.env` → extract SA_PASSWORD
+
+3. Verify schema is locked:
+   - Read `docs/schema-registry.md` — confirm all tables.
+   - Confirm all columns, PKs, FKs, and CHECK constraints are specified
+  
+4. If any dependency is missing, stop and report it.
+
+Usage:
+```
+generate-ddl --group G05
+```
+
+- Use `--group G05` as the default group.
+
+Generate:
+
+* `outputs/05-db-definition-G05.sql`
+
+After generation:
+
+1. Validate output:
+   - Check syntax: DDL must be valid T-SQL (SQL Server 2019+)
+   - Verify naming convention matches `docs/tech-stack.md`
+   - Verify all PK, FK, CHECK, UNIQUE constraints match schema-registry.md
+
+2. Compile and verify on local SQL Server:
+
+- Create database if not exists:
+```bash
+   sqlcmd -S localhost -C -U sa -P "$SA_PASSWORD" \
+   -Q "IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'CS486_G05') CREATE DATABASE CS486_G05;"
+```
+
+- Run DDL:
+```bash
+   sqlcmd -S localhost -C -U sa -P "$SA_PASSWORD" \
+   -d CS486_G05 -i outputs/05-db-definition-G05.sql
+```
+
+- Verify tables created:
+```bash
+   sqlcmd -S localhost -C -U sa -P "$SA_PASSWORD" \
+   -d CS486_G05 \
+   -Q "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME;"
+```
+
+- If any error → drop and recreate database, then re-run from step (a):
+```bash
+   sqlcmd -S localhost -C -U sa -P "$SA_PASSWORD" \
+   -Q "DROP DATABASE IF EXISTS CS486_G05;"
+```
+
+Do NOT edit schema-registry.md to match code.
+
+
+- On success → append verification output to logs/eval/YYYY-MM-DD-05-ddl-compile.log
