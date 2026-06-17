@@ -58,10 +58,20 @@ Write 1 — finalize entity-registry.md (no template needed):
   - Set ALL entity status → 🔒 locked
   - Do NOT restructure existing content
 
-Write 2 — populate schema-registry.md from scratch (template required):
+
+Write 2 — populate schema-registry.md:
+
+  - If docs/schema-registry.md already contains data (not empty):
+    → Write YOUR OWN generated output to logs/registry-snapshots/YYYY-MM-DD-HHMM-schema-registry-task03.md
+    → Do NOT read or copy docs/schema-registry.md
+    → Do NOT overwrite docs/schema-registry.md
+    → Stop here — human will decide whether to merge
+    If docs/schema-registry.md is empty or does not exist:
+    → Write YOUR OWN generated output to docs/schema-registry.md
+
   - Read docs/templates/schema-registry-template.md for format
   - Source: outputs/03-logical-design-G05.md + entity-registry.md
-  - Include: table definitions, FK wiring, indexes, 3NF proof
+  - Include: table definitions, FK wiring 
 ```
 
 ---
