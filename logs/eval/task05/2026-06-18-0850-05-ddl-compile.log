@@ -1,0 +1,54 @@
+=== Tables ===
+bookings                                                                                                                        
+departments                                                                                                                     
+facilities                                                                                                                      
+maintenance                                                                                                                     
+space_facilities                                                                                                                
+spaces                                                                                                                          
+users                                                                                                                           
+
+(7 rows affected)
+
+=== Triggers ===
+trg_bookings_approval_validation                                                                                                 bookings                                                                                                                        
+trg_bookings_check_capacity                                                                                                      bookings                                                                                                                        
+trg_bookings_check_maintenance                                                                                                   bookings                                                                                                                        
+trg_bookings_check_space_status                                                                                                  bookings                                                                                                                        
+trg_bookings_checkin_enforcement                                                                                                 bookings                                                                                                                        
+trg_bookings_completion_enforcement                                                                                              bookings                                                                                                                        
+trg_bookings_prevent_overlap                                                                                                     bookings                                                                                                                        
+trg_bookings_rejection_reason                                                                                                    bookings                                                                                                                        
+trg_maintenance_completion_space_status                                                                                          maintenance                                                                                                                     
+
+(9 rows affected)
+
+=== Non-PK Indexes (our tables) ===
+idx_bookings_approver_id                                                                                                         bookings                                                                                                                         NONCLUSTERED                                                         0
+idx_bookings_checked_in_by                                                                                                       bookings                                                                                                                         NONCLUSTERED                                                         0
+idx_bookings_requested_start                                                                                                     bookings                                                                                                                         NONCLUSTERED                                                         0
+idx_bookings_requester_id                                                                                                        bookings                                                                                                                         NONCLUSTERED                                                         0
+idx_bookings_space_id                                                                                                            bookings                                                                                                                         NONCLUSTERED                                                         0
+idx_bookings_status                                                                                                              bookings                                                                                                                         NONCLUSTERED                                                         0
+idx_bookings_time_range                                                                                                          bookings                                                                                                                         NONCLUSTERED                                                         0
+uq_bookings_active_overlap                                                                                                       bookings                                                                                                                         NONCLUSTERED                                                         1
+UQ_departments_name                                                                                                              departments                                                                                                                      NONCLUSTERED                                                         1
+UQ_facilities_name                                                                                                               facilities                                                                                                                       NONCLUSTERED                                                         1
+idx_maintenance_assigned_staff_id                                                                                                maintenance                                                                                                                      NONCLUSTERED                                                         0
+idx_maintenance_reporter_id                                                                                                      maintenance                                                                                                                      NONCLUSTERED                                                         0
+idx_maintenance_space_id                                                                                                         maintenance                                                                                                                      NONCLUSTERED                                                         0
+idx_maintenance_status                                                                                                           maintenance                                                                                                                      NONCLUSTERED                                                         0
+idx_space_facilities_facility_id                                                                                                 space_facilities                                                                                                                 NONCLUSTERED                                                         0
+idx_spaces_current_status                                                                                                        spaces                                                                                                                           NONCLUSTERED                                                         0
+UQ_spaces_space_code                                                                                                             spaces                                                                                                                           NONCLUSTERED                                                         1
+idx_users_department_id                                                                                                          users                                                                                                                            NONCLUSTERED                                                         0
+UQ_users_email                                                                                                                   users                                                                                                                            NONCLUSTERED                                                         1
+
+(19 rows affected)
+
+=== Constraint counts ===
+C             13
+F             10
+PK             7
+UQ             4
+
+(4 rows affected)

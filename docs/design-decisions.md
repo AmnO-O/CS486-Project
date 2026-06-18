@@ -289,10 +289,33 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 
 ---
 
+### Decision: FK cascade actions changed from SET NULL to NO ACTION
+
+**Task:** 5 (DDL Generation)
+**Date:** 2026-06-18
+
+**Problem:** SQL Server prevents multiple foreign keys on the same table referencing the same parent when any use `ON DELETE SET NULL` or `CASCADE` (Msg 1785 — "may cause cycles or multiple cascade paths").
+
+**Options considered:**
+- Option A: Keep SET NULL on `bookings.approver_id` and `bookings.checked_in_by` → SQL Server rejects the DDL
+- Option B: Change all 3 optional FKs (`bookings.approver_id`, `bookings.checked_in_by`, `maintenance.assigned_staff_id`) to `ON DELETE NO ACTION` → DDL compiles, preserves references, consistent with BR13
+
+**Decision:** Option B — `NO ACTION` for all 3 FKs. NO ACTION preserves the user ID in the historical record even if the referenced user is deleted, which is actually more aligned with BR13 (Historical Records Preservation) than SET NULL.
+
+**Impact:** If a user is deleted (soft-delete is preferred anyway), the approver_id/checked_in_by/assigned_staff_id still points to a potentially deleted user record. This is acceptable because:
+- Soft delete is used for all sensitive records (BR13)
+- Historical accuracy is preserved (who approved/checked-in)
+- Application-level checks can handle display logic for deleted users
+
+**Requirement reference:** BR13 (Historical Records Preservation), SQL Server cascade path limitation.
+
+---
+
 ## Revision log
 
 | Date | Change | By | Task |
-|---|---|---|---|---|
+|---|---|---|---|
+| 2026-06-18 | FK cascade actions: SET NULL → NO ACTION for 3 FKs (SQL Server cascade path limitation) | Agent | Task 05 DDL |
 | 2026-06-15 | Revision 1: added Q3 (maintenance auto-status) and Q4 (auto no-show) decisions; filtered unique index for overlap | Copilot | Task 03 revision |
 | 2026-06-15 | Filled in dates for all Task 2/3 decisions; added account_status, building/floor, rejection_reason, usage_policy decisions | Copilot | Task 03 |
 | — | Template created | Copilot | Planning |

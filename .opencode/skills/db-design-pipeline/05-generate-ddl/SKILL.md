@@ -14,16 +14,17 @@ Convert the locked logical schema into a SQL Server DDL script that is:
 - aligned with the approved schema registry
 - safe for historical data preservation
 
-## Source of truth order
-When there is any conflict, use sources in this order:
 
-1. `docs/schema-registry.md`
-2. `outputs/04-design-validation-G05.md`
-3. `outputs/03-logical-design-G05.md`
-4. `outputs/02-erd-design-G05.md`
-5. `outputs/01-business-req-analysis-G05.md`
-6. `req/business-requirement.md`
-7. `req/CS486_Project.txt`
+Primary source:
+- `docs/schema-registry.md`
+
+Fallback sources only if clarification is needed:
+- `outputs/04-design-validation-G05.md`
+- `outputs/03-logical-design-G05.md`
+- `outputs/02-erd-design-G05.md`
+- `outputs/01-business-req-analysis-G05.md`
+- `req/business-requirement.md`
+
 
 ## Core DDL rules
 
@@ -75,12 +76,30 @@ Use defaults where appropriate for:
 - Avoid schema choices that would erase audit trails.
 - If soft delete is part of the locked schema, keep it consistent across relevant tables.
 
-### 9) SQL Server style
+
+### 9) Procedural constraints / triggers
+- Use triggers for rules that cannot be enforced declaratively.
+- **Each `CREATE TRIGGER` must be the first statement in its batch — always precede with `GO`.**
+- Structure:
+  ```sql
+    GO
+    CREATE TRIGGER trg_name ON table_name ...
+  ```
+- If a rule is intentionally left to the application layer, document in SQL comments.
+
+  > Source: `outputs/03-logical-design-G05.md §7` — read from there, do not infer.
+
+
+### 10) SQL Server style
 - Generate valid T-SQL for SQL Server 2019+.
+- **Add `SET QUOTED_IDENTIFIER ON; GO` at the top of the script** — mandatory for filtered indexes. Without this, SQL Server raises Msg 1934.
 - Use deterministic constraint names.
 - Use clear table and column ordering.
 - Use bracketed identifiers only if required by the naming convention.
 - Keep the script idempotent if the project convention expects it; otherwise generate clean `CREATE TABLE` statements only.
+
+
+
 
 ## Recommended table creation order
 Create tables in dependency order:
@@ -116,6 +135,7 @@ Before outputting SQL, verify:
 - all required `CHECK` constraints exist
 - all required defaults exist
 - all required `NOT NULL` constraints exist
+- all required triggers exist when the schema registry.
 - no extra tables were introduced
 - no schema rule from the locked registry was missed
 

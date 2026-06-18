@@ -44,14 +44,21 @@ generate-ddl --group G05
 
 Generate:
 
-* `outputs/05-db-definition-G05.sql`
+* `outputs/05-db-definition-G05.sql` — includes tables, constraints, indexes, AND triggers
 
 After generation:
 
 1. Validate output:
    - Check syntax: DDL must be valid T-SQL (SQL Server 2019+)
+   - **First line of script must be `SET QUOTED_IDENTIFIER ON; GO`** — required for filtered indexes
    - Verify naming convention matches `docs/tech-stack.md`
-   - Verify all PK, FK, CHECK, UNIQUE constraints match schema-registry.md
+   - Verify all PK, FK, CHECK, UNIQUE constraints match `docs/schema-registry.md`
+   - Verify all triggers match Business Rule Coverage in `docs/schema-registry.md`
+
+   - **FK cascade path check:** For each parent table, list all child FKs pointing to it.
+     If two or more FKs from the same child table reference the same parent with SET NULL or CASCADE,
+     SQL Server will reject it ("multiple cascade paths"). Resolve before compiling:
+     keep one as SET NULL, change the rest to NO ACTION and document in `docs/design-decisions.md`.
 
 2. Compile and verify on local SQL Server:
 
@@ -82,5 +89,6 @@ After generation:
 
 Do NOT edit schema-registry.md to match code.
 
-
-- On success → append verification output to logs/eval/YYYY-MM-DD-05-ddl-compile.log
+- On success → append verification output to logs/eval/task05/YYYY-MM-DD-HHMM-05-ddl-compile.log
+- Write trajectory file per `.opencode/skills/evaluations/trajectory-recording.md`
+- Update `memory/Progress.md` and `memory/ActiveContext.md`

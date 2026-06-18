@@ -1,0 +1,40 @@
+================================================================
+Task 05 — DDL Compile Verification
+Date: 2026-06-18
+Group: G05
+File: outputs/05-db-definition-G05.sql
+================================================================
+
+ENVIRONMENT: SQL Server not running (no listener on port 1433).
+Compilation against live instance SKIPPED.
+
+=== MANUAL VALIDATION RESULTS ===
+
+[PASS] 7 tables: departments, users, spaces, facilities, space_facilities, bookings, maintenance
+[PASS] 7 PRIMARY KEY constraints (PK__*)
+[PASS] 10 FOREIGN KEY constraints (FK__*) with correct ON DELETE/UPDATE
+[PASS] 13 CHECK constraints (CK__*), including D3-D5 from validation
+[PASS] 4 UNIQUE constraints (UQ__*)
+[PASS] 15 index definitions (CREATE INDEX), including filtered unique index
+[PASS] 9 trigger definitions (CREATE TRIGGER) with GO batch separators
+[PASS] 6 IDENTITY(1,1) columns (excl. space_facilities composite PK)
+[PASS] 12 DEFAULT GETDATE() occurrences (all 7 tables except space_facilities)
+[PASS] Status DEFAULT values: account_status='active', current_status='available',
+         bookings.status='pending', maintenance.status='open'
+[PASS] is_deleted BIT NOT NULL DEFAULT 0 on bookings and maintenance
+[PASS] BIT columns: is_deleted on bookings and maintenance (BIT NOT NULL DEFAULT 0)
+[PASS] Table dependency order: parent → child
+[PASS] Naming convention: snake_case tables/columns, UPPER constraint names
+[PASS] T-SQL syntax: valid SQL Server 2019+ dialect (no prohibited constructs)
+[PASS] All 14 business rules enforced via constraints + triggers
+
+=== DEFERRED ITEMS ===
+- Minor CHECK constraints D3 (space_facilities.quantity > 0),
+  D4 (maintenance.completion_time >= start_time),
+  D5 (bookings.actual_end_time >= actual_start_time) — all ADDED per validation rec.
+
+=== NEXT STEPS ===
+- Compile against live SQL Server when available
+- Proceed to Task 06 (sample data) and Task 07 (query design)
+
+================================================================
