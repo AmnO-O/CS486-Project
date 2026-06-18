@@ -254,8 +254,8 @@ No table contains multi-valued attributes or repeating groups. The M:N relations
 
 ## 7. Constraint Implementation for Business Rules
 
-| BR # | Business Rule | Implementation | Enforcement Level |
-|---|---|---|---|---|
+| BR | Business Rule | Implementation | Enforcement Level |
+|---|---|---|---|
 | BR1 | No overlapping approved bookings | `uq_bookings_active_overlap` (filtered unique index on space_id + requested_start_time for confirmed bookings) prevents exact same-start collisions; `trg_bookings_prevent_overlap` trigger checks (`space_id`, `requested_start_time`, `requested_end_time`) interval overlap against existing rows WHERE status IN ('approved','checked_in','completed') AND is_deleted = 0 | Database (index + trigger) |
 | BR2 | Unavailable spaces cannot be booked | `trg_bookings_check_space_status` trigger reads `spaces.current_status` and rejects INSERT/UPDATE if space status NOT IN ('available','in_use') | Database (trigger) |
 | BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` trigger reads `spaces.capacity` and rejects if `expected_participants > capacity` | Database (trigger) |

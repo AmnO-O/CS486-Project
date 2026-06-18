@@ -94,7 +94,9 @@ The business requirement mentions "incident reporting" as a feature. Determine w
 * If an FK references an entity not defined in the registry, still declare that entity as a minimal block (PK only) rather than omitting the relationship.
 * If two relationships between the same pair of entities exist, render both with distinct labels to avoid Mermaid de-duplication.
 * Ignore constraints (NOT NULL, DEFAULT, CHECK) — Mermaid ERD does not support them.
-* Attribute type must be a single token (no spaces): use VARCHAR, INT, TIMESTAMP, BOOLEAN.
+* Omit audit columns (`created_at`, `updated_at`) and soft-delete flags (`is_deleted`) — they are physical-layer concerns, not conceptual attributes.
+* Do NOT include FK markers in entity attribute blocks — relationships are already represented by the connection lines. Only mark `PK`.
+* Attribute type must be a single token (no spaces): use **lowercase conceptual types** — `string`, `int`, `datetime`, `boolean` (not SQL Server capitalized forms like `VARCHAR`, `NVARCHAR`, `DATETIME2`, `BIT`).
 
 ## 4. Guardrails & Prohibitions
 - Do not invent entities, attributes, or relationships not present in the input.
@@ -105,7 +107,7 @@ The business requirement mentions "incident reporting" as a feature. Determine w
 
 * Provide a brief analysis (under 3 sentences) explaining the core entities and their relationships.
 * Return exactly one `mermaid` code block containing the diagram.
-* **Below the diagram, add a "Relationship Participation Summary" section** listing each relationship with its participation constraint explanation (e.g., "Users must belong to exactly 1 Department").
+* **Below the diagram, add a "Relationship Participation Summary" section** with columns: `#`, `Relationship`, `Cardinality`, `Mermaid Notation`, `Participation Explanation` — listing each relationship with its cardinality and participation constraint explanation (e.g., `1:N`, `M:N`, `1:N (partial)`).
 * **Add a "Logical Constraints" section** documenting role-based constraints (e.g., "Approvers must be Users with role in ('Facility Staff', 'Facility Manager')").
 * Output file: `outputs/02-erd-design-G{{group}}.md`
 
@@ -113,10 +115,10 @@ The business requirement mentions "incident reporting" as a feature. Determine w
 - [ ] All entities from entity-registry are present in the diagram
 - [ ] All attributes from entity-registry are present for each entity
 - [ ] All relationships from the Relationship Registry are present
-- [ ] Cardinality (1:N, M:N, 1:1) is correct for each relationship
+- [ ] Cardinality (1:N, M:N, 1:1) is correct for each relationship — explicitly listed in the `Cardinality` column of the Participation Summary table
 - [ ] Participation constraints (`||` mandatory, `|o` optional) are explicitly stated and justified
 - [ ] Junction tables (like Space_Facilities) are rendered as standalone entities with 1:N relationships to parents
-- [ ] Foreign keys are marked with `FK` in entity definitions
+- [ ] Foreign keys are represented by relationship lines — not marked in entity attribute blocks (only `PK` markers in entity blocks)
 - [ ] Primary keys are marked with `PK`
 - [ ] No duplicate entity definitions
 - [ ] Role-based constraints (e.g., approvers must be Facility Staff) are documented in narrative
@@ -138,6 +140,8 @@ erDiagram
     }
     DEPARTMENT ||--o{ USER : "belongs_to"
 ```
+
+FK columns appear as regular attributes without FK markers (relationships are represented by the connection lines, not in entity blocks).
 
 ## 7. Idempotency
 - Identical input must always produce identical output.

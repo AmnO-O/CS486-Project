@@ -17,89 +17,75 @@ The Campus Space Management System database centers on **Users**, **Spaces**, an
 ```mermaid
 erDiagram
     Departments {
-        INT department_id PK
-        NVARCHAR name
-        DATETIME2 created_at
-        DATETIME2 updated_at
+        int department_id PK
+        string name
     }
 
     Users {
-        INT user_id PK
-        NVARCHAR email
-        NVARCHAR full_name
-        NVARCHAR phone_number
-        VARCHAR role
-        INT department_id FK
-        VARCHAR account_status
-        DATETIME2 created_at
-        DATETIME2 updated_at
+        int user_id PK
+        string email
+        string full_name
+        string phone_number
+        string role
+        int department_id
+        string account_status
     }
 
     Spaces {
-        INT space_id PK
-        NVARCHAR space_code
-        NVARCHAR space_name
-        VARCHAR space_type
-        NVARCHAR building
-        NVARCHAR floor
-        NVARCHAR room_number
-        INT capacity
-        VARCHAR current_status
-        NVARCHAR usage_policy
-        DATETIME2 created_at
-        DATETIME2 updated_at
+        int space_id PK
+        string space_code
+        string space_name
+        string space_type
+        string building
+        string floor
+        string room_number
+        int capacity
+        string current_status
+        string usage_policy
     }
 
     Facilities {
-        INT facility_id PK
-        NVARCHAR name
-        DATETIME2 created_at
-        DATETIME2 updated_at
+        int facility_id PK
+        string name
     }
 
     Space_Facilities {
-        INT space_id PK
-        INT facility_id PK
-        INT quantity
+        int space_id PK
+        int facility_id PK
+        int quantity
     }
 
     Bookings {
-        INT booking_id PK
-        INT space_id FK
-        INT requester_id FK
-        DATETIME2 requested_start_time
-        DATETIME2 requested_end_time
-        VARCHAR purpose
-        INT expected_participants
-        VARCHAR status
-        INT approver_id FK
-        DATETIME2 decision_time
-        NVARCHAR decision_note
-        NVARCHAR rejection_reason
-        DATETIME2 actual_start_time
-        INT checked_in_by FK
-        NVARCHAR initial_condition
-        DATETIME2 actual_end_time
-        NVARCHAR final_condition
-        NVARCHAR usage_notes
-        BIT is_deleted
-        DATETIME2 created_at
-        DATETIME2 updated_at
+        int booking_id PK
+        int space_id
+        int requester_id
+        datetime requested_start_time
+        datetime requested_end_time
+        string purpose
+        int expected_participants
+        string status
+        int approver_id
+        datetime decision_time
+        string decision_note
+        string rejection_reason
+        datetime actual_start_time
+        int checked_in_by
+        string initial_condition
+        datetime actual_end_time
+        string final_condition
+        string usage_notes
     }
 
     Maintenance {
-        INT maintenance_id PK
-        INT space_id FK
-        INT reporter_id FK
-        INT assigned_staff_id FK
-        NVARCHAR problem_description
-        DATETIME2 start_time
-        DATETIME2 completion_time
-        VARCHAR status
-        NVARCHAR result_note
-        BIT is_deleted
-        DATETIME2 created_at
-        DATETIME2 updated_at
+        int maintenance_id PK
+        int space_id
+        int reporter_id
+        int assigned_staff_id
+        string problem_description
+        datetime start_time
+        datetime completion_time
+        string status
+        string result_note
     }
 
     Departments ||--o{ Users : "belongs_to"
@@ -118,17 +104,17 @@ erDiagram
 
 ## 3. Relationship Participation Summary
 
-| # | Relationship | Mermaid Notation | Participation Explanation |
-|---|---|---|---|
-| R1 | Departments → Users | `Departments \|\|--o{ Users` | Every User must belong to exactly 1 Department (total on Users — `department_id` NOT NULL); a Department may have zero or many Users. |
-| R2 | Users → Bookings (requester) | `Users \|\|--o{ Bookings` | Every Booking must have exactly 1 requester (total on Bookings — `requester_id` NOT NULL); a User may have zero or many Bookings. |
-| R3 | Users → Bookings (approver) | `Users \|o--o{ Bookings` | A Booking may have zero or one Approver (partial — `approver_id` is nullable, set only on approval/rejection decision); a User acting as approver may handle zero or many Bookings. |
-| R4 | Users → Bookings (checked-in by) | `Users \|o--o{ Bookings` | A Booking may have zero or one check-in staff member (partial — `checked_in_by` is nullable, set only at check-in); a User may check in zero or many Bookings. |
-| R5 | Spaces → Bookings | `Spaces \|\|--o{ Bookings` | Every Booking must reference exactly 1 Space (total on Bookings — `space_id` NOT NULL); a Space may have zero or many Bookings. |
-| R6 | Spaces ↔ Facilities (M:N) | `Spaces \|\|--o{ Space_Facilities` / `Facilities \|\|--o{ Space_Facilities` | A Space may contain zero or many Facility types; a Facility type may be assigned to zero or many Spaces. The junction table Space_Facilities resolves the M:N by holding a composite PK of (space_id, facility_id). |
-| R7 | Spaces → Maintenance | `Spaces \|\|--o{ Maintenance` | Every Maintenance record must reference exactly 1 Space (total on Maintenance — `space_id` NOT NULL); a Space may have zero or many Maintenance records. |
-| R8 | Users → Maintenance (reporter) | `Users \|\|--o{ Maintenance` | Every Maintenance record must have exactly 1 reporter (total on Maintenance — `reporter_id` NOT NULL); a User may report zero or many issues. |
-| R9 | Users → Maintenance (assigned staff) | `Users \|o--o{ Maintenance` | A Maintenance record may have zero or one assigned staff member (partial — `assigned_staff_id` is nullable, may be set later); a User may be assigned to zero or many Maintenance records. |
+| # | Relationship | Cardinality | Mermaid Notation | Participation Explanation |
+|---|---|---|---|---|
+| R1 | Departments → Users | 1:N | `Departments \|\|--o{ Users` | Every User must belong to exactly 1 Department (total on Users — `department_id` NOT NULL); a Department may have zero or many Users. |
+| R2 | Users → Bookings (requester) | 1:N | `Users \|\|--o{ Bookings` | Every Booking must have exactly 1 requester (total on Bookings — `requester_id` NOT NULL); a User may have zero or many Bookings. |
+| R3 | Users → Bookings (approver) | 1:N (partial) | `Users \|o--o{ Bookings` | A Booking may have zero or one Approver (partial — `approver_id` is nullable, set only on approval/rejection decision); a User acting as approver may handle zero or many Bookings. |
+| R4 | Users → Bookings (checked-in by) | 1:N (partial) | `Users \|o--o{ Bookings` | A Booking may have zero or one check-in staff member (partial — `checked_in_by` is nullable, set only at check-in); a User may check in zero or many Bookings. |
+| R5 | Spaces → Bookings | 1:N | `Spaces \|\|--o{ Bookings` | Every Booking must reference exactly 1 Space (total on Bookings — `space_id` NOT NULL); a Space may have zero or many Bookings. |
+| R6 | Spaces ↔ Facilities | M:N | `Spaces \|\|--o{ Space_Facilities` / `Facilities \|\|--o{ Space_Facilities` | A Space may contain zero or many Facility types; a Facility type may be assigned to zero or many Spaces. The junction table Space_Facilities resolves the M:N by holding a composite PK of (space_id, facility_id). |
+| R7 | Spaces → Maintenance | 1:N | `Spaces \|\|--o{ Maintenance` | Every Maintenance record must reference exactly 1 Space (total on Maintenance — `space_id` NOT NULL); a Space may have zero or many Maintenance records. |
+| R8 | Users → Maintenance (reporter) | 1:N | `Users \|\|--o{ Maintenance` | Every Maintenance record must have exactly 1 reporter (total on Maintenance — `reporter_id` NOT NULL); a User may report zero or many issues. |
+| R9 | Users → Maintenance (assigned staff) | 1:N (partial) | `Users \|o--o{ Maintenance` | A Maintenance record may have zero or one assigned staff member (partial — `assigned_staff_id` is nullable, may be set later); a User may be assigned to zero or many Maintenance records. |
 
 ---
 
@@ -163,12 +149,12 @@ These constraints are enforced at the application or trigger level and are not e
 ## Pre-Submission Validation Checklist
 
 - [x] All 7 entities from entity-registry are present (Departments, Users, Spaces, Facilities, Space_Facilities, Bookings, Maintenance)
-- [x] All attributes from entity-registry are present for each entity
+- [x] All business attributes from entity-registry are present for each entity (audit columns omitted — physical-layer concern)
 - [x] All 9 relationships from the Relationship Registry are present (R1–R9)
 - [x] Cardinality is correct: 1:N for R1–R5, R7–R9; M:N resolved via junction for R6
 - [x] Participation constraints (`||` mandatory, `|o` optional) are explicitly stated and justified per Section 3
 - [x] Junction table Space_Facilities is rendered as a standalone entity with 1:N relationships to Spaces and Facilities
-- [x] Foreign keys are marked with `FK` in entity definitions
+- [x] Foreign keys are represented by relationship lines — not marked in entity attribute blocks (only `PK` markers)
 - [x] Primary keys are marked with `PK`
 - [x] No duplicate entity definitions
 - [x] Role-based constraints documented in Section 4 (Logical Constraints)
