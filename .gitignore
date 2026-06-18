@@ -3,11 +3,9 @@ node_modules/
 .opencode/node_modules/
 .opencode/.gitignore
 **/.DS_Store
-pipeline.docx
 pipeline.pdf
 .claude/
 untrack
-eval.txt
 AI-agent-evaluation.docx
 test-database.sql
 .env

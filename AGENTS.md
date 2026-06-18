@@ -23,7 +23,7 @@ Your job is to analyze requirements, generate design artifacts in order, validat
 
 
 ## Operation rules
-- After each task: update `memory/Progress.md` and `memory/ActiveContext.md`
+- After each task, **once the user approves** (see Post-Task Handshake Protocol): update `memory/Progress.md` and `memory/ActiveContext.md`
 - After a key design decision: append to `docs/design-decisions.md` immediately
 
 - If a business rule is ambiguous: refer to `req/business-requirement.md` and `docs/project-overview.md` do not assume

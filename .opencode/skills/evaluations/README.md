@@ -14,8 +14,8 @@ agent used to create them.
   [Braintrust - What is agent evaluation?](https://www.braintrust.dev/articles/agent-evaluation)
   and [Openlayer - Agent evaluation complete guide](https://www.openlayer.com/blog/post/agent-evaluation-complete-guide-testing-ai-agents).
 - Every task should have measurable success criteria and expected inputs/outputs.
-- Evaluation should become a quality gate before a task is marked complete.
-  Source: [Google Cloud - A methodical approach to agent evaluation](https://cloud.google.com/blog/topics/developers-practitioners/a-methodical-approach-to-agent-evaluation).
+- Evaluation is a separate, developer-initiated step, not an automatic gate. Run it
+  when you choose to assess a task — it does not block marking a task complete.
 
 ## Evaluation Layers
 
@@ -144,11 +144,14 @@ whether the whole multi-step workflow preserves rules and consistency. Source:
 
 1. Generate one task output.
 2. Write the trajectory immediately.
-3. Run `evaluate-task --task 0X`.
-4. Review artifact score, process score, and top improvements.
-5. Revise the skill/template/output if needed.
-6. Repeat until the task passes the quality gate.
+3. Review the output and mark the task complete.
+4. When you want a quality check, run `evaluate-task --task 0X` as a separate step.
+5. Review artifact score, process score, and top improvements.
+6. Revise the skill/template/output if needed.
 7. Run `evaluate-pipeline` at major milestones and before final submission.
+
+Evaluation is developer-initiated, not an automatic gate: it does not block marking
+a task complete, and you choose when to run it.
 
 This workflow follows article-based guidance: define measurable success, inspect
 the full trajectory, validate side effects, and use evaluation logs to prevent

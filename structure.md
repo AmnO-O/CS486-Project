@@ -25,7 +25,7 @@ CS486-Project/
 ├── outputs/                              # Final deliverables
 │   ├── 01-business-req-analysis-G05.md   # Requirement analysis
 │   ├── 02-erd-design-G05.md              # Conceptual ERD
-│   ├── 03-logical-design-G05.md          # [Future] Logical schema
+│   ├── 03-logical-design-G05.md          # Logical schema
 │   ├── 04-design-validation-G05.md       # [Future] Schema validation
 │   ├── 05-db-definition-G05.sql          # [Future] T-SQL DDL
 │   ├── 06-sample-data-G05.sql            # [Future] Sample data
@@ -71,7 +71,7 @@ CS486-Project/
         │   │   └── SKILL.md
         │   ├── 02-erd/                   # Task 02 skill
         │   │   └── SKILL.md
-        │   ├── 03-logical-design/        # [Future] Task 03 skill
+        │   ├── 03-logical-design/        # Task 03 skill
         │   │   └── SKILL.md
         │   ├── 04-design-validation/     # [Future] Task 04 skill
         │   │   └── SKILL.md

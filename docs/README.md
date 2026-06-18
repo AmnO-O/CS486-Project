@@ -3,12 +3,12 @@
 
 **Required reading order for onboarding:**
 
-1. **[project-overview.md](./project-overview.md)** — What this project is, who uses it, what problem it solves (5m)
-2. **[tech-stack.md](./tech-stack.md)** — Technology conventions and vocabulary (5m)
+1. **[project-overview.md](./project-overview.md)** — What this project is, who uses it, what problem it solves 
+2. **[tech-stack.md](./tech-stack.md)** — Technology conventions and vocabulary
 
-4. **[entity-registry.md](./entity-registry.md)** — Entities and attributes (Tasks 1–7) (10m)
-5. **[schema-registry.md](./schema-registry.md)** — Normalized relational schema (Tasks 3–5) (10m)
-6. **[design-decisions.md](./design-decisions.md)** — Design rationale and trade-offs (5m)
+3. **[entity-registry.md](./entity-registry.md)** — Entities and attributes (Tasks 1–7)
+4. **[schema-registry.md](./schema-registry.md)** — Normalized relational schema (Tasks 3–5) 
+5. **[design-decisions.md](./design-decisions.md)** — Design rationale and trade-offs 
 
 ---
 
