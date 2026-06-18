@@ -263,8 +263,8 @@ No table contains multi-valued attributes or repeating groups. The M:N relations
 | BR5 | Maintenance assigned staff tracking | `assigned_staff_id` FK → `users(user_id)` (nullable) | FK constraint |
 | BR6 | Decision recording (approver, time, note) | `trg_bookings_approval_validation` trigger enforces that when status changes TO 'approved' or 'rejected', `approver_id`, `decision_time`, and `decision_note` are NOT NULL | Database (trigger) |
 | BR7 | Rejection requires reason | `trg_bookings_rejection_reason` trigger enforces that when status changes TO 'rejected', `rejection_reason` IS NOT NULL | Database (trigger) |
-| BR8 | Actual time recording at check-in/completion | `actual_start_time`, `actual_end_time` columns (nullable, set on status transition) | Application (timestamp set during check-in/completion workflow) |
-| BR9 | Space condition tracking | `initial_condition`, `final_condition` columns (nullable, recorded during workflow) | Application |
+| BR8 | Actual time recording at check-in/completion | `actual_start_time`, `actual_end_time` columns + `trg_bookings_checkin_enforcement`, `trg_bookings_completion_enforcement` (triggers enforce NOT NULL on status transition) | Database (trigger) |
+| BR9 | Space condition tracking | `initial_condition`, `final_condition` columns + same triggers as BR8 | Database (trigger) |
 | BR10 | Unique identification (email, space_code) | UNIQUE constraints on `users(email)`, `spaces(space_code)`, `departments(name)`, `facilities(name)` | Database (UNIQUE index) |
 | BR11 | Soft deletes for bookings/maintenance | `is_deleted BIT NOT NULL DEFAULT 0` on both tables | Database (DEFAULT) |
 | BR12 | Audit trail (created_at, updated_at) | All tables have `created_at` and `updated_at` with GETDATE() defaults | Database (DEFAULT) |
@@ -284,6 +284,8 @@ The following business rules involve cross-table or cross-row validation that `C
 | `trg_bookings_approval_validation` | `bookings` UPDATE | When `new.status` IN ('approved','rejected') AND `old.status` = 'pending', enforce: `new.approver_id IS NOT NULL` AND `new.decision_time IS NOT NULL` AND `new.decision_note IS NOT NULL`. |
 | `trg_bookings_rejection_reason` | `bookings` UPDATE | When `new.status = 'rejected'`, enforce: `new.rejection_reason IS NOT NULL`. |
 | `trg_maintenance_completion_space_status` | `maintenance` UPDATE | When `new.status = 'resolved'` AND `old.status != 'resolved'`, auto-update `spaces.current_status = 'available'` for the related space if its status is 'under_maintenance'. |
+| `trg_bookings_checkin_enforcement` | `bookings` UPDATE | When `new.status = 'checked_in'` AND `old.status != 'checked_in'`, enforce: `new.actual_start_time IS NOT NULL`, `new.checked_in_by IS NOT NULL`, `new.initial_condition IS NOT NULL`. If any is NULL, RAISERROR and rollback. |
+| `trg_bookings_completion_enforcement` | `bookings` UPDATE | When `new.status = 'completed'` AND `old.status != 'completed'`, enforce: `new.actual_end_time IS NOT NULL`, `new.final_condition IS NOT NULL`. If any is NULL, RAISERROR and rollback. |
 
 **Note on overlap detection (BR1):** The filtered unique index `uq_bookings_active_overlap` provides a lightweight pre-check for exact `(space_id, requested_start_time)` duplicates, while `trg_bookings_prevent_overlap` handles the general interval-overlap case. Both operate at the database level, ensuring data integrity even if multiple clients submit concurrent requests.
 
@@ -299,6 +301,7 @@ The following business rules involve cross-table or cross-row validation that `C
 | D4 | ERD entity-registry lists `account_status` as provisional enum | Finalized as `CHECK IN ('active','inactive','suspended')` with DEFAULT 'active' | Finalization | Requirement §2 states "Account Status" exists but does not enumerate values. Standard account lifecycle values chosen. |
 | D5 | ERD does not show explicit `is_deleted` on maintenance | `is_deleted BIT NOT NULL DEFAULT 0` on maintenance | Included | Assumption A4 requires soft deletion for both bookings and maintenance. The ERD showed it only on Bookings, but the business requirement applies to both. |
 | D6 | Q5: building/floor as reference tables vs varchar fields | Stored as free-text `NVARCHAR` fields on `spaces` | No deviation from entity-registry | Consistent with entity-registry specification. Building/floor reference tables would add complexity without corresponding query requirement. |
+| D7 | ERD does not define triggers for check-in/completion fields | `trg_bookings_checkin_enforcement` and `trg_bookings_completion_enforcement` added | Added | Business rules BR8 and BR9 require actual time and condition recording. The ERD shows these as nullable columns; triggers enforce NOT NULL on status transition (`checked_in` / `completed`), providing defense-in-depth beyond the application layer. |
 
 ### Resolved ambiguities
 
@@ -318,6 +321,7 @@ The following business rules involve cross-table or cross-row validation that `C
 |---|---|---|
 | 1.0 | 2026-06-15 | Initial logical design |
 | 1.1 | 2026-06-15 | Added filtered unique index `uq_bookings_active_overlap` for BR1 exact-start collision prevention; replaced generic "application-level" enforcement with 7 concrete trigger definitions; resolved Q3 (auto space-status on maintenance completion) and Q4 (automatic no-show detection); added per-FK ON DELETE referential rules; strengthened index strategy with filtered index; improved cross-column constraint documentation with detailed trigger logic |
+| 1.2 | 2026-06-18 | Added `trg_bookings_checkin_enforcement` (enforces actual_start_time, checked_in_by, initial_condition NOT NULL when status → checked_in) and `trg_bookings_completion_enforcement` (enforces actual_end_time, final_condition NOT NULL when status → completed); BR8/BR9 upgraded from Application to Database enforcement; added D7 to deviations §8 |
 
 ---
 

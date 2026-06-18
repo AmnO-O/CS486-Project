@@ -255,7 +255,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 ## Revision log
 
 | Date | Change | Reason |
-|---|---|---|---|
+|---|---|---|
 | 2026-06-15 | Revision 1: no entity changes — trigger/index decisions captured in schema-registry | Task 03 revision |
 | 2026-06-15 | Finalized all attribute types, constraints, and locked (🔒) all entities | Task 03 registry maintenance — logical design |
 | 2026-06-13 | Confirmed and refined 9 relationships and 7 entities for ERD generation | Task 02 registry maintenance |

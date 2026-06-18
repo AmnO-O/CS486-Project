@@ -6,26 +6,30 @@ metadata:
 ---
 
 ## Current task
-Task 03 — Logical Design ✅ *(completed)*
+Task 02 — ERD Design ✅ *(revised to conceptual level)*
+Task 03 — Logical Design ✅ *(updated with BR8/BR9 triggers + D7 deviation)*
+Task 04 — Design Validation ✅ *(fully re-validated, all discrepancies resolved)*
 
 ## Status
-- Task 03 output: `outputs/03-logical-design-G05.md` ✅ (generated 2026-06-15)
-- Entity registry: `docs/entity-registry.md` ✅ (locked, all entities 🔒)
-- Schema registry: `docs/schema-registry.md` ✅ (populated with tables, indexes, 3NF proof)
-- Design decisions: `docs/design-decisions.md` ✅ (dates filled, Q1/Q2/Q5 resolved, account_status finalized)
+- Task 02 revision: `outputs/02-erd-design-G05.md` ✅ (2026-06-17 — conceptual cleanup)
+- Task 03 update: `outputs/03-logical-design-G05.md` ✅ (2026-06-18 — added `trg_bookings_checkin_enforcement`, `trg_bookings_completion_enforcement`; BR8/BR9 upgraded to Database; D7 added)
+- Task 04 output: `outputs/04-design-validation-G05.md` ✅ (2026-06-18 — BR8/BR9 ✅, D1/D2 ✅ resolved, SCHEMA FREEZE READY)
+- SKILL.md updates:
+  - `.opencode/skills/db-design-pipeline/02-erd/SKILL.md` ✅ (Rule F fixed to conceptual types)
+  - `.opencode/skills/db-design-pipeline/03-logical-design/SKILL.md` ✅ (step 5 expanded to include triggers; guardrail for status-driven column enforcement)
+- Schema registry: `docs/schema-registry.md` ✅ (BR8/BR9 updated, 4 missing indexes added, `idx_bookings_overlap` → `idx_bookings_time_range`, D1/D2 resolved)
+- Entity registry: `docs/entity-registry.md` ✅ (locked since Task 03)
 
 ## Blocking issues
-- None
+- ⏳ **SCHEMA FREEZE pending group approval** — all gates passed, no blockers remain
 
 ## Notes from last session
-- Task 03 generated from `docs/entity-registry.md`, `outputs/02-erd-design-G05.md`, `outputs/01-business-req-analysis-G05.md`
-- 7 tables mapped from 7 entities + 1 junction table (space_facilities)
-- 9 relationships mapped as FK constraints
-- 3NF proof completed for all tables
-- Resolved ambiguities: Q1 (separate rejection_reason), Q2 (free-text usage_policy), Q5 (free-text building/floor)
-- Business rules documented with enforcement strategy (database + application)
+- BR8/BR9 enforcement upgraded via 2 new triggers (check-in enforcement: actual_start_time, checked_in_by, initial_condition; completion enforcement: actual_end_time, final_condition)
+- D1/D2 fully resolved: 4 missing indexes added, naming conflict fixed
+- Schema-registry fully synchronized with outputs/03
+- Validation all 13 sections updated to reflect current state
+- Remaining: group approval for freeze → then Task 05 DDL
 
 ## Next steps
-1. Run `/04-evaluate-design` for Task 04 — Design Validation
-2. Evaluate output with `.opencode/commands/evaluate-task.md`
-3. Update `Progress.md` and this file
+1. ⏳ Await group approval for SCHEMA FREEZE
+2. Proceed to Task 05 — DDL generation (`generate-ddl --group G05`)

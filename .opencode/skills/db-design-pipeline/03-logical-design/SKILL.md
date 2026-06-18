@@ -31,7 +31,7 @@ Produce the logical schema design prompt and expected behavior for Task 03, gene
    - Map to a foreign key constraint in the child table
    - Use appropriate referential integrity rules (ON DELETE CASCADE, ON DELETE SET NULL, etc.)
    - If M:N, create a junction/associative table with composite PK
-5. Implement business rule constraints as CHECK constraints and UNIQUE constraints.
+5. Implement business rule constraints as CHECK constraints, UNIQUE constraints, and (where appropriate) INSTEAD OF / AFTER triggers for cross-row, cross-table, or status-transition validation.
 6. Define indexes on:
    - Primary keys
    - Foreign keys
@@ -75,6 +75,7 @@ Produce the logical schema design prompt and expected behavior for Task 03, gene
 - Do **not** modify prior artifacts (outputs/01 or 02); only read them.
 - Do **not** use SQL Server 2008 or deprecated features without compatibility notes.
 - Do **not** create tables without explicit justification (especially junction tables).
+- **Add triggers for status-driven column enforcement**: For columns that are nullable at table level but must be NOT NULL when a status column transitions to a specific value (e.g., `actual_start_time` must be set when `status = 'checked_in'`), define AFTER UPDATE triggers. This provides defense-in-depth beyond application-level enforcement.
 
 ### Interoperability
 - The runtime may provide a template for table definitions if a specific visual format is required.

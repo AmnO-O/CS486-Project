@@ -7,14 +7,14 @@
 | Task 1 | Business analysis | `outputs/01-business-req-analysis-G05.md` | ✅ Approved | — |
 | Task 2 | ERD design | `outputs/02-erd-design-G05.md` | ✅ Approved | Task 1 |
 | Task 3 | Logical design | `outputs/03-logical-design-G05.md` | ✅ Approved | Task 2 |
-| Task 4 | Design validation | `outputs/04-design-validation-G05.md` | ⬜ Not started | Task 3 |
+| Task 4 | Design validation | `outputs/04-design-validation-G05.md` | ✅ Approved | Task 3 |
 | Task 5 | SQL DDL | `outputs/05-ddl-G05.sql` | ⬜ Not started | Task 4 ✅ freeze |
 | Task 6 | Sample data | `outputs/06-sample-data-G05.sql` | ⬜ Not started | Task 5 |
 | Task 7 | Query design | `outputs/07-query-design-G05.sql` | ⬜ Not started | Task 5 |
 | — | Logs agent improvement | `improvement_logs.md` | ⬜ ongoing | — |
 | — | Git repository | — | ⬜ Not started | — |
 | — | Report PDF | `outputs/report-G05.pdf` | ⬜ Not started | All tasks |
-| — | SCHEMA FREEZE | — | ⬜ Not started | Task 4 — all 4 must approve |
+| — | SCHEMA FREEZE | — | ⏳ Pending group approval | Task 4 — all gates passed, all 4 must approve |
 
 ## Status legend
 
@@ -46,6 +46,12 @@ Do NOT generate DDL or sample data before this gate.
 | 2026-06-15 | Usage policy as free-text NVARCHAR(MAX) | No fixed policy set defined |
 | 2026-06-15 | Account_status enum: active/inactive/suspended | Standard university account lifecycle values |
 | 2026-06-15 | All entity registry attributes finalized and locked (🔒) | Post-Task 03 finalization |
+| 2026-06-17 | Design validation passed — 14/14 BR covered, 3NF confirmed, ERD fidelity 7/7 | Post-Task 04 validation |
+| 2026-06-17 | Schema-registry index synchronization needed (4 missing indexes, 1 naming conflict) | Discrepancy D1/D2 in validation report |
+| 2026-06-17 | SCHEMA FREEZE recommended pending group approval | Post-Task 04 |
+| 2026-06-18 | BR8/BR9 upgraded from Application to Database enforcement via `trg_bookings_checkin_enforcement` and `trg_bookings_completion_enforcement` | Defense-in-depth for status-transition NOT NULL validation |
+| 2026-06-18 | D1/D2 index sync resolved — 4 missing indexes added, `idx_bookings_overlap` → `idx_bookings_time_range` | Cross-file consistency between outputs/03 and schema-registry restored |
+| 2026-06-18 | SCHEMA FREEZE READY — all gates passed, awaiting group approval | Index sync resolved, BR8/BR9 database-level
 | 2026-06-12 | Task 01 output filename: `01-business-req-analysis-G05.md` | Matches required naming in `req/business-requirement.md` §3.2 |
 | 2026-06-12 | 7 entities defined: Users, Departments, Spaces, Facilities, Space_Facilities, Bookings, Maintenance | Directly derived from requirement sections |
 | 2026-06-12 | Assumption: Users have unique emails | Natural business key |

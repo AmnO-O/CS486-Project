@@ -241,11 +241,15 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | idx_bookings_space_id | bookings | space_id | Non-clustered |
 | idx_bookings_requester_id | bookings | requester_id | Non-clustered |
 | idx_bookings_status | bookings | status | Non-clustered |
-| idx_bookings_overlap | bookings | space_id, requested_start_time, requested_end_time | Non-clustered |
+| idx_bookings_time_range | bookings | space_id, requested_start_time, requested_end_time | Non-clustered |
 | idx_bookings_approver_id | bookings | approver_id | Non-clustered |
+| idx_bookings_checked_in_by | bookings | checked_in_by | Non-clustered |
+| idx_bookings_requested_start | bookings | requested_start_time | Non-clustered |
+| uq_bookings_active_overlap | bookings | space_id, requested_start_time (filtered WHERE status IN ('approved','checked_in','completed') AND is_deleted = 0) | Unique non-clustered |
 | PK__maintenance | maintenance | maintenance_id | Clustered |
 | idx_maintenance_space_id | maintenance | space_id | Non-clustered |
 | idx_maintenance_reporter_id | maintenance | reporter_id | Non-clustered |
+| idx_maintenance_assigned_staff_id | maintenance | assigned_staff_id | Non-clustered |
 | idx_maintenance_status | maintenance | status | Non-clustered |
 
 ---
@@ -258,8 +262,39 @@ All tables satisfy 1NF (atomic values, no repeating groups), 2NF (no partial dep
 
 ## Business Rule Coverage
 
-*To be completed during Task 04 — Design Validation.*
+Validated during Task 04 — Design Validation (2026-06-17, re-validated 2026-06-18).
+
+| BR # | Rule | Enforcement | Level | Status |
+|---|---|---|---|---|
+| BR1 | No overlapping approved bookings | `uq_bookings_active_overlap` (filtered unique index) + `trg_bookings_prevent_overlap` (interval overlap trigger) | Database | ✅ Enforced |
+| BR2 | Unavailable spaces cannot be booked | `trg_bookings_check_space_status` trigger | Database | ✅ Enforced |
+| BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` trigger | Database | ✅ Enforced |
+| BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` trigger | Database | ✅ Enforced |
+| BR5 | Maintenance assigned staff tracking | FK `assigned_staff_id` → `users(user_id)` | Database | ✅ Enforced |
+| BR6 | Decision recording (approver, time, note) | `trg_bookings_approval_validation` trigger | Database | ✅ Enforced |
+| BR7 | Rejection requires reason | `trg_bookings_rejection_reason` trigger | Database | ✅ Enforced |
+| BR8 | Actual time recording at check-in/completion | `actual_start_time`, `actual_end_time` + `trg_bookings_checkin_enforcement`, `trg_bookings_completion_enforcement` (enforce NOT NULL on status transition) | Database | ✅ Enforced |
+| BR9 | Space condition tracking | `initial_condition`, `final_condition` + same triggers as BR8 | Database | ✅ Enforced |
+| BR10 | Unique identification (email, space_code) | UNIQUE constraints on `users(email)`, `spaces(space_code)`, `departments(name)`, `facilities(name)` | Database | ✅ Enforced |
+| BR11 | Soft deletes for bookings/maintenance | `is_deleted BIT NOT NULL DEFAULT 0` | Database | ✅ Enforced |
+| BR12 | Audit trail (created_at, updated_at) | Both columns with `DEFAULT GETDATE()` on all tables | Database | ✅ Enforced |
+| BR13 | Historical records preservation | Soft delete mechanism | Application + DB | ✅ Enforced |
+| BR14 | Staff view reports | Supporting indexes present | Database | ✅ Enforced |
+
+**Note:** See `outputs/04-design-validation-G05.md` §2 for detailed evidence.
 
 ---
 
-*Last updated: 2026-06-15 (Task 03 — Logical Design)*
+## SCHEMA FREEZE
+
+| Gate | Status | Date |
+|---|---|---|
+| Entity registry locked | ✅ 🔒 | Task 03 (2026-06-15) |
+| Schema registry populated | ✅ 🔒 | Task 03 (2026-06-15) |
+| Design validation passed | ✅ | Task 04 (2026-06-17) — re-validated 2026-06-18 (BR8/BR9 upgraded to database-level) |
+| Index sync (D1, D2) | ✅ Resolved | 2026-06-18 — added 4 missing indexes, renamed idx_bookings_overlap → idx_bookings_time_range |
+| **SCHEMA FREEZE** | **⏳ Pending group approval** | — |
+
+---
+
+*Last updated: 2026-06-18 (BR8/BR9 upgraded, D1/D2 index sync resolved)*
