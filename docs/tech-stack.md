@@ -17,6 +17,11 @@
 | Junction table | `<tableA>_<tableB>` (alpha order) | `space_facilities` |
 | Enum/status | lowercase with underscores | `no_show`, `checked_in` |
 | Index | `idx_<table>_<column>` | `idx_bookings_space_id` |
+| Primary key constraint | `PK_<table>` | `PK_departments` |
+| Foreign key constraint | `FK_<child>_<col>` | `FK_users_department_id` |
+| Unique constraint | `UQ_<table>_<col>` | `UQ_users_email` |
+| Check constraint | `CK_<table>_<rule>` | `CK_bookings_status` |
+| Trigger | `trg_<table>_<action>` | `trg_bookings_prevent_overlap` |
 
 ## Enum values (must match requirement exactly)
 

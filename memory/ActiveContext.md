@@ -6,29 +6,26 @@ metadata:
 ---
 
 ## Current task
-Task 05 — DDL Generation ✅ *(completed 2026-06-18)*
+Task 05 — DDL Generation ✅ *(regenerated 2026-06-18)*
 
 ## Status
-- Task 05 output: `outputs/05-db-definition-G05.sql` ✅ (2026-06-18 — Regenerated, compiled and verified on SQL Server)
-- Design decision: 3 FKs changed from SET NULL to NO ACTION (SQL Server cascade path limitation), documented in `docs/design-decisions.md`
-- Compile verification: `logs/eval/task05/2026-06-18-0911-05-ddl-compile.log` ✅
-- Trajectory: `logs/trajectory/task05/2026-06-18-0911-trajectory.md` ✅
+- Task 05 output: `outputs/05-db-definition-G05.sql` ✅ (2026-06-18 — Generated from scratch, compiled and verified on SQL Server)
+- Design decision: `maintenances.assigned_staff_id` kept as `SET NULL` (only 1 cascade FK to users from maintenances — no SQL Server cascade path conflict)
+- Compile verification: `logs/eval/task05/2026-06-18-1350-05-ddl-compile.log` ✅
 
 ## Verification summary
-- 7 tables created (departments, users, spaces, facilities, space_facilities, bookings, maintenance)
-- 10 foreign keys (all FK actions per schema-registry + design-decisions: 2 CASCADE, 8 NO ACTION)
-- 13 CHECK constraints (including D3-D5 deferred checks from validation)
-- 9 triggers (BR1-BR9 enforcement + Q3 auto space-status on maintenance completion)
-- 26 indexes (7 clustered PK, 4 unique, 15 nonclustered)
+- 7 tables created (departments, users, spaces, facilities, space_facilities, bookings, maintenances)
+- 10 foreign keys (2 CASCADE on space_facilities, 1 SET NULL on maintenances.assigned_staff_id, 7 NO ACTION)
+- 13 CHECK constraints (including D3-D5 deferred checks: quantity > 0, completion_time >= start_time, actual_end_time >= actual_start_time)
+- 9 triggers (BR1-BR9 enforcement + trg_maintenances_completion_space_status for Q3)
+- 19 indexes on user tables (7 PK clustered, 4 unique, 8 nonclustered, 1 filtered unique)
 - Filtered unique index `uq_bookings_active_overlap` with WHERE clause verified
+- All CHECK constraints match schema-registry + D3/D4/D5 recommendations from validation report
+- All FK cascade paths verified: no multiple-cascade-path conflict
+- Naming conventions per `docs/tech-stack.md`: PK_, FK_, UQ_, CK_, idx_, trg_ prefixes
 
 ## Blocking issues
 - ⏳ **SCHEMA FREEZE pending group approval** — still outstanding
-
-## Notes from last session
-- DDL compiled successfully on first attempt — clean run after database drop/recreate
-- All 9 triggers, 10 FKs, 13 CHECK constraints, 26 indexes verified on SQL Server
-- Minor CHECK constraints (D3-D5) from validation report included: `CK__space_facilities__quantity`, `CK__bookings__actual_time_order`, `CK__maintenance__completion_time`
 
 ## Next steps
 1. Proceed to Task 06 — Sample Data generation (`generate-data --group G05`)

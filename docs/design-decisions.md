@@ -313,8 +313,48 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 
 ## Revision log
 
+### Decision: BR7 trigger scoped to status transition only
+
+**Task:** 5 (DDL Generation)
+**Date:** 2026-06-18
+
+**Problem:** `trg_bookings_rejection_reason` checked `inserted` only, re-validating `rejection_reason IS NOT NULL` on **every** UPDATE touching a `status = 'rejected'` row. If an ORM/API omitted `rejection_reason` from a soft-delete payload (e.g. `SET is_deleted = 1`), the column could be silently set to NULL, falsely blocking the update.
+
+**Fix:** Added a `LEFT JOIN deleted` to the trigger's `IF EXISTS` subquery so the check fires only when `status` is transitioning **to** `'rejected'`:
+- On INSERT: joins no `deleted` row → enforces rule
+- On UPDATE where `status` changes from `'pending'`/`'approved'` to `'rejected'` → enforces rule
+- On UPDATE where `status` is already `'rejected'` → skips (no re-validation)
+
+**Impact:** Soft-delete and any other column-level updates on rejected bookings no longer trigger false BR7 violations.
+
+**Requirement reference:** BR7
+
+---
+
+### Decision: Maintenance-completion space-status trigger checks for concurrent active tickets
+
+**Task:** 5 (DDL Generation)
+**Date:** 2026-06-18
+
+**Problem:** `trg_maintenances_completion_space_status` set `spaces.current_status = 'available'` as soon as *any* maintenance ticket transitioned to `'resolved'`, ignoring other unresolved tickets on the same space. With concurrent tickets (e.g. AC repair + network repair), resolving the first would prematurely clear the `'under_maintenance'` flag.
+
+**Fix:** Added `NOT EXISTS` subquery that checks for other active (`'open'`/`'in_progress'`) tickets for the same space before flipping the space to `'available'`. The space remains `'under_maintenance'` until the last active ticket is resolved.
+
+**Behavior verified:**
+- Two concurrent `'in_progress'` tickets → resolving Ticket A keeps space as `'under_maintenance'` ✅
+- Resolving Ticket B (last active) → space transitions to `'available'` ✅
+
+**Requirement reference:** Q3 (maintenance-to-booking interaction)
+
+---
+
+## Revision log
+
 | Date | Change | By | Task |
 |---|---|---|---|
+| 2026-06-18 | Added `updated_at` auto-stamp triggers (6 tables) — `AFTER UPDATE` keeps timestamps current beyond the initial INSERT | Agent | Task 05 DDL |
+| 2026-06-18 | Maintenance-completion trigger: `NOT EXISTS` check prevents premature space-status flip with concurrent tickets | Agent | Task 05 DDL |
+| 2026-06-18 | BR7 trigger scoped to status transition — `LEFT JOIN deleted` prevents false rejections on non-status updates | Agent | Task 05 DDL |
 | 2026-06-18 | FK cascade actions: SET NULL → NO ACTION for 3 FKs (SQL Server cascade path limitation) | Agent | Task 05 DDL |
 | 2026-06-15 | Revision 1: added Q3 (maintenance auto-status) and Q4 (auto no-show) decisions; filtered unique index for overlap | Copilot | Task 03 revision |
 | 2026-06-15 | Filled in dates for all Task 2/3 decisions; added account_status, building/floor, rejection_reason, usage_policy decisions | Copilot | Task 03 |

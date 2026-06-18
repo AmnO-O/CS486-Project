@@ -14,139 +14,182 @@ Convert the locked logical schema into a SQL Server DDL script that is:
 - aligned with the approved schema registry
 - safe for historical data preservation
 
+---
 
-Primary source:
-- `docs/schema-registry.md`
+## Source of truth order
 
-Fallback sources only if clarification is needed:
-- `outputs/04-design-validation-G05.md`
-- `outputs/03-logical-design-G05.md`
-- `outputs/02-erd-design-G05.md`
-- `outputs/01-business-req-analysis-G05.md`
-- `req/business-requirement.md`
+When there is any conflict between sources, resolve it using this priority order:
 
+1. `docs/schema-registry.md`
+2. `outputs/04-design-validation-G05.md`
+3. `outputs/03-logical-design-G05.md`
+4. `outputs/02-erd-design-G05.md`
+5. `outputs/01-business-req-analysis-G05.md`
+6. `req/business-requirement.md`
+7. `req/CS486_Project.txt`
+
+Primary source is always `docs/schema-registry.md`. All other files are fallback references for clarification only. Do not override the schema registry with lower-priority sources.
+
+---
 
 ## Core DDL rules
 
-### 1) Table mapping
+### 1. Table mapping
 - Each strong entity becomes one table.
 - Each M:N relationship becomes a junction table.
 - Each multivalued attribute becomes a separate table if the schema registry requires it.
 - Do not create tables that are not present in the locked schema.
 
-### 2) Primary keys
+### 2. Primary keys
 - Every table must have a primary key.
 - Use the key defined in `docs/schema-registry.md`.
 - If the schema uses surrogate keys, preserve them.
 - Do not invent alternate primary keys unless the schema registry explicitly allows it.
 
-### 3) Foreign keys
+### 3. Foreign keys
 - Every foreign key must reference an approved parent table.
-- Foreign key nullability must match the cardinality and participation constraint.
+- Foreign key nullability must match the cardinality and participation constraint from Task 02.
 - Do not use cascading deletes unless the schema registry explicitly allows it.
 - For historical records, prefer preserving rows over destructive cascades.
 
-### 4) Candidate keys / unique constraints
-- Any candidate key identified in Task 03 or locked in the schema registry must become `UNIQUE`.
+### 4. Candidate keys / unique constraints
+- Any candidate key identified in Task 03 or locked in the schema registry must become a `UNIQUE` constraint.
 - Business identifiers such as email or space code must be protected if the schema registry marks them as unique.
 
-### 5) CHECK constraints
-- Use `CHECK` for enumerated values, simple domain restrictions, and bounded numeric rules.
-- Use `CHECK` for:
-  - status columns
-  - type columns
-  - capacity ranges
-  - date/time ordering when it can be enforced locally
-- Keep checks readable and consistent.
+### 5. CHECK constraints
+Use `CHECK` for enumerated values, simple domain restrictions, and bounded numeric rules. Apply to:
+- status columns
+- type columns
+- capacity ranges
+- date/time ordering when it can be enforced locally
 
-### 6) DEFAULT values
-Use defaults where appropriate for:
-- `created_at`
+Keep checks readable and consistent across all tables.
+
+### 6. DEFAULT values
+Apply defaults where appropriate for:
+- `created_at` → `GETDATE()`
 - `updated_at` if the project convention requires it
-- flags such as `is_deleted`
+- flags such as `is_deleted` → `0`
 - initial status columns when the schema registry defines a default state
 
-### 7) NULLability
+### 7. NULLability
 - Mandatory attributes must be `NOT NULL`.
 - Optional attributes may be nullable.
-- Follow participation constraints from Task 02 and column-level requirements from Task 03/04.
+- Follow participation constraints from Task 02 and column-level requirements from Tasks 03 and 04.
 
-### 8) Historical data preservation
+### 8. Historical data preservation
 - Do not destroy historical booking or maintenance records.
 - Avoid schema choices that would erase audit trails.
-- If soft delete is part of the locked schema, keep it consistent across relevant tables.
+- If soft delete is part of the locked schema, apply it consistently across all relevant tables.
+- Prefer `NO ACTION` on FK delete behavior unless the schema registry explicitly authorizes `CASCADE` or `SET NULL`.
 
+### 9. Procedural constraints / triggers
+Use triggers for business rules that cannot be enforced declaratively (e.g. the no-overlapping-bookings rule).
 
-### 9) Procedural constraints / triggers
-- Use triggers for rules that cannot be enforced declaratively.
-- **Each `CREATE TRIGGER` must be the first statement in its batch — always precede with `GO`.**
-- Structure:
+**Mandatory pattern — each trigger must be in its own batch:**
+```sql
+GO
+CREATE TRIGGER trg_name
+ON table_name
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    -- rule enforcement logic
+END
+GO
+```
+
+> **Rule:** Every `CREATE TRIGGER` must be the first statement in its batch.
+> Always precede with `GO`. Forgetting `GO` causes a compile error on SQL Server.
+
+Trigger requirements are defined in the **Business Rule Coverage** section of `docs/schema-registry.md`.
+Refer to `outputs/03-logical-design-G05.md §7` for context on which rules require triggers vs declarative constraints.
+
+If a rule is intentionally deferred to the application layer, document the reason in a SQL comment at the relevant location in the script.
+
+### 10. SQL Server style
+- Generate valid **T-SQL for SQL Server 2019+**.
+- **The first two lines of the script must be:**
   ```sql
-    GO
-    CREATE TRIGGER trg_name ON table_name ...
+  SET QUOTED_IDENTIFIER ON
+  GO
   ```
-- If a rule is intentionally left to the application layer, document in SQL comments.
-
-  > Source: `outputs/03-logical-design-G05.md §7` — read from there, do not infer.
-
-
-### 10) SQL Server style
-- Generate valid T-SQL for SQL Server 2019+.
-- **Add `SET QUOTED_IDENTIFIER ON; GO` at the top of the script** — mandatory for filtered indexes. Without this, SQL Server raises Msg 1934.
-- Use deterministic constraint names.
+  This is mandatory for filtered indexes. Omitting it causes `Msg 1934` at compile time.
+- Use deterministic, predictable constraint names (see naming convention below).
 - Use clear table and column ordering.
-- Use bracketed identifiers only if required by the naming convention.
-- Keep the script idempotent if the project convention expects it; otherwise generate clean `CREATE TABLE` statements only.
+- Use bracketed identifiers `[name]` only if required by the project naming convention in `docs/tech-stack.md`.
+- Keep the script idempotent if the project convention requires it; otherwise generate clean `CREATE TABLE` statements only.
 
-
-
+---
 
 ## Recommended table creation order
-Create tables in dependency order:
 
-1. parent/master tables
-2. lookup tables
-3. core transaction tables
-4. junction tables
-5. dependent tables
+Create tables in dependency order to avoid FK reference errors:
 
-If using `CREATE TABLE` only:
-- define parent tables first
-- then child tables with foreign keys
+1. Parent / master tables (e.g. `Users`, `Spaces`)
+2. Lookup / reference tables
+3. Core transaction tables (e.g. `Bookings`)
+4. Junction tables (e.g. `SpaceFacilities`)
+5. Dependent tables (e.g. `BookingApprovals`, `UsageSessions`, `MaintenanceRecords`)
+
+---
 
 ## Constraint naming convention
-Use predictable names such as:
 
-- `PK_<TABLE>`
-- `FK_<CHILD>_<PARENT>`
-- `UQ_<TABLE>_<COLUMN>`
-- `CK_<TABLE>_<RULE>`
+Use short, predictable names that match `docs/tech-stack.md`:
 
-Keep names short, readable, and consistent with project conventions.
+| Type | Pattern | Example |
+|------|---------|---------|
+| Primary key | `PK_<TABLE>` | `PK_Bookings` |
+| Foreign key | `FK_<CHILD>_<PARENT>` | `FK_Bookings_Users` |
+| Unique | `UQ_<TABLE>_<COLUMN>` | `UQ_Users_Email` |
+| Check | `CK_<TABLE>_<RULE>` | `CK_Bookings_Status` |
+
+---
 
 ## Validation checklist
-Before outputting SQL, verify:
 
-- all required tables exist
-- all required columns exist
-- all PKs exist
-- all FKs exist
-- all candidate keys are enforced
-- all required `CHECK` constraints exist
-- all required defaults exist
-- all required `NOT NULL` constraints exist
-- all required triggers exist when the schema registry.
-- no extra tables were introduced
-- no schema rule from the locked registry was missed
+Before outputting SQL, verify every item:
+
+**Tables and columns**
+- [ ] All required tables exist
+- [ ] No extra tables were introduced that are not in the schema registry
+- [ ] All required columns exist with correct data types and nullability
+
+**Constraints**
+- [ ] All PKs exist
+- [ ] All FKs exist and reference the correct parent columns
+- [ ] All candidate keys are enforced as `UNIQUE`
+- [ ] All required `CHECK` constraints exist and use correct enum values
+- [ ] All required `DEFAULT` values are present
+- [ ] All required `NOT NULL` constraints are applied
+
+**Triggers**
+- [ ] All required triggers exist and match the Business Rule Coverage in `docs/schema-registry.md`
+- [ ] Every trigger is preceded by `GO` in its own batch
+
+**Script integrity**
+- [ ] `SET QUOTED_IDENTIFIER ON` + `GO` is the first block in the file
+- [ ] No schema rule from the locked registry was missed
+- [ ] No analysis text or prose is mixed into the SQL output
+
+---
 
 ## Common mistakes to avoid
-- skipping the schema registry and coding directly from the raw requirement
-- mixing analysis text with DDL output
-- inventing new entities that were not approved
-- forgetting junction tables for M:N relationships
-- using `CHECK` where a lookup table is required, or vice versa
-- adding cascade deletes that would break history
-- allowing nullable foreign keys where participation is total
+
+- Skipping `docs/schema-registry.md` and generating directly from raw requirements
+- Mixing analysis text or markdown prose with DDL output
+- Inventing new entities that were not approved in the schema registry
+- Forgetting junction tables for M:N relationships
+- Using `CHECK` where a lookup table is required, or vice versa
+- Adding `CASCADE` deletes that would erase historical records
+- Allowing nullable foreign keys where participation is total (mandatory)
+- Omitting `GO` before `CREATE TRIGGER` — causes batch-level compile errors
+- Forgetting `SET QUOTED_IDENTIFIER ON` at the top — causes `Msg 1934` on filtered indexes
+
+---
 
 ## Output standard
-The final SQL file should be ready to run after review, with no explanatory prose mixed into the script unless the project template explicitly requires comments.
+
+The final SQL file must be ready to run after review.
+No explanatory prose should be mixed into the script unless the project template explicitly requires inline comments.

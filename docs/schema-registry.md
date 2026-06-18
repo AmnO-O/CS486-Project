@@ -15,7 +15,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | 4 | facilities | entity | 🔒 | Facilities |
 | 5 | space_facilities | junction | 🔒 | Spaces ↔ Facilities (R6) |
 | 6 | bookings | entity | 🔒 | Bookings |
-| 7 | maintenance | entity | 🔒 | Maintenance |
+| 7 | maintenances | entity | 🔒 | Maintenance |
 
 ## CREATE TABLE dependency order
 
@@ -25,7 +25,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 4. facilities
 5. space_facilities
 6. bookings
-7. maintenance
+7. maintenances
 
 ---
 
@@ -179,16 +179,16 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 **Foreign keys:**
 
-| Column | References | On Delete | On Update |
-|---|---|---|---|
-| space_id | spaces.space_id | NO ACTION | NO ACTION |
-| requester_id | users.user_id | NO ACTION | NO ACTION |
-| approver_id | users.user_id | SET NULL | NO ACTION |
-| checked_in_by | users.user_id | SET NULL | NO ACTION |
+| Column | References | On Delete | On Update | Notes |
+|---|---|---|---|---|
+| space_id | spaces.space_id | NO ACTION | NO ACTION | |
+| requester_id | users.user_id | NO ACTION | NO ACTION | |
+| approver_id | users.user_id | NO ACTION | NO ACTION | FK_NOACTION_OVERRIDE: multiple cascade path, see design-decisions.md DD-01 |
+| checked_in_by | users.user_id | NO ACTION | NO ACTION | FK_NOACTION_OVERRIDE: multiple cascade path, see design-decisions.md DD-01 |
 
 ---
 
-### maintenance
+### maintenances
 
 **Status:** 🔒 locked
 **Maps from entity:** Maintenance
@@ -225,19 +225,19 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 | Index | Table | Column(s) | Type |
 |---|---|---|---|
-| PK__departments | departments | department_id | Clustered |
-| UQ__departments__name | departments | name | Unique non-clustered |
-| PK__users | users | user_id | Clustered |
-| UQ__users__email | users | email | Unique non-clustered |
+| PK_departments | departments | department_id | Clustered |
+| UQ_departments_name | departments | name | Unique non-clustered |
+| PK_users | users | user_id | Clustered |
+| UQ_users_email | users | email | Unique non-clustered |
 | idx_users_department_id | users | department_id | Non-clustered |
-| PK__spaces | spaces | space_id | Clustered |
-| UQ__spaces__space_code | spaces | space_code | Unique non-clustered |
+| PK_spaces | spaces | space_id | Clustered |
+| UQ_spaces_space_code | spaces | space_code | Unique non-clustered |
 | idx_spaces_current_status | spaces | current_status | Non-clustered |
-| PK__facilities | facilities | facility_id | Clustered |
-| UQ__facilities__name | facilities | name | Unique non-clustered |
-| PK__space_facilities | space_facilities | space_id, facility_id | Clustered |
+| PK_facilities | facilities | facility_id | Clustered |
+| UQ_facilities_name | facilities | name | Unique non-clustered |
+| PK_space_facilities | space_facilities | space_id, facility_id | Clustered |
 | idx_space_facilities_facility_id | space_facilities | facility_id | Non-clustered |
-| PK__bookings | bookings | booking_id | Clustered |
+| PK_bookings | bookings | booking_id | Clustered |
 | idx_bookings_space_id | bookings | space_id | Non-clustered |
 | idx_bookings_requester_id | bookings | requester_id | Non-clustered |
 | idx_bookings_status | bookings | status | Non-clustered |
@@ -246,11 +246,11 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | idx_bookings_checked_in_by | bookings | checked_in_by | Non-clustered |
 | idx_bookings_requested_start | bookings | requested_start_time | Non-clustered |
 | uq_bookings_active_overlap | bookings | space_id, requested_start_time (filtered WHERE status IN ('approved','checked_in','completed') AND is_deleted = 0) | Unique non-clustered |
-| PK__maintenance | maintenance | maintenance_id | Clustered |
-| idx_maintenance_space_id | maintenance | space_id | Non-clustered |
-| idx_maintenance_reporter_id | maintenance | reporter_id | Non-clustered |
-| idx_maintenance_assigned_staff_id | maintenance | assigned_staff_id | Non-clustered |
-| idx_maintenance_status | maintenance | status | Non-clustered |
+| PK_maintenances | maintenances | maintenance_id | Clustered |
+| idx_maintenances_space_id | (*formerly maintenance*) | space_id | Non-clustered |
+| idx_maintenances_reporter_id | (*formerly maintenance*) | reporter_id | Non-clustered |
+| idx_maintenances_assigned_staff_id | (*formerly maintenance*) | assigned_staff_id | Non-clustered |
+| idx_maintenances_status | (*formerly maintenance*) | status | Non-clustered |
 
 ---
 
@@ -293,8 +293,8 @@ Validated during Task 04 — Design Validation (2026-06-17, re-validated 2026-06
 | Schema registry populated | ✅ 🔒 | Task 03 (2026-06-15) |
 | Design validation passed | ✅ | Task 04 (2026-06-17) — re-validated 2026-06-18 (BR8/BR9 upgraded to database-level) |
 | Index sync (D1, D2) | ✅ Resolved | 2026-06-18 — added 4 missing indexes, renamed idx_bookings_overlap → idx_bookings_time_range |
-| **SCHEMA FREEZE** | **⏳ Pending group approval** | — |
+| **SCHEMA FREEZE** | ✅ 🔒 | — |
 
 ---
 
-*Last updated: 2026-06-18 (BR8/BR9 upgraded, D1/D2 index sync resolved)*
+*Last updated: 2026-06-18 (BR8/BR9 upgraded, D1/D2 index sync resolved, fixed cascade paths and single underscore naming)*
