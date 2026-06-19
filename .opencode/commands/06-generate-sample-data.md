@@ -29,7 +29,8 @@ Prompt:
   1. Realistic valid data for every locked table
   2. Normal workflow scenarios for bookings and maintenance
   3. Intentional expected-error cases for key constraints and triggers
-  4. Verification queries for row counts, statuses, audit fields, and reporting scenarios
+  4. `sqlcmd` execution with output saved under `logs/execution/task06/`
+  5. Verification queries for row counts, statuses, audit fields, and reporting scenarios
 
   Do not:
   - modify any registry
