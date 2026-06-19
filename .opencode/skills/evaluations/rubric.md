@@ -40,7 +40,7 @@ Total Score = Sum(Weighted Score)
 | `03-logical-design.md` | Tables, columns, PKs, FKs, datatypes, constraints, normalization, naming convention. |
 | `04-design-validation.md` | Requirement coverage, rule coverage, anomaly checks, gap/risk log, fix recommendations. |
 | `05-db-definition.sql` | SQL Server DDL, table order, PK/FK/CHECK/UNIQUE constraints, rule comments. |
-| `06-sample-data.sql` | Valid insert order, FK-safe data, realistic status scenarios, and intentional failing `INSERT` cases marked with comments such as `-- Expected error: ...` to prove constraints work. These negative cases should include invalid bookings for rooms that are `Under Maintenance` or `Retired`, and conflicting bookings with overlapping time periods. |
+| `06-sample-data.sql` | Valid insert order, FK-safe data, realistic status scenarios, and intentional failing `INSERT` cases marked with comments such as `-- Expected error: ...` to prove constraints work. These negative cases should include invalid bookings for rooms that are `Under Maintenance` or `Retired`, and conflicting bookings with overlapping time periods. The task must also include a `logs/execution/task06/<timestamp>-output.txt` execution log from `sqlcmd`. File-level evaluation must check: valid seed sections have no unexpected SQL Server errors; the script is idempotent or rerunnable against pre-existing Task 06 sample data; every expected-error case has a corresponding captured error message; and captured expected errors prove the intended BR/constraint rather than unrelated `NULL`, FK, duplicate-key, or setup-cascade failures. |
 | `07-query-design.sql` | Query purpose, requirement/report mapping, correct table/column usage. |
 
 ## Pipeline-Level Checks
@@ -51,7 +51,8 @@ Total Score = Sum(Weighted Score)
 | Relationship in ERD becomes an FK or associative table. | Relationship -> FK matrix |
 | Logical tables appear in DDL. | Logical design -> DDL comparison |
 | Sample data matches DDL constraints. | Insert order and constraint review |
-| Sample data proves critical constraints through expected failures. | `06-sample-data.sql` includes commented negative `INSERT` cases with `-- Expected error: ...`, especially for unavailable room statuses and overlapping booking periods. |
+| Sample data executes cleanly where it should. | `logs/execution/task06/<timestamp>-output.txt` shows valid seed sections completed without unexpected SQL Server errors; if rerun evidence exists, the second run also avoids duplicate-key and NULL-cascade failures. |
+| Sample data proves critical constraints through expected failures. | `06-sample-data.sql` includes commented negative `INSERT` cases with `-- Expected error: ...`, especially for unavailable room statuses and overlapping booking periods; `logs/execution/task06/<timestamp>-output.txt` shows a matching captured error for each expected-error case, and the captured message reflects the intended rule rather than a setup/cascade error. |
 | Queries use existing tables and columns. | Query review |
 | Business rules are preserved across the pipeline. | Requirement -> SQL/query traceability |
 

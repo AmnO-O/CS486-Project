@@ -37,7 +37,7 @@ These common reads are expected context, not extra noise.
 | 03 logical-design | common reads; `outputs/01-business-req-analysis-G05.md`; `outputs/02-erd-design-G05.md`; `docs/entity-registry.md` | `outputs/03-logical-design-G05.md`; `docs/schema-registry.md` (populate tables, columns, FK wiring, indexes, 3NF proof); `docs/entity-registry.md` (lock finalized names/types/constraints) | any unrelated `outputs/`; editing prior output artifacts |
 | 04 design-validation | common reads; `req/business-requirement.md`; `outputs/01-business-req-analysis-G05.md`; `outputs/02-erd-design-G05.md`; `outputs/03-logical-design-G05.md`; `docs/entity-registry.md` (RO except lock marker); `docs/schema-registry.md` (RO except business-rule coverage/lock marker) | `outputs/04-design-validation-G05.md`; `docs/schema-registry.md` business-rule coverage and lock marker if SCHEMA FREEZE is approved; `docs/entity-registry.md` lock marker if approved | changing schema/entity facts beyond validation coverage or lock markers; any unrelated `outputs/` |
 | 05 ddl | common reads; `outputs/01-business-req-analysis-G05.md`; `docs/schema-registry.md` (RO, locked source of truth) | `outputs/05-db-definition-G05.sql` or project variant `outputs/05-ddl-G05.sql` | `docs/schema-registry.md`; `docs/entity-registry.md`; any prior `outputs/` |
-| 06 sample-data | common reads; `req/business-requirement.md`; `outputs/01-business-req-analysis-G05.md`; `outputs/05-db-definition-G05.sql` or `outputs/05-ddl-G05.sql`; `docs/entity-registry.md` (RO); `docs/schema-registry.md` (RO) | `outputs/06-sample-data-G05.sql` | any registry; any prior `outputs/` |
+| 06 sample-data | common reads; `req/business-requirement.md`; `outputs/01-business-req-analysis-G05.md`; `outputs/05-db-definition-G05.sql` or `outputs/05-ddl-G05.sql`; `docs/entity-registry.md` (RO); `docs/schema-registry.md` (RO) | `outputs/06-sample-data-G05.sql`; `logs/execution/task06/<timestamp>-output.txt` | any registry; any prior `outputs/` |
 | 07 query-design | common reads; `req/business-requirement.md`; `outputs/01-business-req-analysis-G05.md`; `outputs/05-db-definition-G05.sql` or `outputs/05-ddl-G05.sql`; `docs/entity-registry.md` (RO); `docs/schema-registry.md` (RO) | `outputs/07-query-design-G05.sql` | any registry; any prior `outputs/` |
 
 RO = read-only (allowed to read, must not modify).
@@ -52,6 +52,10 @@ RO = read-only (allowed to read, must not modify).
 - Task 06 must create realistic valid data plus intentional negative test cases
   marked with `-- Expected error: ...` where constraints should reject invalid
   rows, especially unavailable room bookings and overlapping booking periods.
+- Task 06 must execute the sample-data script with `sqlcmd`, save stdout/stderr
+  to `logs/execution/task06/<timestamp>-output.txt`, and record in the trajectory
+  whether execution completed or was blocked. Detailed artifact scoring of valid
+  seed errors and expected-error quality belongs in `rubric.md`.
 - Task 07 must read the requirement and business analysis so each SQL query has a
   real business question, target user, and usefulness explanation. Expected query
   areas include booking history, upcoming bookings, no-show bookings, maintenance
@@ -63,6 +67,7 @@ These may be read or appended in any task and do not count as violations:
 - `docs/design-decisions.md` (read always; append only on a key decision)
 - `memory/Progress.md`, `memory/ActiveContext.md` (read always; update post-task, only via handshake)
 - `logs/trajectory/task0X/*` (the trajectory being written)
+- `logs/execution/task06/*-output.txt` (Task 06 `sqlcmd` execution evidence)
 
 ## Never-allowed (hard fail in any task)
 
