@@ -1,0 +1,105 @@
+=== DDL Compile Log ===
+Timestamp: 2026-06-20T13:33:24Z
+Script: outputs/05-db-definition-G05.sql
+
+=== Step 1: Create Database ===
+Command: CREATE DATABASE CS486_G05
+Result: SUCCESS
+
+=== Step 2: Run DDL ===
+Command: sqlcmd -i outputs/05-db-definition-G05.sql
+Result: SUCCESS (no errors)
+
+=== Step 3: Tables Created ===
+TABLE_NAME                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                        
+departments                                                                                                                     
+facilities                                                                                                                      
+maintenances                                                                                                                    
+space_facilities                                                                                                                
+spaces                                                                                                                          
+users                                                                                                                           
+
+(7 rows affected)
+
+=== Step 4: Constraints ===
+CONSTRAINT_NAME                                                                                                                  CONSTRAINT_TYPE
+-------------------------------------------------------------------------------------------------------------------------------- ---------------
+CK_bookings_expected_participants                                                                                                CHECK          
+CK_bookings_purpose                                                                                                              CHECK          
+CK_bookings_requested_end_time                                                                                                   CHECK          
+CK_bookings_status                                                                                                               CHECK          
+CK_maintenances_status                                                                                                           CHECK          
+CK_spaces_capacity                                                                                                               CHECK          
+CK_spaces_current_status                                                                                                         CHECK          
+CK_spaces_space_type                                                                                                             CHECK          
+CK_users_account_status                                                                                                          CHECK          
+CK_users_role                                                                                                                    CHECK          
+FK_bookings_approver_id                                                                                                          FOREIGN KEY    
+FK_bookings_checked_in_by                                                                                                        FOREIGN KEY    
+FK_bookings_requester_id                                                                                                         FOREIGN KEY    
+FK_bookings_space_id                                                                                                             FOREIGN KEY    
+FK_maintenances_assigned_staff_id                                                                                                FOREIGN KEY    
+FK_maintenances_reporter_id                                                                                                      FOREIGN KEY    
+FK_maintenances_space_id                                                                                                         FOREIGN KEY    
+FK_space_facilities_facility_id                                                                                                  FOREIGN KEY    
+FK_space_facilities_space_id                                                                                                     FOREIGN KEY    
+FK_users_department_id                                                                                                           FOREIGN KEY    
+PK_bookings                                                                                                                      PRIMARY KEY    
+PK_departments                                                                                                                   PRIMARY KEY    
+PK_facilities                                                                                                                    PRIMARY KEY    
+PK_maintenances                                                                                                                  PRIMARY KEY    
+PK_space_facilities                                                                                                              PRIMARY KEY    
+PK_spaces                                                                                                                        PRIMARY KEY    
+PK_users                                                                                                                         PRIMARY KEY    
+UQ_departments_name                                                                                                              UNIQUE         
+UQ_facilities_name                                                                                                               UNIQUE         
+UQ_spaces_space_code                                                                                                             UNIQUE         
+UQ_users_email                                                                                                                   UNIQUE         
+
+(31 rows affected)
+
+=== Step 5: User-defined Indexes ===
+name                                                                                                                             type_desc                                                    is_unique is_primary_key is_unique_constraint
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------ --------- -------------- --------------------
+idx_bookings_approver_id                                                                                                         NONCLUSTERED                                                         0              0                    0
+idx_bookings_checked_in_by                                                                                                       NONCLUSTERED                                                         0              0                    0
+idx_bookings_requested_start                                                                                                     NONCLUSTERED                                                         0              0                    0
+idx_bookings_requester_id                                                                                                        NONCLUSTERED                                                         0              0                    0
+idx_bookings_space_id                                                                                                            NONCLUSTERED                                                         0              0                    0
+idx_bookings_status                                                                                                              NONCLUSTERED                                                         0              0                    0
+idx_bookings_time_range                                                                                                          NONCLUSTERED                                                         0              0                    0
+idx_maintenances_assigned_staff_id                                                                                               NONCLUSTERED                                                         0              0                    0
+idx_maintenances_reporter_id                                                                                                     NONCLUSTERED                                                         0              0                    0
+idx_maintenances_space_id                                                                                                        NONCLUSTERED                                                         0              0                    0
+idx_maintenances_status                                                                                                          NONCLUSTERED                                                         0              0                    0
+idx_space_facilities_facility_id                                                                                                 NONCLUSTERED                                                         0              0                    0
+idx_spaces_current_status                                                                                                        NONCLUSTERED                                                         0              0                    0
+idx_users_department_id                                                                                                          NONCLUSTERED                                                         0              0                    0
+uq_bookings_active_overlap                                                                                                       NONCLUSTERED                                                         1              0                    0
+
+(15 rows affected)
+
+=== Step 6: Triggers ===
+name                                                                                                                             table_name                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+trg_bookings_approval_validation                                                                                                 bookings                                                                                                                        
+trg_bookings_check_capacity                                                                                                      bookings                                                                                                                        
+trg_bookings_check_maintenance                                                                                                   bookings                                                                                                                        
+trg_bookings_check_space_status                                                                                                  bookings                                                                                                                        
+trg_bookings_checkin_enforcement                                                                                                 bookings                                                                                                                        
+trg_bookings_completion_enforcement                                                                                              bookings                                                                                                                        
+trg_bookings_prevent_overlap                                                                                                     bookings                                                                                                                        
+trg_bookings_rejection_reason                                                                                                    bookings                                                                                                                        
+trg_bookings_updated_at                                                                                                          bookings                                                                                                                        
+trg_departments_updated_at                                                                                                       departments                                                                                                                     
+trg_facilities_updated_at                                                                                                        facilities                                                                                                                      
+trg_maintenances_completion_space_status                                                                                         maintenances                                                                                                                    
+trg_maintenances_updated_at                                                                                                      maintenances                                                                                                                    
+trg_spaces_updated_at                                                                                                            spaces                                                                                                                          
+trg_users_updated_at                                                                                                             users                                                                                                                           
+
+(15 rows affected)
+
+=== RESULT: ALL CHECKS PASSED ===
