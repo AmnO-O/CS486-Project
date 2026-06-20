@@ -58,8 +58,9 @@ Write only these Task 06 deliverables, plus required trajectory and allowed memo
 5. Read `references/sql-style-and-ordering.md` while writing the SQL so insert order, lookup variables, trigger-aware transitions, dates, and comments stay consistent.
 6. Save `outputs/06-sample-data-G05.sql`.
 7. Read `references/execution-validation.md`, run `sqlcmd` after Task 05 DDL creates the database, and save the console output log.
-8. If execution exposes sample-data generation errors in valid seed sections, fix the SQL and rerun.
-9. Read `references/completion-actions.md` before updating trajectory and memory files.
+8. Rerun the script when validating idempotence or after any fix that changes cleanup, inserts, lookup capture, or expected-error setup.
+9. If execution exposes sample-data generation errors in valid seed sections, fix the SQL and rerun.
+10. Read `references/completion-actions.md` before updating trajectory and memory files.
 
 ## Reference Guide
 
@@ -88,6 +89,8 @@ Before finalizing the SQL file, verify:
 - Expected-error output proves the intended BR/constraint, not an unrelated NULL, FK, or duplicate-key cascade.
 - The script continues after expected failures.
 - Verification queries cover audit timestamps and required reporting scenarios.
+- The trajectory plan includes SQL generation, `sqlcmd` execution, execution-log review, and rerun/idempotence evidence when applicable.
+- Any revision made after execution is recorded in the trajectory with the failing evidence, the fix, and the replacement execution log.
 - No registry or prior output file was modified.
 
 ## Completion Gate

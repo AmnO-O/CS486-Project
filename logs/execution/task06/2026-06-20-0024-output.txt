@@ -1,0 +1,129 @@
+=== SECTION 1: IDEMPOTENT CLEANUP ===
+=== SECTION 2: DEPARTMENTS ===
+=== SECTION 3: USERS ===
+=== SECTION 4: SPACES ===
+=== SECTION 5: FACILITIES ===
+=== SECTION 6: SPACE FACILITIES ===
+=== SECTION 7: MAINTENANCES ===
+=== SECTION 8: BOOKINGS ===
+=== SECTION 9: EXPECTED-ERROR TEST CASES ===
+EXPECTED_ERROR: BR1 â?" overlapping approved booking interval
+  CAUGHT: BR1 violation: overlapping booking interval detected.
+EXPECTED_ERROR: BR2 â?" booking on under_maintenance space
+  CAUGHT: BR2 violation: space is not available for booking.
+EXPECTED_ERROR: BR2 â?" booking on retired space
+  CAUGHT: BR2 violation: space is not available for booking.
+EXPECTED_ERROR: BR3 â?" expected participants exceed capacity
+  CAUGHT: BR3 violation: expected participants exceed space capacity.
+EXPECTED_ERROR: BR4 â?" overlapping unresolved maintenance
+  CAUGHT: BR4 violation: overlapping unresolved maintenance prevents booking.
+EXPECTED_ERROR: BR6 â?" missing approval metadata
+  CAUGHT: BR6 violation: approver_id, decision_time, and decision_note are required when approving or rejecting a booking.
+EXPECTED_ERROR: BR7 â?" missing rejection reason
+  CAUGHT: BR7 violation: rejection_reason is required when status is rejected.
+EXPECTED_ERROR: BR8/BR9 â?" missing check-in fields
+  CAUGHT: BR8/BR9 violation: actual_start_time, checked_in_by, and initial_condition are required when checking in.
+EXPECTED_ERROR: BR8/BR9 â?" missing completion fields
+  CAUGHT: BR8/BR9 violation: actual_end_time and final_condition are required when completing a booking.
+EXPECTED_ERROR: CK_users_role â?" invalid role value
+  CAUGHT: The INSERT statement conflicted with the CHECK constraint "CK_users_role". The conflict occurred in database "CS486_G05", table "dbo.users", column 'role'.
+EXPECTED_ERROR: CK_bookings_requested_end_time â?" end <= start
+  CAUGHT: The INSERT statement conflicted with the CHECK constraint "CK_bookings_requested_end_time". The conflict occurred in database "CS486_G05", table "dbo.bookings".
+EXPECTED_ERROR: UQ_users_email â?" duplicate email
+  CAUGHT: Violation of UNIQUE KEY constraint 'UQ_users_email'. Cannot insert duplicate key in object 'dbo.users'. The duplicate key value is (t06_alice.wang@university.edu).
+EXPECTED_ERROR: UQ_spaces_space_code â?" duplicate space_code
+  CAUGHT: Violation of UNIQUE KEY constraint 'UQ_spaces_space_code'. Cannot insert duplicate key in object 'dbo.spaces'. The duplicate key value is (T06-AUD-001).
+=== SECTION 10: VERIFICATION QUERIES ===
+--- VERIFY: Row counts ---
+table            row_count  
+---------------- -----------
+bookings                  14
+departments                5
+facilities                 6
+maintenances               5
+space_facilities          16
+spaces                    10
+users                      8
+--- VERIFY: BR12 audit timestamps ---
+source       id          created_at                             updated_at                            
+------------ ----------- -------------------------------------- --------------------------------------
+departments            1            2026-06-20 00:14:20.7366667            2026-06-20 00:14:20.7366667
+departments            2            2026-06-20 00:14:20.7366667            2026-06-20 00:14:20.7366667
+departments            3            2026-06-20 00:14:20.7366667            2026-06-20 00:14:20.7366667
+users                 33            2026-06-20 00:24:37.3200000            2026-06-20 00:24:37.3200000
+users                 34            2026-06-20 00:24:37.3200000            2026-06-20 00:24:37.3200000
+users                 35            2026-06-20 00:24:37.3200000            2026-06-20 00:24:37.3200000
+spaces                33            2026-06-20 00:24:37.3433333            2026-06-20 00:24:37.3433333
+spaces                34            2026-06-20 00:24:37.3433333            2026-06-20 00:24:37.3433333
+spaces                35            2026-06-20 00:24:37.3433333            2026-06-20 00:24:37.3433333
+bookings              44            2026-06-20 00:24:37.5900000            2026-06-20 00:24:37.5900000
+bookings              45            2026-06-20 00:24:37.6233333            2026-06-20 00:24:37.6233333
+bookings              46            2026-06-20 00:24:37.6233333            2026-06-20 00:24:37.6233333
+maintenances          17            2026-06-20 00:24:37.5033333            2026-06-20 00:24:37.5033333
+maintenances          18            2026-06-20 00:24:37.5100000            2026-06-20 00:24:37.5100000
+maintenances          19            2026-06-20 00:24:37.5100000            2026-06-20 00:24:37.5100000
+--- VERIFY: BR11/BR13 soft-deleted rows ---
+table        id          is_deleted status                                             requested_start_time                   space_id   
+------------ ----------- ---------- -------------------------------------------------- -------------------------------------- -----------
+bookings              53          1 completed                                                     2026-06-10 14:00:00.0000000          38
+maintenances          20          1 resolved                                                      2026-06-14 09:00:00.0000000          41
+--- VERIFY: BR14 booking history (Main Auditorium) ---
+booking_id  requester                                                                                                                                                                                                                                                       purpose                                            requested_start_time                   requested_end_time                     status                                            
+----------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------- -------------------------------------- --------------------------------------------------
+         44 Alice Wang                                                                                                                                                                                                                                                      lecture                                                       2026-06-18 09:00:00.0000000            2026-06-18 11:00:00.0000000 completed                                         
+--- VERIFY: BR14 upcoming bookings ---
+booking_id  space_code                                         space_name                                                                                                                                                                                                                                                      requester                                                                                                                                                                                                                                                       purpose                                            requested_start_time                   requested_end_time                     status                                            
+----------- -------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------- -------------------------------------- --------------------------------------------------
+         50 T06-SW-001                                         Student Hub                                                                                                                                                                                                                                                     Bob Chen                                                                                                                                                                                                                                                        student_activity                                              2026-06-20 14:00:00.0000000            2026-06-20 17:00:00.0000000 checked_in                                        
+         46 T06-CL-101                                         Lecture Room 1                                                                                                                                                                                                                                                  Carol Liu                                                                                                                                                                                                                                                       lecture                                                       2026-06-25 08:00:00.0000000            2026-06-25 10:00:00.0000000 approved                                          
+         45 T06-CL-201                                         Computer Lab 1                                                                                                                                                                                                                                                  Bob Chen                                                                                                                                                                                                                                                        examination                                                   2026-07-01 09:00:00.0000000            2026-07-01 12:00:00.0000000 pending                                           
+         47 T06-CL-101                                         Lecture Room 1                                                                                                                                                                                                                                                  Alice Wang                                                                                                                                                                                                                                                      workshop                                                      2026-07-02 10:00:00.0000000            2026-07-02 12:00:00.0000000 pending                                           
+         51 T06-PL-001                                         Project Lab Alpha                                                                                                                                                                                                                                               Eve Johnson                                                                                                                                                                                                                                                     administrative_event                                          2026-07-03 10:00:00.0000000            2026-07-03 12:00:00.0000000 pending                                           
+         59 T06-AUD-002                                        Small Auditorium                                                                                                                                                                                                                                                Alice Wang                                                                                                                                                                                                                                                      seminar                                                       2026-08-01 09:00:00.0000000            2026-08-01 11:00:00.0000000 pending                                           
+         60 T06-AUD-002                                        Small Auditorium                                                                                                                                                                                                                                                Bob Chen                                                                                                                                                                                                                                                        workshop                                                      2026-08-02 14:00:00.0000000            2026-08-02 16:00:00.0000000 pending                                           
+         61 T06-AUD-002                                        Small Auditorium                                                                                                                                                                                                                                                Carol Liu                                                                                                                                                                                                                                                       lecture                                                       2026-08-03 10:00:00.0000000            2026-08-03 12:00:00.0000000 approved                                          
+         62 T06-AUD-002                                        Small Auditorium                                                                                                                                                                                                                                                Alice Wang                                                                                                                                                                                                                                                      workshop                                                      2026-08-04 09:00:00.0000000            2026-08-04 11:00:00.0000000 checked_in                                        
+--- VERIFY: BR14 spaces under maintenance ---
+space_code                                         space_name                                                                                                                                                                                                                                                      building                                                                                             room_number                                        maintenance_id problem_description                                                                                                                                                                                                                                              status                                             start_time                            
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- --------------------------------------
+T06-CL-102                                         Lecture Room 2                                                                                                                                                                                                                                                  Building A                                                                                           201                                                            18 Air conditioning not cooling â?" temperature exceeds 30A°C in the room                                                                                                                                                                                           open                                                          2026-06-19 10:00:00.0000000
+T06-CL-102                                         Lecture Room 2                                                                                                                                                                                                                                                  Building A                                                                                           201                                                            19 Three desks have broken legs and five chairs are unstable â?" risk of injury                                                                                                                                                                                     in_progress                                                   2026-06-19 14:00:00.0000000
+--- VERIFY: BR14 no-show bookings ---
+booking_id  space_code                                         requester                                                                                                                                                                                                                                                       purpose                                            requested_start_time                   requested_end_time                    
+----------- -------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------- --------------------------------------
+         48 T06-CL-201                                         Bob Chen                                                                                                                                                                                                                                                        seminar                                                       2026-06-18 13:00:00.0000000            2026-06-18 15:00:00.0000000
+--- VERIFY: Booking status distribution ---
+status                                             count      
+-------------------------------------------------- -----------
+approved                                                     2
+cancelled                                                    1
+checked_in                                                   2
+completed                                                    2
+no_show                                                      1
+pending                                                      5
+rejected                                                     1
+--- VERIFY: Maintenance status distribution ---
+status                                             count      
+-------------------------------------------------- -----------
+in_progress                                                  2
+open                                                         1
+resolved                                                     2
+--- VERIFY: Space type distribution ---
+space_type                                         count      
+-------------------------------------------------- -----------
+auditorium                                                   2
+classroom                                                    2
+computer_lab                                                 2
+meeting_room                                                 2
+project_lab                                                  1
+student_workspace                                            1
+--- VERIFY: User role distribution ---
+role                                               count      
+-------------------------------------------------- -----------
+department_admin                                             1
+facility_manager                                             1
+facility_staff                                               1
+lecturer                                                     2
+student                                                      2
+teaching_assistant                                           1
+=== TASK 06 SAMPLE DATA GENERATION COMPLETE ===
