@@ -26,30 +26,35 @@ CS486-Project/
 │   ├── 01-business-req-analysis-G05.md   # Requirement analysis
 │   ├── 02-erd-design-G05.md              # Conceptual ERD
 │   ├── 03-logical-design-G05.md          # Logical schema
-│   ├── 04-design-validation-G05.md       # [Future] Schema validation
-│   ├── 05-db-definition-G05.sql          # [Future] T-SQL DDL
-│   ├── 06-sample-data-G05.sql            # [Future] Sample data
+│   ├── 04-design-validation-G05.md       # Schema validation
+│   ├── 05-db-definition-G05.sql          # T-SQL DDL
+│   ├── 06-sample-data-G05.sql            # Sample data
 │   └── 07-query-design-G05.sql           # [Future] Business queries
 │
 ├── logs/                                 # Agent execution and evaluation logs
 │   ├── trajectory/                       # Task execution traces
-│   │   ├── task01/                       # [Future] Task 01 trace
+│   │   ├── task01/                       # Task 01 trace
 │   │   ├── task02/                       # Task 02 trace
-│   │   ├── task03/                       # [Future] Task 03 trace
-│   │   ├── task04/                       # [Future] Task 04 trace
-│   │   ├── task05/                       # [Future] Task 05 trace
-│   │   ├── task06/                       # [Future] Task 06 trace
+│   │   ├── task03/                       # Task 03 trace
+│   │   ├── task04/                       # Task 04 trace
+│   │   ├── task05/                       # Task 05 trace
+│   │   ├── task06/                       # Task 06 trace
 │   │   └── task07/                       # [Future] Task 07 trace
 │   │
-│   └── eval/                             # Output evaluation logs
-│       ├── task01/                       # [Future] Task 01 evaluation
-│       ├── task02/                       # Task 02 evaluation
-│       ├── task03/                       # [Future] Task 03 evaluation
-│       ├── task04/                       # [Future] Task 04 evaluation
-│       ├── task05/                       # [Future] Task 05 evaluation
-│       ├── task06/                       # [Future] Task 06 evaluation
-│       ├── task07/                       # [Future] Task 07 evaluation
-│       └── pipeline/                     # [Future] Pipeline evaluation
+│   ├── execution/                        # Execution run outputs
+│   │   └── task06/                       # Task 06 execution output
+│   │
+│   ├── eval/                             # Output evaluation logs
+│   │   ├── task01/                       # Task 01 evaluation
+│   │   ├── task02/                       # Task 02 evaluation
+│   │   ├── task03/                       # Task 03 evaluation
+│   │   ├── task04/                       # Task 04 evaluation
+│   │   ├── task05/                       # Task 05 evaluation
+│   │   ├── task06/                       # Task 06 evaluation
+│   │   ├── task07/                       # [Future] Task 07 evaluation
+│   │   └── pipeline/                     # [Future] Pipeline evaluation
+│   │
+│   └── registry-snapshots/               # Registry snapshots per task
 │
 └── .opencode/                            # OpenCode agent configuration
     ├── commands/                         # Slash commands
@@ -63,7 +68,7 @@ CS486-Project/
     │   ├── 07-generate-query-design.md   # Generate Task 07
     │   ├── evaluate-task.md              # Evaluate one task
     │   └── evaluate-pipeline.md          # [Future] Evaluate pipeline
-    |   
+    |
     └── skills/
         ├── db-design-pipeline/           # Main DB design workflow
         │   ├── SKILL.md                  # Pipeline rules
@@ -73,12 +78,19 @@ CS486-Project/
         │   │   └── SKILL.md
         │   ├── 03-logical-design/        # Task 03 skill
         │   │   └── SKILL.md
-        │   ├── 04-design-validation/     # [Future] Task 04 skill
+        │   ├── 04-design-validation/     # Task 04 skill
         │   │   └── SKILL.md
-        │   ├── 05-ddl/                   # [Future] Task 05 skill
+        │   ├── 05-generate-ddl/          # Task 05 skill
         │   │   └── SKILL.md
-        │   ├── 06-sample-data/           # [Future] Task 06 skill
-        │   │   └── SKILL.md
+        │   ├── 06-sample-data/           # Task 06 skill
+        │   │   ├── SKILL.md
+        │   │   └── references/
+        │   │       ├── sql-style-and-ordering.md
+        │   │       ├── execution-validation.md
+        │   │       ├── completion-actions.md
+        │   │       ├── business-rule-proofs.md
+        │   │       ├── idempotence-and-test-isolation.md
+        │   │       └── data-coverage.md
         │   └── 07-query-design/          # [Future] Task 07 skill
         │       └── SKILL.md
         │

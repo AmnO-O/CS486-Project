@@ -1,11 +1,14 @@
-# Skill: db-design-pipeline:04-design-validation
+---
+name: 04-design-validation
+description: Evaluate the relational schema against the ERD, business requirements, entity registry, and schema registry to produce a comprehensive validation report for Task 04.
+---
 
-## Title
-Design Validation of Relational Schema against ERD and Business Requirements 
+# Task 04 — Design Validation of Relational Schema against ERD and Business Requirements
 
 ## Purpose
 Produce a comprehensive design validation report for Task 04, generating `outputs/04-design-validation-G05.md`, which evaluates the relational schema in `outputs/03-logical-design-G05.md` against the ERD in `outputs/02-erd-design-G05.md` and the business requirements in `outputs/01-business-req-analysis-G05.md`.
 
+---
 
 ## Inputs
 - `outputs/01-business-req-analysis-G05.md` (required for business rules)
@@ -15,8 +18,12 @@ Produce a comprehensive design validation report for Task 04, generating `output
 - `docs/schema-registry.md` (required for logical design details)
 - --group (optional, default: G05)
 
+---
+
 ## Outputs
 - `outputs/04-design-validation-G{{group}}.md` (validation report)
+
+---
 
 ## Evaluation Criteria
 
@@ -27,6 +34,8 @@ The report must explicitly evaluate whether the relational schema:
 3. **Uses appropriate keys** — each table has a well-chosen primary key (surrogate or natural); foreign keys are declared wherever a referencing relationship exists; candidate keys are captured with UNIQUE constraints where applicable.
 4. **Uses appropriate relationships** — every ERD relationship (1:1, 1:N, M:N) is correctly translated: 1:N via FK on the many-side, M:N via junction table with composite PK, 1:1 via FK with UNIQUE constraint. Cardinality and participation (total vs. partial) constraints must match.
 5. **Uses appropriate constraints** — NOT NULL, UNIQUE, CHECK, DEFAULT, and referential-integrity (ON DELETE / ON UPDATE) actions are applied wherever the ERD or business rules demand them.
+
+---
 
 ## Behavior / Steps
 
@@ -41,6 +50,8 @@ The report must explicitly evaluate whether the relational schema:
 9. **Discrepancy log** — compile a prioritised list of all findings: *Critical* (schema cannot correctly store or enforce required data), *Major* (constraint or relationship missing), *Minor* (naming, style, or optional improvement).
 10. **Recommendations** — for every discrepancy, provide a concrete corrective action (e.g., add column, add constraint, rename table, add junction table).
 11. **Indexing & partitioning** — suggest indexes for high-selectivity FK columns, frequently filtered columns, and any column appearing in business-rule queries; suggest partitioning if any table is expected to grow beyond 10 M rows.
+
+---
 
 ## Guidelines
 

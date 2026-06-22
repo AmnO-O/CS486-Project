@@ -110,5 +110,3 @@ sqlcmd -S localhost -C <AUTH> \
 ## On success
 
 - Append verification output to `logs/eval/task05/YYYY-MM-DD-HHmm-05-ddl-compile.log`
-- Update `memory/Progress.md`: mark Task 05 as complete
-- Update `memory/ActiveContext.md`: clear any blockers, set next active task to Task 06
