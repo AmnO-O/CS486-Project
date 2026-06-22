@@ -1,0 +1,116 @@
+=== CS486 G05 — Task 05 DDL Compile Verification ===
+Timestamp: Sat Jun 20 03:30:21 UTC 2026
+
+=== Tables ===
+bookings                                                                                                                        
+departments                                                                                                                     
+facilities                                                                                                                      
+maintenances                                                                                                                    
+space_facilities                                                                                                                
+spaces                                                                                                                          
+users                                                                                                                           
+
+(7 rows affected)
+
+=== Constraints ===
+CK_bookings_actual_time_order                                                                                                    CHECK          
+CK_bookings_expected_participants                                                                                                CHECK          
+CK_bookings_purpose                                                                                                              CHECK          
+CK_bookings_status                                                                                                               CHECK          
+CK_bookings_time_range                                                                                                           CHECK          
+CK_maintenances_completion_time                                                                                                  CHECK          
+CK_maintenances_status                                                                                                           CHECK          
+CK_space_facilities_quantity                                                                                                     CHECK          
+CK_spaces_capacity                                                                                                               CHECK          
+CK_spaces_current_status                                                                                                         CHECK          
+CK_spaces_space_type                                                                                                             CHECK          
+CK_users_account_status                                                                                                          CHECK          
+CK_users_role                                                                                                                    CHECK          
+FK_bookings_approver_id                                                                                                          FOREIGN KEY    
+FK_bookings_checked_in_by                                                                                                        FOREIGN KEY    
+FK_bookings_requester_id                                                                                                         FOREIGN KEY    
+FK_bookings_space_id                                                                                                             FOREIGN KEY    
+FK_maintenances_assigned_staff_id                                                                                                FOREIGN KEY    
+FK_maintenances_reporter_id                                                                                                      FOREIGN KEY    
+FK_maintenances_space_id                                                                                                         FOREIGN KEY    
+FK_space_facilities_facility_id                                                                                                  FOREIGN KEY    
+FK_space_facilities_space_id                                                                                                     FOREIGN KEY    
+FK_users_department_id                                                                                                           FOREIGN KEY    
+PK_bookings                                                                                                                      PRIMARY KEY    
+PK_departments                                                                                                                   PRIMARY KEY    
+PK_facilities                                                                                                                    PRIMARY KEY    
+PK_maintenances                                                                                                                  PRIMARY KEY    
+PK_space_facilities                                                                                                              PRIMARY KEY    
+PK_spaces                                                                                                                        PRIMARY KEY    
+PK_users                                                                                                                         PRIMARY KEY    
+UQ_departments_name                                                                                                              UNIQUE         
+UQ_facilities_name                                                                                                               UNIQUE         
+UQ_spaces_space_code                                                                                                             UNIQUE         
+UQ_users_email                                                                                                                   UNIQUE         
+
+(34 rows affected)
+
+=== Indexes ===
+idx_bookings_approver_id                                                                                                         bookings                                                                                                                        
+idx_bookings_checked_in_by                                                                                                       bookings                                                                                                                        
+idx_bookings_requested_start                                                                                                     bookings                                                                                                                        
+idx_bookings_requester_id                                                                                                        bookings                                                                                                                        
+idx_bookings_space_id                                                                                                            bookings                                                                                                                        
+idx_bookings_status                                                                                                              bookings                                                                                                                        
+idx_bookings_time_range                                                                                                          bookings                                                                                                                        
+PK_bookings                                                                                                                      bookings                                                                                                                        
+uq_bookings_active_overlap                                                                                                       bookings                                                                                                                        
+PK_departments                                                                                                                   departments                                                                                                                     
+UQ_departments_name                                                                                                              departments                                                                                                                     
+PK_facilities                                                                                                                    facilities                                                                                                                      
+UQ_facilities_name                                                                                                               facilities                                                                                                                      
+idx_maintenances_assigned_staff_id                                                                                               maintenances                                                                                                                    
+idx_maintenances_reporter_id                                                                                                     maintenances                                                                                                                    
+idx_maintenances_space_id                                                                                                        maintenances                                                                                                                    
+idx_maintenances_status                                                                                                          maintenances                                                                                                                    
+PK_maintenances                                                                                                                  maintenances                                                                                                                    
+idx_space_facilities_facility_id                                                                                                 space_facilities                                                                                                                
+PK_space_facilities                                                                                                              space_facilities                                                                                                                
+idx_spaces_current_status                                                                                                        spaces                                                                                                                          
+PK_spaces                                                                                                                        spaces                                                                                                                          
+UQ_spaces_space_code                                                                                                             spaces                                                                                                                          
+idx_users_department_id                                                                                                          users                                                                                                                           
+PK_users                                                                                                                         users                                                                                                                           
+UQ_users_email                                                                                                                   users                                                                                                                           
+
+(26 rows affected)
+
+=== Triggers ===
+trg_bookings_approval_validation                                                                                                
+trg_bookings_check_capacity                                                                                                     
+trg_bookings_check_maintenance                                                                                                  
+trg_bookings_check_space_status                                                                                                 
+trg_bookings_checkin_enforcement                                                                                                
+trg_bookings_completion_enforcement                                                                                             
+trg_bookings_prevent_overlap                                                                                                    
+trg_bookings_rejection_reason                                                                                                   
+trg_bookings_updated_at                                                                                                         
+trg_departments_updated_at                                                                                                      
+trg_facilities_updated_at                                                                                                       
+trg_maintenances_completion_space_status                                                                                        
+trg_maintenances_updated_at                                                                                                     
+trg_spaces_updated_at                                                                                                           
+trg_users_updated_at                                                                                                            
+
+(15 rows affected)
+
+=== Foreign Keys (cascade actions) ===
+FK_bookings_approver_id                                                                                                          bookings                                                                                                                         users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_bookings_checked_in_by                                                                                                        bookings                                                                                                                         users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_bookings_requester_id                                                                                                         bookings                                                                                                                         users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_bookings_space_id                                                                                                             bookings                                                                                                                         spaces                                                                                                                           NO_ACTION                                                    NO_ACTION                                                   
+FK_maintenances_assigned_staff_id                                                                                                maintenances                                                                                                                     users                                                                                                                            SET_NULL                                                     NO_ACTION                                                   
+FK_maintenances_reporter_id                                                                                                      maintenances                                                                                                                     users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_maintenances_space_id                                                                                                         maintenances                                                                                                                     spaces                                                                                                                           NO_ACTION                                                    NO_ACTION                                                   
+FK_space_facilities_facility_id                                                                                                  space_facilities                                                                                                                 facilities                                                                                                                       CASCADE                                                      NO_ACTION                                                   
+FK_space_facilities_space_id                                                                                                     space_facilities                                                                                                                 spaces                                                                                                                           CASCADE                                                      NO_ACTION                                                   
+FK_users_department_id                                                                                                           users                                                                                                                            departments                                                                                                                      NO_ACTION                                                    NO_ACTION                                                   
+
+(10 rows affected)
+
+=== RESULT: COMPILED SUCCESSFULLY ===
