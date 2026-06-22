@@ -26,9 +26,67 @@ When there is any conflict between sources, resolve it using this priority order
 4. `outputs/02-erd-design-G05.md`
 5. `outputs/01-business-req-analysis-G05.md`
 6. `req/business-requirement.md`
-7. `req/CS486_Project.txt`
 
 Primary source is always `docs/schema-registry.md`. All other files are fallback references for clarification only. Do not override the schema registry with lower-priority sources.
+
+
+**Schema Freeze Rule**
+
+
+If a constraint, FK behavior, column, index, or trigger is explicitly defined in `docs/schema-registry.md`, it must be implemented exactly.
+
+If the schema registry is silent about a constraint, the generator may add
+additional integrity constraints only when:
+
+- they do not alter cardinality
+- they do not alter FK delete/update behavior
+- they do not introduce new entities
+- they do not contradict any approved business rule
+
+Additional integrity safeguards may only be:
+- CHECK constraints
+- DEFAULT constraints
+
+Do not introduce new UNIQUE constraints,
+- new indexes,
+- new foreign keys,
+- new triggers, or modify existing schema-registry definitions.
+
+
+Such constraints must be documented with:
+```
+-- Additional integrity safeguard (not part of locked schema)
+```
+
+**Schema Freeze Enforcement**
+
+If a trigger, index, FK action, constraint, or business-rule implementation
+is explicitly listed in `docs/schema-registry.md`, generate it exactly.
+
+Do not introduce additional:
+
+- triggers
+- stored procedures
+- functions
+- computed columns
+- automation logic
+- background synchronization logic
+
+unless they are explicitly required by:
+
+- `docs/schema-registry.md`, or
+- `outputs/04-design-validation-G05.md`
+
+Additional integrity safeguards are allowed only as:
+
+- CHECK constraints
+- supporting non-conflicting indexes
+
+They must not change application behavior, business-rule semantics,
+or lifecycle transitions defined in the locked schema.
+
+
+
 
 ---
 
@@ -84,7 +142,13 @@ Apply defaults where appropriate for:
 - Prefer `NO ACTION` on FK delete behavior unless the schema registry explicitly authorizes `CASCADE` or `SET NULL`.
 
 ### 9. Procedural constraints / triggers
-Use triggers for business rules that cannot be enforced declaratively (e.g. the no-overlapping-bookings rule).
+Trigger Scope Rule
+
+Only generate triggers that are explicitly required by the
+Business Rule Coverage section of `docs/schema-registry.md`.
+
+Do not invent additional triggers unless the schema registry
+or design-validation document explicitly requires them.
 
 **Mandatory pattern — each trigger must be in its own batch:**
 ```sql
@@ -103,7 +167,13 @@ GO
 > Always precede with `GO`. Forgetting `GO` causes a compile error on SQL Server.
 
 Trigger requirements are defined in the **Business Rule Coverage** section of `docs/schema-registry.md`.
-Refer to `outputs/03-logical-design-G05.md §7` for context on which rules require triggers vs declarative constraints.
+
+- Refer to `outputs/03-logical-design-G05.md §7` for context on which rules require triggers vs declarative constraints.
+
+- Use `outputs/03-logical-design-G05.md §8` only for clarification. 
+
+- Never add, remove, or modify schema elements that conflict with
+`docs/schema-registry.md`.
 
 If a rule is intentionally deferred to the application layer, document the reason in a SQL comment at the relevant location in the script.
 

@@ -297,17 +297,18 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 **Problem:** SQL Server prevents multiple foreign keys on the same table referencing the same parent when any use `ON DELETE SET NULL` or `CASCADE` (Msg 1785 — "may cause cycles or multiple cascade paths").
 
 **Options considered:**
-- Option A: Keep SET NULL on `bookings.approver_id` and `bookings.checked_in_by` → SQL Server rejects the DDL
-- Option B: Change all 3 optional FKs (`bookings.approver_id`, `bookings.checked_in_by`, `maintenance.assigned_staff_id`) to `ON DELETE NO ACTION` → DDL compiles, preserves references, consistent with BR13
+- Option A: Keep SET NULL on `bookings.approver_id` and `bookings.checked_in_by` → SQL Server rejects the DDL (multiple cascade paths: both FK → users)
+- Option B: Change all 3 optional FKs to NO ACTION → compiles, but unnecessarily loses SET NULL where it would work
+- Option C: Change only the 2 conflicting FKs on `bookings` to NO ACTION; keep SET NULL on `maintenances.assigned_staff_id` (only 1 FK from maintenances → users, so no conflict)
 
-**Decision:** Option B — `NO ACTION` for all 3 FKs. NO ACTION preserves the user ID in the historical record even if the referenced user is deleted, which is actually more aligned with BR13 (Historical Records Preservation) than SET NULL.
+**Decision:** Option C — `bookings.approver_id` and `bookings.checked_in_by` use `ON DELETE NO ACTION` to avoid the cascade path conflict (multiple FKs from bookings → users). `maintenances.assigned_staff_id` uses `ON DELETE SET NULL` since it is the only FK from maintenances → users, and setting it null correctly preserves the maintenance record while clearing the assignment reference.
 
-**Impact:** If a user is deleted (soft-delete is preferred anyway), the approver_id/checked_in_by/assigned_staff_id still points to a potentially deleted user record. This is acceptable because:
-- Soft delete is used for all sensitive records (BR13)
-- Historical accuracy is preserved (who approved/checked-in)
-- Application-level checks can handle display logic for deleted users
+**Impact:** 
+- `bookings.approver_id` and `bookings.checked_in_by` → NO ACTION: preserves historical user reference even if the user is deleted (soft-delete is preferred per BR13)
+- `maintenances.assigned_staff_id` → SET NULL: if the assigned staff user is deleted, the assignment reference is nullified; the maintenance record and reporter reference remain intact
+- Application-level checks handle display logic for deleted users in all cases
 
-**Requirement reference:** BR13 (Historical Records Preservation), SQL Server cascade path limitation.
+**Requirement reference:** BR13 (Historical Records Preservation), SQL Server cascade path limitation (Msg 1785).
 
 ---
 

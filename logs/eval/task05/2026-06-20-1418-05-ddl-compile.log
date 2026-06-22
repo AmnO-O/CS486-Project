@@ -1,0 +1,79 @@
+=== DDL Compile Log ===
+Date: Sat Jun 20 14:18:30 UTC 2026
+Status: SUCCESS
+
+--- Tables ---
+TABLE_NAME                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                        
+departments                                                                                                                     
+facilities                                                                                                                      
+maintenances                                                                                                                    
+space_facilities                                                                                                                
+spaces                                                                                                                          
+users                                                                                                                           
+
+(7 rows affected)
+
+--- Indexes ---
+name                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------
+idx_bookings_approver_id                                                                                                        
+idx_bookings_checked_in_by                                                                                                      
+idx_bookings_requested_start                                                                                                    
+idx_bookings_requester_id                                                                                                       
+idx_bookings_space_id                                                                                                           
+idx_bookings_status                                                                                                             
+idx_bookings_time_range                                                                                                         
+PK_bookings                                                                                                                     
+uq_bookings_active_overlap                                                                                                      
+PK_departments                                                                                                                  
+UQ_departments_name                                                                                                             
+PK_facilities                                                                                                                   
+UQ_facilities_name                                                                                                              
+idx_maintenances_assigned_staff_id                                                                                              
+idx_maintenances_reporter_id                                                                                                    
+idx_maintenances_space_id                                                                                                       
+idx_maintenances_status                                                                                                         
+PK_maintenances                                                                                                                 
+idx_space_facilities_facility_id                                                                                                
+PK_space_facilities                                                                                                             
+idx_spaces_current_status                                                                                                       
+PK_spaces                                                                                                                       
+UQ_spaces_space_code                                                                                                            
+idx_users_department_id                                                                                                         
+PK_users                                                                                                                        
+UQ_users_email                                                                                                                  
+
+(26 rows affected)
+
+--- Triggers ---
+name                                                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------
+trg_bookings_approval_validation                                                                                                
+trg_bookings_check_capacity                                                                                                     
+trg_bookings_check_maintenance                                                                                                  
+trg_bookings_check_space_status                                                                                                 
+trg_bookings_checkin_enforcement                                                                                                
+trg_bookings_completion_enforcement                                                                                             
+trg_bookings_prevent_overlap                                                                                                    
+trg_bookings_rejection_reason                                                                                                   
+trg_maintenances_completion_space_status                                                                                        
+
+(9 rows affected)
+
+--- FK Constraints ---
+name                                                                                                                             child                                                                                                                            parent                                                                                                                           on_delete                                                    on_update                                                   
+-------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------ ------------------------------------------------------------
+FK_bookings_approver_id                                                                                                          bookings                                                                                                                         users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_bookings_checked_in_by                                                                                                        bookings                                                                                                                         users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_bookings_requester_id                                                                                                         bookings                                                                                                                         users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_bookings_space_id                                                                                                             bookings                                                                                                                         spaces                                                                                                                           NO_ACTION                                                    NO_ACTION                                                   
+FK_maintenances_assigned_staff_id                                                                                                maintenances                                                                                                                     users                                                                                                                            SET_NULL                                                     NO_ACTION                                                   
+FK_maintenances_reporter_id                                                                                                      maintenances                                                                                                                     users                                                                                                                            NO_ACTION                                                    NO_ACTION                                                   
+FK_maintenances_space_id                                                                                                         maintenances                                                                                                                     spaces                                                                                                                           NO_ACTION                                                    NO_ACTION                                                   
+FK_space_facilities_facility_id                                                                                                  space_facilities                                                                                                                 facilities                                                                                                                       CASCADE                                                      NO_ACTION                                                   
+FK_space_facilities_space_id                                                                                                     space_facilities                                                                                                                 spaces                                                                                                                           CASCADE                                                      NO_ACTION                                                   
+FK_users_department_id                                                                                                           users                                                                                                                            departments                                                                                                                      NO_ACTION                                                    NO_ACTION                                                   
+
+(10 rows affected)

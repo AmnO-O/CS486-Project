@@ -63,29 +63,7 @@ This is required for filtered indexes on SQL Server. Omitting it causes a compil
 
 ---
 
-## Post-generation validation
-
-### 1. Syntax and convention check
-- DDL must be valid **T-SQL (SQL Server 2019+)**
-- Naming convention must match `docs/tech-stack.md`
-- All PK, FK, CHECK, UNIQUE constraints must match `docs/schema-registry.md`
-- All triggers must cover every Business Rule listed in `docs/schema-registry.md`
-
-### 2. FK cascade path check
-
-For each parent table, list every child FK pointing to it. If **two or more FKs from the same child table** reference the **same parent table** with `CASCADE` or `SET NULL`, SQL Server will reject the script with:
-
-> *"Introducing FOREIGN KEY constraint may cause cycles or multiple cascade paths."*
-
-**Resolution — apply before compiling:**
-- Keep one FK as `SET NULL` (or `CASCADE`)
-- Change all remaining FKs on the same path to `NO ACTION`
-- Document each decision in `docs/design-decisions.md`
-
-**Known risk in this schema:**
-`MaintenanceRecord` has both `reporter_id` and `assigned_staff_id` as FKs pointing to `Users`. Verify that both are not simultaneously set to `CASCADE` or `SET NULL`. Set one to `NO ACTION` and document it.
-
-### 3. Compile on local SQL Server
+### Compile on local SQL Server
 
 Choose **one** authentication mode and use it consistently for all four commands:
 

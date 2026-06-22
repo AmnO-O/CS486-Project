@@ -8,7 +8,7 @@
 | Task 2 | ERD design | `outputs/02-erd-design-G05.md` | ✅ Approved | Task 1 |
 | Task 3 | Logical design | `outputs/03-logical-design-G05.md` | ✅ Approved | Task 2 |
 | Task 4 | Design validation | `outputs/04-design-validation-G05.md` | ✅ Approved | Task 3 |
-| Task 5 | SQL DDL | `outputs/05-db-definition-G05.sql` | ✅ Completed | Task 4 ✅ freeze |
+| Task 5 | SQL DDL | `outputs/05-db-definition-G05.sql` | ✅ Completed (regenerated 2026-06-20) | Task 4 ✅ freeze |
 | Task 6 | Sample data | `outputs/06-sample-data-G05.sql` | ⬜ Not started | Task 5 |
 | Task 7 | Query design | `outputs/07-query-design-G05.sql` | ⬜ Not started | Task 5 |
 | — | Logs agent improvement | `improvement_logs.md` | ⬜ ongoing | — |
