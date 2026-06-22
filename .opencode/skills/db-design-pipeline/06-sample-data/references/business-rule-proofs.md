@@ -10,7 +10,7 @@ The script must contain intentional negative test cases for the most important c
 
 ## Setup Discipline
 
-Before every negative case, ensure prerequisite IDs and baseline rows exist. Use stable natural-key lookups populated from base tables, not temp tables that only contain freshly inserted rows. If a prerequisite is missing, throw a setup error and fix the seed phase; do not let the negative case continue with NULL IDs.
+Before every negative case, ensure prerequisite IDs and baseline rows exist. Use stable natural-key lookups populated from base tables, not temp tables that only contain freshly inserted rows. 
 
 ## Required Negative Cases
 

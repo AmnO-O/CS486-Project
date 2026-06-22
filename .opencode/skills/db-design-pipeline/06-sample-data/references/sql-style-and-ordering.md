@@ -5,7 +5,8 @@
 - Use valid T-SQL for SQL Server 2019+.
 - Start with a clear header comment naming the project, group, task, and dependency on Task 05 DDL.
 - Use `SET NOCOUNT ON;`.
-- Use `GO` between major sections when useful.
+- **Mandatory Configuration: Use `SET QUOTED_IDENTIFIER ON;` right after the header. This is strictly required by SQL Server when inserting or updating data in tables that have Filtered Indexes.**
+- Use `GO` between major sections when useful
 - Use bracketed identifiers consistently with Task 05 DDL, such as `[dbo].[bookings]`.
 - Avoid relying on unknown identity values.
 - Re-select identity values from base tables after guarded inserts or cleanup/reseed, so reruns and pre-existing rows populate the same lookup variables.
@@ -23,6 +24,7 @@ DECLARE @cs_department_id INT = (
   - past dates for `completed` and `no_show`
   - current or in-progress dates for `checked_in`
   - future dates for `pending` and `approved`
+- Include a mandatory "Assumptions and Design Decisions" comment block after the header and before SECTION 1. Cover: date-range rationale, space-status coverage, maintenance concurrency, soft-delete choices, FK-safe ordering, idempotence strategy, and the rationale behind specific expected-error test cases. This block explains sample-data-level choices only — **do not duplicate schema-level design decisions** (those belong in `docs/design-decisions.md` with the proper template).
 - Do not mix prose or Markdown into the SQL file. Inline SQL comments are allowed and encouraged.
 
 ## Insert Order
@@ -50,14 +52,11 @@ Follow FK dependency order:
 ## Idempotent Insert Patterns
 
 - Use stable Task 06-specific natural keys where possible, such as deterministic emails, space codes, facility names, and booking titles or notes.
-- If using cleanup, delete in reverse FK order: dependent junction/history rows, bookings, maintenances, space facilities, facilities, spaces, users, then departments only when they are Task 06-owned.
-- If using guarded inserts, follow each parent insert block with lookup queries that repopulate IDs from base tables.
-- Fail fast with `THROW` if any required lookup variable remains NULL before child inserts or expected-error tests.
+- Implement your chosen idempotence strategy (Cleanup-and-reseed or Guarded inserts) strictly following the specific rules and logic defined in `references/idempotence-and-test-isolation.md`.
 
 ## Common Mistakes To Avoid
 
 - Writing a non-idempotent script that fails on rerun with duplicate keys.
-- Letting expected-error cases fail with NULL lookup IDs before reaching the intended business rule.
 - Hardcoding identity values that break when seed order changes.
 - Inserting child rows before parent rows.
 - Using enum labels from prose requirements instead of locked lowercase enum values in DDL.
