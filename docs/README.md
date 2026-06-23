@@ -24,7 +24,7 @@
 1. **Start of session:** Read memory files in this order: `memory/MEMORY.md` → `memory/ActiveContext.md` → `memory/Progress.md`. If present, also review `docs/project-overview.md` and `docs/tech-stack.md`.
 2. **Begin task:** Open the docs file for the active pipeline step (see the reading order above).
 3. **During task:** Follow the procedural skill at `.opencode/skills/db-design-pipeline/` for detailed step-by-step guidance.
-4. **End of task:** Update `memory/Progress.md` and `memory/ActiveContext.md` with results and any open questions.
+4. **End of task:** After user approval (Post-Task Handshake Protocol in `AGENTS.md`), update `memory/Progress.md` and `memory/ActiveContext.md` with results and any open questions.
 
 ---
 

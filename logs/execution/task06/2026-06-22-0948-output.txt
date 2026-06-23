@@ -1,0 +1,160 @@
+SECTION 0: Cleanup previous T06 sample data
+SECTION 1: Departments
+SECTION 2: Users
+SECTION 3: Spaces
+SECTION 4: Facilities
+SECTION 5: Space Facilities
+SECTION 6: Maintenances
+SECTION 7: Valid Bookings
+  Booking 1: Future approved lecture
+  Booking 2: Future approved examination
+  Booking 3: Past completed examination
+  Booking 4: Past no-show
+  Booking 5: Future pending workshop
+  Booking 6: Checked-in student activity
+  Booking 7: Future approved meeting
+  Booking 8: Past rejected seminar
+  Booking 9: Future approved administrative event
+  Booking 10: Soft-deleted booking
+  Booking 11: Cancelled booking
+SECTION 8: Expected-Error Test Cases
+EXPECTED_ERROR_CASE 1: BR1 overlap prevention
+  Expected error (BR1 overlap): BR1 violation: overlapping booking interval detected.
+EXPECTED_ERROR_CASE 2: BR2 under_maintenance space
+  Expected error (BR2 under_maintenance): BR2 violation: space is not available for booking.
+EXPECTED_ERROR_CASE 3: BR2 retired space
+  Expected error (BR2 retired): BR2 violation: space is not available for booking.
+EXPECTED_ERROR_CASE 4: BR2 temporarily_closed space
+  Expected error (BR2 temporarily_closed): BR2 violation: space is not available for booking.
+EXPECTED_ERROR_CASE 5: BR3 capacity violation
+  Expected error (BR3 capacity): BR3 violation: expected participants exceed space capacity.
+EXPECTED_ERROR_CASE 6: BR4 maintenance overlap
+  Expected error (BR4 maintenance overlap): BR4 violation: overlapping unresolved maintenance prevents booking.
+EXPECTED_ERROR_CASE 7: BR6 approval metadata missing
+  Expected error (BR6 approval metadata): BR6 violation: approver_id, decision_time, and decision_note are required when approving or rejecting a booking.
+EXPECTED_ERROR_CASE 8: BR7 rejection reason missing
+  Expected error (BR7 rejection reason): BR7 violation: rejection_reason is required when status is rejected.
+EXPECTED_ERROR_CASE 9: BR8/BR9 check-in missing fields
+  Expected error (BR8/BR9 check-in): BR8/BR9 violation: actual_start_time, checked_in_by, and initial_condition are required when checking in.
+EXPECTED_ERROR_CASE 10: BR8/BR9 completion missing fields
+  Expected error (BR8/BR9 completion): BR8/BR9 violation: actual_end_time and final_condition are required when completing a booking.
+EXPECTED_ERROR_CASE 11: Duplicate email
+  Expected error (duplicate email): Violation of UNIQUE KEY constraint 'UQ_users_email'. Cannot insert duplicate key in object 'dbo.users'. The duplicate key value is (t06.student1@university.edu).
+EXPECTED_ERROR_CASE 12: Invalid booking status
+  Expected error (invalid enum): The INSERT statement conflicted with the CHECK constraint "CK_bookings_status". The conflict occurred in database "CS486_G05", table "dbo.bookings", column 'status'.
+EXPECTED_ERROR_CASE 13: Invalid time range
+  Expected error (invalid time range): The INSERT statement conflicted with the CHECK constraint "CK_bookings_requested_end_time". The conflict occurred in database "CS486_G05", table "dbo.bookings".
+SECTION 9: Verification Queries
+--- Row counts ---
+table            row_count  
+---------------- -----------
+bookings                  15
+departments                6
+facilities                 6
+maintenances               5
+space_facilities          19
+spaces                     9
+users                     17
+--- All booking statuses ---
+status                                            
+--------------------------------------------------
+approved                                          
+cancelled                                         
+checked_in                                        
+completed                                         
+no_show                                           
+pending                                           
+rejected                                          
+--- All booking purposes ---
+purpose                                           
+--------------------------------------------------
+administrative_event                              
+examination                                       
+lecture                                           
+meeting                                           
+seminar                                           
+student_activity                                  
+workshop                                          
+--- All space types ---
+space_type                                        
+--------------------------------------------------
+auditorium                                        
+classroom                                         
+computer_lab                                      
+meeting_room                                      
+project_lab                                       
+student_workspace                                 
+--- All space statuses ---
+current_status                                    
+--------------------------------------------------
+available                                         
+in_use                                            
+retired                                           
+temporarily_closed                                
+under_maintenance                                 
+--- All maintenance statuses ---
+status                                            
+--------------------------------------------------
+in_progress                                       
+open                                              
+resolved                                          
+--- All user roles ---
+role                                              
+--------------------------------------------------
+department_admin                                  
+facility_manager                                  
+facility_staff                                    
+lecturer                                          
+student                                           
+teaching_assistant                                
+--- All account statuses ---
+account_status                                    
+--------------------------------------------------
+active                                            
+inactive                                          
+suspended                                         
+--- Audit: created_at and updated_at are populated (no NULLs) ---
+table        total       null_created null_updated
+------------ ----------- ------------ ------------
+departments            6            0            0
+users                 17            0            0
+spaces                 9            0            0
+facilities             6            0            0
+bookings              15            0            0
+maintenances           5            0            0
+--- Soft-deleted bookings (is_deleted = 1) ---
+booking_id  space_id    requester_id requested_start_time                   requested_end_time                     purpose                                            status                                             is_deleted
+----------- ----------- ------------ -------------------------------------- -------------------------------------- -------------------------------------------------- -------------------------------------------------- ----------
+         96          21           26            2026-06-05 08:00:00.0000000            2026-06-05 10:00:00.0000000 lecture                                            approved                                                    1
+--- Soft-deleted maintenances (is_deleted = 1) ---
+maintenance_id space_id    problem_description                                                                                                                                                                                                                                              status                                             is_deleted
+-------------- ----------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- ----------
+            22          22 Cleaning issues                                                                                                                                                                                                                                                  resolved                                                    1
+--- Upcoming future approved bookings ---
+booking_id  space_code                                         space_name                                                                                                                                                                                                                                                      requested_start_time                   requested_end_time                     purpose                                            expected_participants
+----------- -------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------- -------------------------------------- -------------------------------------------------- ---------------------
+         87 T06-AUD-101                                        Main Auditorium                                                                                                                                                                                                                                                            2026-07-01 08:00:00.0000000            2026-07-01 10:00:00.0000000 lecture                                                              150
+         88 T06-AUD-101                                        Main Auditorium                                                                                                                                                                                                                                                            2026-07-01 10:00:00.0000000            2026-07-01 12:00:00.0000000 examination                                                          180
+         95 T06-CL-201                                         Classroom 201                                                                                                                                                                                                                                                              2026-07-03 08:00:00.0000000            2026-07-03 10:00:00.0000000 administrative_event                                                  20
+         93 T06-LAB-002                                        Project Lab B                                                                                                                                                                                                                                                              2026-07-10 14:00:00.0000000            2026-07-10 15:00:00.0000000 meeting                                                               10
+        106 T06-AUD-101                                        Main Auditorium                                                                                                                                                                                                                                                            2026-08-25 09:00:00.0000000            2026-08-25 11:00:00.0000000 seminar                                                               10
+--- Spaces currently under maintenance ---
+space_code                                         space_name                                                                                                                                                                                                                                                      building                                                                                             room_number                                        maintenance_id problem_description                                                                                                                                                                                                                                              status                                             start_time                            
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- --------------------------------------
+T06-MTG-001                                        Meeting Room 1                                                                                                                                                                                                                                                  Building A                                                                                           001                                                            18 Broken projector and damaged furniture                                                                                                                                                                                                                           open                                                          2026-06-20 10:00:00.0000000
+--- No-show bookings ---
+booking_id  space_code                                         requested_start_time                   requested_end_time                     requester                                                                                                                                                                                                                                                      
+----------- -------------------------------------------------- -------------------------------------- -------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+         90 T06-CL-201                                                    2026-06-12 14:00:00.0000000            2026-06-12 16:00:00.0000000 Alice Johnson                                                                                                                                                                                                                                                  
+--- Booking history for T06 lecturer (past bookings) ---
+booking_id  space_code                                         requested_start_time                   requested_end_time                     purpose                                            status                                            
+----------- -------------------------------------------------- -------------------------------------- -------------------------------------- -------------------------------------------------- --------------------------------------------------
+         94 T06-LAB-001                                                   2026-06-08 10:00:00.0000000            2026-06-08 12:00:00.0000000 seminar                                            rejected                                          
+--- Maintenance with assigned staff ---
+maintenance_id space_code                                         problem_description                                                                                                                                                                                                                                              status                                             assigned_staff                                                                                                                                                                                                                                                 
+-------------- -------------------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            18 T06-MTG-001                                        Broken projector and damaged furniture                                                                                                                                                                                                                           open                                               David Kim                                                                                                                                                                                                                                                      
+            19 T06-CL-101                                         Air conditioning failure                                                                                                                                                                                                                                         open                                               David Kim                                                                                                                                                                                                                                                      
+            20 T06-LAB-001                                        Network connectivity issues                                                                                                                                                                                                                                      resolved                                           David Kim                                                                                                                                                                                                                                                      
+            21 T06-SW-001                                         Damaged furniture                                                                                                                                                                                                                                                in_progress                                        David Kim                                                                                                                                                                                                                                                      
+=== SAMPLE DATA GENERATION COMPLETE ===

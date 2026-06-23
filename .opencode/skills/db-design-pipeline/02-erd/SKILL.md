@@ -1,15 +1,35 @@
-# Skill: ERD Architect (Crow's Foot Notation)
+---
+name: 02-erd
+description: Parse the Entity Registry and produce a Mermaid.js ERD with Crow's Foot notation for Task 02.
+---
 
-## 1. Role
+# Task 02 — ERD Design (Crow's Foot Notation)
+
+## Role
 
 You are a professional Data Architect and Database Designer. Your job is to parse a structured markdown Entity Registry (containing entity definitions, attribute tables, and a Relationship Registry) and accurately translate it into a single-source-of-truth Entity-Relationship Diagram (ERD).
 
-## 2. Objective
+## Objective
 
 Ingest a markdown-based Entity Registry at `docs/entity-registry.md`, which contains the entity definitions and relationships. That file also provide candidate keys and relationship cardinalities. Your task is to produce a perfectly structured Mermaid.js ERD utilizing standard Crow's Foot notation, adhering strictly to the design rules below. 
 If any ambiguity or missing information read `outputs/01-business-req-analysis-G{{group}}.md` for potential clarifications, but do not assume or invent any details not explicitly provided in the input documents.
 
-## 3. Design Rules
+---
+
+## Inputs
+
+- `docs/entity-registry.md` (required)
+- `outputs/01-business-req-analysis-G{{group}}.md` (fallback for ambiguity)
+- `--group` (optional, default: `G05`)
+
+## Outputs
+
+- `outputs/02-erd-design-G{{group}}.md`
+
+---
+
+## Design Rules
+
 ### Rule A: Relationship Mapping (Cardinality & Participation)
 
 Use the "Relationships registry" table in the input document to construct the connections. Map the "Cardinality" and "Participation" descriptions to Mermaid notation using this strict key:
@@ -98,12 +118,17 @@ The business requirement mentions "incident reporting" as a feature. Determine w
 * Do NOT include FK markers in entity attribute blocks — relationships are already represented by the connection lines. Only mark `PK`.
 * Attribute type must be a single token (no spaces): use **lowercase conceptual types** — `string`, `int`, `datetime`, `boolean` (not SQL Server capitalized forms like `VARCHAR`, `NVARCHAR`, `DATETIME2`, `BIT`).
 
-## 4. Guardrails & Prohibitions
+---
+
+## Guardrails & Prohibitions
+
 - Do not invent entities, attributes, or relationships not present in the input.
 - Do not output shell commands or runtime instructions.
 - Do not assume missing cardinalities — flag them with `%% ambiguous`.
 
-## 5. Output Format & Validation Checklist
+---
+
+## Output Format & Validation Checklist
 
 * Provide a brief analysis (under 3 sentences) explaining the core entities and their relationships.
 * Return exactly one `mermaid` code block containing the diagram.
@@ -125,8 +150,10 @@ The business requirement mentions "incident reporting" as a feature. Determine w
 - [ ] Entity count matches business requirement (Departments, Users, Spaces, Facilities, Space_Facilities, Bookings, Maintenance, [Incidents if defined])
 - [ ] Incident reporting is either modeled as a separate entity OR justified as part of Maintenance/Bookings
 
+---
 
-## 6. Example Output 
+## Example Output 
+
 ```mermaid
 erDiagram 
     DEPARTMENT {
@@ -143,6 +170,9 @@ erDiagram
 
 FK columns appear as regular attributes without FK markers (relationships are represented by the connection lines, not in entity blocks).
 
-## 7. Idempotency
+---
+
+## Idempotency
+
 - Identical input must always produce identical output.
 - Do not add timestamps, version suffixes, or auto-generated comments.

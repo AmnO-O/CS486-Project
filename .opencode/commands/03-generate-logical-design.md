@@ -1,5 +1,5 @@
 ---
-description: Generate the logical schema design from the ERD and entity registry
+description: Generate the logical schema design from the ERD and entity registry.
 ---
 
 Command: generate-logical-design
@@ -49,4 +49,4 @@ Prompt:
 Notes:
   - Use `--group G05` as the default group.
   - This command file defines the invocation interface only; the skill contains the task behavior.
-  - Overwrite output file if it already exists.
+  - Overwrite `outputs/03-logical-design-G05.md` if it already exists.

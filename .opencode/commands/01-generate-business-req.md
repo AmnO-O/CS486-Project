@@ -1,4 +1,8 @@
-   Command: generate-business-req
+---
+description: Generate a complete business requirement analysis for the Campus Space Management System.
+---
+
+Command: generate-business-req
 
 Description:
 Run the `db-design-pipeline:01-business-req-analysis` skill to generate `outputs/01-business-req-analysis-G05.md` from requirements under `req/`.
@@ -35,7 +39,8 @@ Prompt:
   - assume the database design is finalized
   - invent unsupported requirements
 
-Notes: 
+Notes:
   - Use `--group G05` as the default group.
   - If a directory is provided, read all requirement files under that directory.
   - This command file defines the invocation interface only; the skill contains the task behavior.
+  - Overwrite `outputs/01-business-req-analysis-G05.md` if it already exists.

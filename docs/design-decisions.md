@@ -363,4 +363,4 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 
 ---
 
-_This document is finalized once Task 4 (Design Validation) is marked ✅ and SCHEMA FREEZE is approved._
+_This document is a living artifact — updated throughout the pipeline as design decisions are made or revised. The decision log is considered locked after SCHEMA FREEZE (end of Task 4); subsequent tasks may append revision entries for implementation-driven adjustments._

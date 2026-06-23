@@ -1,10 +1,14 @@
-# Skill: db-design-pipeline:03-logical-design
+---
+name: 03-logical-design
+description: Produce the logical schema design from the Entity Registry and ERD for Task 03, generating outputs/03-logical-design-G05.md.
+---
 
-## Title
-Logical Design from ERD and Entity Registry
+# Task 03 — Logical Design from ERD and Entity Registry
 
 ## Purpose
-Produce the logical schema design prompt and expected behavior for Task 03, generating `outputs/03-logical-design-G05.md` from `docs/entity-registry.md`, `outputs/02-erd-design-G05.md`, and `outputs/01-business-req-analysis-G05.md`.
+Produce the logical schema design deliverable for Task 03, generating `outputs/03-logical-design-G05.md` from `docs/entity-registry.md`, `outputs/02-erd-design-G05.md`, and `outputs/01-business-req-analysis-G05.md`.
+
+---
 
 ## Inputs
 - docs/entity-registry.md (required)
@@ -12,10 +16,14 @@ Produce the logical schema design prompt and expected behavior for Task 03, gene
 - outputs/01-business-req-analysis-G05.md (required for business rules)
 - --group (optional, default: G05)
 
+---
+
 ## Outputs
 - outputs/03-logical-design-G{{group}}.md
 - docs/schema-registry.md (updated with table and column definitions)
 - docs/entity-registry.md (updated with finalized names/types/constraints)
+
+---
 
 ## Behavior / Steps
 
@@ -44,6 +52,8 @@ Produce the logical schema design prompt and expected behavior for Task 03, gene
 9. Record constraint implementation details (how business rules are enforced).
 10. Note any deviations from the ERD with justification.
 11. Format the result as a final markdown deliverable and update the schema registry.
+
+---
 
 ## Cognitive Rules / Guidelines
 
@@ -82,6 +92,8 @@ Produce the logical schema design prompt and expected behavior for Task 03, gene
 - The skill must update `docs/schema-registry.md` with the finalized table and column metadata.
 - The skill must add finalization markers to `docs/entity-registry.md` for names/types that have been locked.
 
+---
+
 ## Validation Checks (post-generation)
 
 - Verify all entities from the entity registry are represented as tables.
@@ -92,9 +104,13 @@ Produce the logical schema design prompt and expected behavior for Task 03, gene
 - Verify naming conventions are documented and applied consistently.
 - Verify no forbidden writes have occurred (outputs/01 or 02).
 
+---
+
 ## Idempotency
 - Overwrite `outputs/03-logical-design-G{{group}}.md` if it exists.
 - Update (not overwrite) `docs/schema-registry.md` and `docs/entity-registry.md` with finalized metadata.
+
+---
 
 ## Notes
 - The skill should be prompt-focused and not include runtime shell behavior.
