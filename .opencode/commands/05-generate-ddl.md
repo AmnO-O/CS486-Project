@@ -1,5 +1,5 @@
 ---
-description: Implement the database using SQL DDL with tables, keys, constraints, checks, and default values where appropriate.
+description: Generate SQL Server DDL from the approved logical schema.
 ---
 
 Use skill in:
@@ -12,7 +12,7 @@ Required inputs:
 - `outputs/03-logical-design-G05.md`
 - `outputs/04-design-validation-G05.md`
 - `docs/schema-registry.md`
-- `.env` *(SQL Auth only — skip when using Windows Auth `-E`)*
+- `.env` (SQL Auth only — skip when using Windows Auth `-E`)
 
 For clarification only:
 - `req/business-requirement.md`
@@ -37,7 +37,7 @@ For clarification only:
 ---
 
 
-### Usage:
+Usage:
 ```bash
 generate-ddl --group G05
 ```
@@ -107,8 +107,6 @@ sqlcmd -S localhost -C <AUTH> \
 
 ---
 
-## On success
+### On success
 
 - Append verification output to `logs/eval/task05/YYYY-MM-DD-HHmm-05-ddl-compile.log`
-- Update `memory/Progress.md`: mark Task 05 as complete
-- Update `memory/ActiveContext.md`: clear any blockers, set next active task to Task 06
