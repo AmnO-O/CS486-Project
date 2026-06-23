@@ -74,7 +74,7 @@ _(All resolved — no open questions remain.)_
 
 ## How to update this file
 
-After completing each task:
+Only after user approves the output (see Post-Task Handshake Protocol in `AGENTS.md`):
 1. Change status to ✅ Approved or ⚠️ Needs revision
 2. Add key decisions to the decisions log
 3. Update `memory/ActiveContext.md` for the next task
