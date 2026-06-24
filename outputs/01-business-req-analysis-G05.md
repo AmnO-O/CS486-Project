@@ -264,6 +264,34 @@ A space with status `under_maintenance` cannot have approved bookings during the
 
 ---
 
+## 9. Requirements Traceability Matrix
+
+Each business rule (BR1–BR14) is mapped to its source paragraph in `req/business-requirement.md` for independent validation. Rules marked as **Inferred / Derived** are not explicitly stated but follow logically from listed attributes.
+
+| BR # | Business Rule | Source in `req/business-requirement.md` | Nature |
+|---|---|---|---|
+| BR1 | No overlapping approved bookings | § "Booking Requests" → "Booking Constraints", lines 143–148 | Explicit |
+| BR2 | Unavailable spaces cannot be booked | § "Booking Requests" → "Booking Constraints", lines 147–148 | Explicit |
+| BR3 | Expected participants ≤ space capacity | § "Space Management" line 82 (`capacity`) + § "Booking Requests" line 119 (`expected participants`) — no explicit ≤ rule stated | **Inferred** — derived from two separate attribute lists |
+| BR4 | Maintenance blocks booking | § "Maintenance Management" → "Maintenance Constraint", lines 211–213 | Explicit |
+| BR5 | Maintenance assigned staff tracking | § "Maintenance Management", line 204 (`Assigned Staff Member`) | Explicit |
+| BR6 | Decision recording (approver, time, note) | § "Booking Approval", lines 156–160 | Explicit |
+| BR7 | Rejection requires reason | § "Booking Approval", lines 162–164 | Explicit |
+| BR8 | Actual time recording at check-in/completion | § "Check-In and Session Completion", lines 170–184 | Explicit |
+| BR9 | Space condition tracking (initial + final) | § "Check-In and Session Completion", lines 176, 183 | Explicit |
+| BR10 | Unique identification (email, space_code) | § "Space Management" line 76 (`Space Code (unique)`); email uniqueness is **Assumption A1** | Explicit for space_code; **Assumption** for email |
+| BR11 | Soft deletes for audit trail | § "Historical Records and Reporting", lines 219–222 ("system must keep historical records") | **Inferred** — requirement states "keep records" but does not prescribe soft-delete mechanism |
+| BR12 | Audit trail (`created_at`, `updated_at`) | Not in `req/business-requirement.md` — sourced from `docs/tech-stack.md` naming conventions | **Design convention** |
+| BR13 | Historical records preservation | § "Historical Records and Reporting", lines 219–222 | Explicit |
+| BR14 | Staff views (booking history, upcoming, maintenance, no-shows) | § "Historical Records and Reporting", lines 224–229 | Explicit |
+
+**How to use this matrix during validation (Task 4):**
+- For each **Explicit** rule → verify the logical schema enforces it, and no rule is missing.
+- For each **Inferred / Derived** rule → confirm with the group whether the inference is correct; if not, adjust or remove.
+- For **Design conventions** → verify they align with `docs/tech-stack.md`; these are not business requirements and can be changed without affecting business compliance.
+
+---
+
 ## Entity Summary
 
 The following entities have been identified from the requirements:
