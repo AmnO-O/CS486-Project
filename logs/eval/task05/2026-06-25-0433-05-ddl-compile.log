@@ -1,0 +1,62 @@
+TABLE_NAME                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                        
+departments                                                                                                                     
+facilities                                                                                                                      
+maintenances                                                                                                                    
+space_facilities                                                                                                                
+spaces                                                                                                                          
+users                                                                                                                           
+
+(7 rows affected)
+=== TRIGGERS ===
+name                                                                                                                             type_desc                                                   
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------
+trg_bookings_approval_validation                                                                                                 SQL_TRIGGER                                                 
+trg_bookings_check_capacity                                                                                                      SQL_TRIGGER                                                 
+trg_bookings_check_maintenance                                                                                                   SQL_TRIGGER                                                 
+trg_bookings_check_space_status                                                                                                  SQL_TRIGGER                                                 
+trg_bookings_checkin_enforcement                                                                                                 SQL_TRIGGER                                                 
+trg_bookings_completion_enforcement                                                                                              SQL_TRIGGER                                                 
+trg_bookings_prevent_overlap                                                                                                     SQL_TRIGGER                                                 
+trg_bookings_rejection_reason                                                                                                    SQL_TRIGGER                                                 
+trg_bookings_updated_at                                                                                                          SQL_TRIGGER                                                 
+trg_departments_updated_at                                                                                                       SQL_TRIGGER                                                 
+trg_facilities_updated_at                                                                                                        SQL_TRIGGER                                                 
+trg_maintenances_completion_space_status                                                                                         SQL_TRIGGER                                                 
+trg_maintenances_updated_at                                                                                                      SQL_TRIGGER                                                 
+trg_spaces_updated_at                                                                                                            SQL_TRIGGER                                                 
+trg_users_updated_at                                                                                                             SQL_TRIGGER                                                 
+
+(15 rows affected)
+=== FOREIGN KEYS ===
+fk_name                                                                                                                          parent_table                                                                                                                     referenced_table                                                                                                                
+-------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+FK_bookings_approver_id                                                                                                          bookings                                                                                                                         users                                                                                                                           
+FK_bookings_checked_in_by                                                                                                        bookings                                                                                                                         users                                                                                                                           
+FK_bookings_requester_id                                                                                                         bookings                                                                                                                         users                                                                                                                           
+FK_bookings_space_id                                                                                                             bookings                                                                                                                         spaces                                                                                                                          
+FK_maintenances_assigned_staff_id                                                                                                maintenances                                                                                                                     users                                                                                                                           
+FK_maintenances_reporter_id                                                                                                      maintenances                                                                                                                     users                                                                                                                           
+FK_maintenances_space_id                                                                                                         maintenances                                                                                                                     spaces                                                                                                                          
+FK_space_facilities_facility_id                                                                                                  space_facilities                                                                                                                 facilities                                                                                                                      
+FK_space_facilities_space_id                                                                                                     space_facilities                                                                                                                 spaces                                                                                                                          
+FK_users_department_id                                                                                                           users                                                                                                                            departments                                                                                                                     
+
+(10 rows affected)
+=== UNIQUE CONSTRAINTS ===
+name                                                                                                                             type_desc                                                   
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------
+UQ_departments_name                                                                                                              UNIQUE_CONSTRAINT                                           
+UQ_facilities_name                                                                                                               UNIQUE_CONSTRAINT                                           
+UQ_spaces_space_code                                                                                                             UNIQUE_CONSTRAINT                                           
+UQ_users_email                                                                                                                   UNIQUE_CONSTRAINT                                           
+
+(4 rows affected)
+=== FILTERED INDEX ===
+name                                                                                                                             type_desc                                                    is_unique filter_definition                                                                                                                                                                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------ --------- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+uq_bookings_active_overlap                                                                                                       NONCLUSTERED                                                         1 (([status] IN ('approved', 'checked_in', 'completed')) AND [is_deleted]=(0))                                                                                                                                                                                    
+
+(1 rows affected)
+=== DDL COMPILATION: SUCCESS ===

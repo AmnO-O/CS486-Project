@@ -66,6 +66,7 @@ between them**: each fact lives in exactly one file (see the boundary below).
 - Any change after SCHEMA FREEZE requires group consensus + a `docs/design-decisions.md` entry.
 
 ## After ANY task — required actions
+**Gate: trajectory file must exist under `logs/trajectory/task0X/` before any user-facing summary is sent. Only then proceed to the remaining actions.**
 1. Save output to `outputs/<task>-G05.<ext>`
 2. Update the registries per the **Registry maintenance protocol** above
 3. Write a trajectory file per `.opencode/skills/evaluations/trajectory-recording.md`

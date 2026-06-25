@@ -1,0 +1,126 @@
+type               count      
+------------------ -----------
+Tables                       7
+Triggers                    15
+FKs                         10
+CHECKs                      10
+PKs                          7
+Unique constraints           4
+Non-PK indexes              15
+
+(7 rows affected)
+              
+--------------
+--- Tables ---
+
+(1 rows affected)
+TABLE_NAME                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                        
+departments                                                                                                                     
+facilities                                                                                                                      
+maintenances                                                                                                                    
+space_facilities                                                                                                                
+spaces                                                                                                                          
+users                                                                                                                           
+
+(7 rows affected)
+           
+-----------
+--- FKs ---
+
+(1 rows affected)
+table_name                                                                                                                       fk_name                                                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                         FK_bookings_space_id                                                                                                            
+bookings                                                                                                                         FK_bookings_requester_id                                                                                                        
+bookings                                                                                                                         FK_bookings_approver_id                                                                                                         
+bookings                                                                                                                         FK_bookings_checked_in_by                                                                                                       
+maintenances                                                                                                                     FK_maintenances_space_id                                                                                                        
+maintenances                                                                                                                     FK_maintenances_reporter_id                                                                                                     
+maintenances                                                                                                                     FK_maintenances_assigned_staff_id                                                                                               
+space_facilities                                                                                                                 FK_space_facilities_space_id                                                                                                    
+space_facilities                                                                                                                 FK_space_facilities_facility_id                                                                                                 
+users                                                                                                                            FK_users_department_id                                                                                                          
+
+(10 rows affected)
+              
+--------------
+--- CHECKs ---
+
+(1 rows affected)
+table_name                                                                                                                       ck_name                                                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                         CK_bookings_requested_end_time                                                                                                  
+bookings                                                                                                                         CK_bookings_purpose                                                                                                             
+bookings                                                                                                                         CK_bookings_expected_participants                                                                                               
+bookings                                                                                                                         CK_bookings_status                                                                                                              
+maintenances                                                                                                                     CK_maintenances_status                                                                                                          
+spaces                                                                                                                           CK_spaces_space_type                                                                                                            
+spaces                                                                                                                           CK_spaces_current_status                                                                                                        
+spaces                                                                                                                           CK_spaces_capacity                                                                                                              
+users                                                                                                                            CK_users_role                                                                                                                   
+users                                                                                                                            CK_users_account_status                                                                                                         
+
+(10 rows affected)
+               
+---------------
+--- Indexes ---
+
+(1 rows affected)
+table_name                                                                                                                       index_name                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                         idx_bookings_approver_id                                                                                                        
+bookings                                                                                                                         idx_bookings_checked_in_by                                                                                                      
+bookings                                                                                                                         idx_bookings_requested_start                                                                                                    
+bookings                                                                                                                         idx_bookings_requester_id                                                                                                       
+bookings                                                                                                                         idx_bookings_space_id                                                                                                           
+bookings                                                                                                                         idx_bookings_status                                                                                                             
+bookings                                                                                                                         idx_bookings_time_range                                                                                                         
+bookings                                                                                                                         uq_bookings_active_overlap                                                                                                      
+maintenances                                                                                                                     idx_maintenances_assigned_staff_id                                                                                              
+maintenances                                                                                                                     idx_maintenances_reporter_id                                                                                                    
+maintenances                                                                                                                     idx_maintenances_space_id                                                                                                       
+maintenances                                                                                                                     idx_maintenances_status                                                                                                         
+space_facilities                                                                                                                 idx_space_facilities_facility_id                                                                                                
+spaces                                                                                                                           idx_spaces_current_status                                                                                                       
+users                                                                                                                            idx_users_department_id                                                                                                         
+
+(15 rows affected)
+                          
+--------------------------
+--- Unique Constraints ---
+
+(1 rows affected)
+table_name                                                                                                                       uq_name                                                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+departments                                                                                                                      UQ_departments_name                                                                                                             
+facilities                                                                                                                       UQ_facilities_name                                                                                                              
+spaces                                                                                                                           UQ_spaces_space_code                                                                                                            
+users                                                                                                                            UQ_users_email                                                                                                                  
+
+(4 rows affected)
+                
+----------------
+--- Triggers ---
+
+(1 rows affected)
+table_name                                                                                                                       trigger_name                                                                                                                    
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+bookings                                                                                                                         trg_bookings_approval_validation                                                                                                
+bookings                                                                                                                         trg_bookings_check_capacity                                                                                                     
+bookings                                                                                                                         trg_bookings_check_maintenance                                                                                                  
+bookings                                                                                                                         trg_bookings_check_space_status                                                                                                 
+bookings                                                                                                                         trg_bookings_checkin_enforcement                                                                                                
+bookings                                                                                                                         trg_bookings_completion_enforcement                                                                                             
+bookings                                                                                                                         trg_bookings_prevent_overlap                                                                                                    
+bookings                                                                                                                         trg_bookings_rejection_reason                                                                                                   
+bookings                                                                                                                         trg_bookings_updated_at                                                                                                         
+departments                                                                                                                      trg_departments_updated_at                                                                                                      
+facilities                                                                                                                       trg_facilities_updated_at                                                                                                       
+maintenances                                                                                                                     trg_maintenances_completion_space_status                                                                                        
+maintenances                                                                                                                     trg_maintenances_updated_at                                                                                                     
+spaces                                                                                                                           trg_spaces_updated_at                                                                                                           
+users                                                                                                                            trg_users_updated_at                                                                                                            
+
+(15 rows affected)

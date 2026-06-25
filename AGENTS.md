@@ -18,6 +18,8 @@ Your job is to analyze requirements, generate design artifacts in order, validat
 ## Hard rules (never violate)
 - **NO skipping tasks** — pipeline runs 01 → 07 in strict order
 - **NO generating output** without reading the relevant skill + template first
+- **NO silently skipping** a referenced instruction file — if a skill/instruction file doesn't exist, stop and report the gap immediately.
+- **Strict adherence to the reading sequence** specified in `db-design-pipeline` before writing any code.
 - **NO contradicting** any entry in `docs/design-decisions.md` — raise conflicts, do not silently override
 - **NO editing** `outputs/` files directly — only via generate commands
 
