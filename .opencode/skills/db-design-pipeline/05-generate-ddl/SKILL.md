@@ -24,7 +24,7 @@ Convert the locked logical schema into a SQL Server DDL script that is:
 ## Required inputs
 
 Read in this order before generating:
-1. `AGENTS.md` — to load global pipeline constraints, rules, and guardrails
+1. `AGENTS.md` — to load global pipeline constraints, rules.
 2. `memory/Progress.md` — verify Task 04 is marked complete; stop and report if not
 3. `memory/ActiveContext.md` — check for blockers; stop and report if any
 4. `.env` — extract `SA_PASSWORD` (SQL Auth only; skip when using Windows Auth `-E`)
