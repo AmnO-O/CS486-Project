@@ -136,15 +136,7 @@ These constraints are enforced at the application or trigger level and are not e
 
 ---
 
-## 5. Design Decisions
-
-- **Incident reporting is not a separate entity** — Incidents are captured within the Maintenance entity via `problem_description` and `result_note`. No distinct attributes (e.g., severity, incident_type) differentiate incidents from maintenance requests in the current requirement. If such attributes are needed in the future, a separate `Incidents` entity should be created and documented in `docs/design-decisions.md`.
-
-- **Building and floor are free-text fields** — `building` and `floor` are `NVARCHAR` free-text columns on `Spaces`, not separate reference tables. This simplifies the schema at the cost of building-based reporting flexibility. See ambiguity Q5 in `outputs/01-business-req-analysis-G05.md`.
-
-- **Rejection reason is a separate column** — `rejection_reason` is stored as a distinct `NVARCHAR(MAX)` column on `Bookings`, separate from `decision_note`. This resolves ambiguity Q1 from the business requirements by keeping rejection-specific text distinguishable from general approval notes.
-
----
+<!-- Design decisions migrated to docs/design-decisions.md: Building/floor as free-text fields, Rejection reason as separate column, Incident reporting merged into Maintenance -->
 
 ## Pre-Submission Validation Checklist
 
@@ -159,7 +151,7 @@ These constraints are enforced at the application or trigger level and are not e
 - [x] No duplicate entity definitions
 - [x] Role-based constraints documented in Section 4 (Logical Constraints)
 - [x] Entity count matches business requirement (7 entities)
-- [x] Incident reporting justified as part of Maintenance (Section 5)
+- [x] Key design decisions documented in `docs/design-decisions.md` (incident, building/floor, rejection reason)
 
 ---
 

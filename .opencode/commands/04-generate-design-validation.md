@@ -1,23 +1,21 @@
 ---
-description: Generate design validation report for the current ERD and schema registry.
+description: Run Task 04 — validate logical schema against ERD and business requirements
 ---
 
-Command: generate-design-validation
+Execute Task 04 — Design Validation following the process and criteria defined in the `04-design-validation` skill.
 
-Description:
-Run the `db-design-pipeline:04-design-validation` skill to produce a design validation report for the current ERD and schema registry, outputting `outputs/04-design-validation-G{{group}}.md`.
+Group: ${1:-G05}
 
-Usage:
-```
-generate-design-validation --group G05
-```
+Required inputs:
+- outputs/01-business-req-analysis-${1:-G05}.md
+- outputs/02-erd-design-${1:-G05}.md
+- outputs/03-logical-design-${1:-G05}.md
+- docs/entity-registry.md
+- docs/schema-registry.md
 
-Prompt:
-  Validate the ERD and logical design for the Campus Space Management System, group G05.
+Requirement: complete all 5 evaluation criteria and all 11 steps defined in the skill, and output the report to `outputs/04-design-validation-${1:-G05}.md`.
 
-  Input sources:  check the SKILL.md (`db-design-pipeline:04-design-validation`) for required inputs
-  Output: `outputs/04-design-validation-G{{group}}.md`
-
+If any of the inputs above is missing, stop and report exactly which file was not found — do not guess or fabricate replacement content.
 Notes:
   - Use `--group G05` as the default group.
   - This command file defines the invocation interface only; the skill contains the task behavior.

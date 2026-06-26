@@ -1,6 +1,6 @@
 ---
 name: 04-design-validation
-description: Evaluate the relational schema against the ERD, business requirements, entity registry, and schema registry to produce a comprehensive validation report for Task 04.
+description: Use when user asks to validate a logical schema against an ERD, or references outputs/03-logical-design and outputs/02-erd-design files
 ---
 
 # Task 04 — Design Validation of Relational Schema against ERD and Business Requirements
@@ -49,7 +49,6 @@ The report must explicitly evaluate whether the relational schema:
 8. **Normalization** — evaluate compliance with 3NF; identify any partial or transitive dependencies and recommend decomposition if present.
 9. **Discrepancy log** — compile a prioritised list of all findings: *Critical* (schema cannot correctly store or enforce required data), *Major* (constraint or relationship missing), *Minor* (naming, style, or optional improvement).
 10. **Recommendations** — for every discrepancy, provide a concrete corrective action (e.g., add column, add constraint, rename table, add junction table).
-11. **Indexing & partitioning** — suggest indexes for high-selectivity FK columns, frequently filtered columns, and any column appearing in business-rule queries; suggest partitioning if any table is expected to grow beyond 10 M rows.
 
 ---
 
@@ -58,4 +57,29 @@ The report must explicitly evaluate whether the relational schema:
 - **Role**: Act as a database design validation engineer, ensuring that the logical schema accurately reflects the ERD and business requirements.
 - **Input sources only**: `outputs/01-business-req-analysis-G05.md`, `outputs/02-erd-design-G05.md`, `outputs/03-logical-design-G05.md`, and `docs/entity-registry.md`.
 - **Output intent**: Produce a detailed, reviewer-ready validation report structured around the five evaluation criteria above. Each section should contain a summary verdict (*Pass / Partial / Fail*), a per-item checklist, and actionable recommendations.
-- **Do NOT embed hardcoded templates** — templates/responses are provided by the runtime when needed.
+
+---
+
+## Validation / Self-Check Checklist
+
+Before finalizing the report, verify every item below. Each must be checked (`[x]`) or explicitly documented as not applicable:
+
+- [ ] **Entity coverage** — every entity in the ERD (`outputs/02`) maps to exactly one table in the logical schema (`outputs/03`); no table exists without a corresponding ERD entity.
+- [ ] **Attribute completeness** — for each entity, every conceptual attribute in the ERD/entity-registry appears as a column in its mapped table; attribute names, types, and nullability match.
+- [ ] **Business rule coverage** — every business rule from `outputs/01` is traced to a schema mechanism (CHECK, UNIQUE, FK, trigger, etc.) and labelled *Enforced*, *Partial*, or *Missing*.
+- [ ] **Relationship translation** — each relationship (R1–R9) in the entity-registry is translated with correct cardinality (1:N / M:N / 1:1), correct participation (NOT NULL ↔ total, nullable ↔ partial), and correct referential-integrity actions.
+- [ ] **Key adequacy** — every table has a PRIMARY KEY; natural/business candidate keys are declared as UNIQUE; surrogate keys are used only where no suitable natural key exists.
+- [ ] **Normalization (3NF)** — no partial or transitive dependencies remain; every non-key column depends on nothing but the whole primary key.
+- [ ] **Discrepancy log quality** — each entry is classified as *Critical* / *Major* / *Minor* with a concrete, actionable recommendation; no entry is vague or unactionable.
+- [ ] **Discrepancy log completeness** — every finding discovered during the checks above is recorded; nothing is silently ignored or assumed "obvious."
+- [ ] **Cross-file synchronisation** — `docs/schema-registry.md` is in sync with `outputs/03`; any delta found is either resolved or logged in the discrepancy log.
+- [ ] **Lock status documented** — Section 12 (registry lock status) is present, listing both `entity-registry.md` and `schema-registry.md` with their current status and any actions taken.
+- [ ] **Verdict summary** — a clear recommendation (SCHEMA FREEZE READY / FREEZE WITH DEFERRED ITEMS / REVISION REQUIRED) is stated at the end.
+
+---
+
+## Idempotency
+
+- Running with the **same set of input files** (unchanged `outputs/01`, `outputs/02`, `outputs/03`, `docs/entity-registry.md`, `docs/schema-registry.md`) **must produce the same verdict and the same discrepancy log**.
+- Discrepancy entries must not contain **timestamps, random sort orders, or volatile identifiers** that would change between runs.
+- If a discrepancy is resolved between runs, the log must reflect the new state (e.g., entry moved to "Resolved") — but for identical inputs, output must be deterministic.

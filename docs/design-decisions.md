@@ -54,6 +54,25 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
+### Decision: Incident reporting merged into Maintenance entity
+
+**Task:** 2 (ERD Design)
+**Date:** 2026-06-17
+
+**Problem:** The business requirement lists "incident reporting" as a system capability, but does not define distinct attributes (e.g., severity, incident_type) that would differentiate an incident from a maintenance request.
+
+**Options considered:**
+- Option A: Separate `Incidents` entity — pros: dedicated table for incidents; cons: no distinct attributes to justify a separate table, overlaps with Maintenance
+- Option B: Merge incidents into `Maintenance` entity — pros: avoids redundant table, captures all problem reports in one place; cons: cannot query incidents separately without filtering on `problem_description`
+
+**Decision:** We chose Option B because no distinct attributes (severity, incident_type) differentiate incidents from maintenance requests in the current requirement. Incidents are captured via `problem_description` and `result_note` on the Maintenance entity.
+
+**Impact:** If the requirement later defines distinct incident attributes, a separate `Incidents` entity should be created and documented here.
+
+**Requirement reference:** `req/business-requirement.md` line 36 (incident reporting), `docs/project-overview.md` line 17
+
+---
+
 ### Decision: Surrogate keys (INT IDENTITY) vs. business keys
 
 **Task:** 3 (Logical Design)

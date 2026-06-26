@@ -162,7 +162,7 @@ erDiagram
     }
     USER {
         int id PK
-        int department_id FK
+        int department_id
         string email
     }
     DEPARTMENT ||--o{ USER : "belongs_to"
