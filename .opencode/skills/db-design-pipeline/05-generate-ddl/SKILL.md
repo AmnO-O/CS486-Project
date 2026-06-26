@@ -24,18 +24,26 @@ Convert the locked logical schema into a SQL Server DDL script that is:
 ## Required inputs
 
 Read in this order before generating:
-1. `AGENTS.md` — to load global pipeline constraints, rules.
-2. `memory/Progress.md` — verify Task 04 is marked complete; stop and report if not
-3. `memory/ActiveContext.md` — check for blockers; stop and report if any
+1. `AGENTS.md` — to load global pipeline constraints and rules.
 4. `.env` — extract `SA_PASSWORD` (SQL Auth only; skip when using Windows Auth `-E`)
 5. `docs/schema-registry.md` — primary source of truth; must be fully locked
-6. `outputs/04-design-validation-G05.md` — fallback for clarification
-7. `outputs/03-logical-design-G05.md` — fallback for clarification
-8. `outputs/02-erd-design-G05.md` — fallback for clarification
-9. `outputs/01-business-req-analysis-G05.md` — fallback for clarification
-10. `req/business-requirement.md` — fallback for clarification only
 
 If schema registry is not fully locked → **stop and report**. Do not generate DDL against an incomplete schema.
+
+
+---
+## Source of truth order
+
+When any conflict exists between sources, resolve using this priority:
+
+1. `docs/schema-registry.md`
+2. `outputs/04-design-validation-G05.md`
+3. `outputs/03-logical-design-G05.md`
+4. `outputs/02-erd-design-G05.md`
+5. `outputs/01-business-req-analysis-G05.md`
+6. `req/business-requirement.md`
+
+Do not override the schema registry with lower-priority sources.
 
 ---
 
@@ -66,21 +74,6 @@ For every business rule in the Business Rule Coverage section of `docs/schema-re
 **If any mismatch exists → STOP.**
 
 Do not generate DDL until the mismatch is resolved. Document the resolution in `docs/design-decisions.md` before continuing.
-
----
-
-## Source of truth order
-
-When any conflict exists between sources, resolve using this priority:
-
-1. `docs/schema-registry.md`
-2. `outputs/04-design-validation-G05.md`
-3. `outputs/03-logical-design-G05.md`
-4. `outputs/02-erd-design-G05.md`
-5. `outputs/01-business-req-analysis-G05.md`
-6. `req/business-requirement.md`
-
-Do not override the schema registry with lower-priority sources.
 
 ---
 
@@ -290,10 +283,6 @@ Run **after generating the SQL file** to verify output correctness:
 
 1. Compile and verify on local SQL Server (steps above)
 2. Append verification output to `logs/eval/task05/YYYY-MM-DD-HHmm-05-ddl-compile.log`
-3. Write trajectory file per `.opencode/skills/evaluations/trajectory-recording.md`
-4. Update `memory/Progress.md` and `memory/ActiveContext.md`
-5. If any key design decision was made → append to `docs/design-decisions.md`
-
 ---
 
 ## Common mistakes to avoid
@@ -308,9 +297,3 @@ Run **after generating the SQL file** to verify output correctness:
 - Using double underscore in constraint names
 - Writing trigger logic from memory — always derive from `outputs/03-logical-design-G05.md §7`
 - Omitting the recursion guard (`IF NOT UPDATE`) in triggers that automatically update timestamp or audit columns which causes potential infinite trigger recursion.
-
----
-
-## Output standard
-
-The final SQL file must be ready to run after review. No explanatory prose mixed into the script unless the project template explicitly requires inline comments.
