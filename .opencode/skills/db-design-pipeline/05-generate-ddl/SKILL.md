@@ -30,6 +30,21 @@ Read in this order before generating:
 
 If schema registry is not fully locked → **stop and report**. Do not generate DDL against an incomplete schema.
 
+
+---
+## Source of truth order
+
+When any conflict exists between sources, resolve using this priority:
+
+1. `docs/schema-registry.md`
+2. `outputs/04-design-validation-G05.md`
+3. `outputs/03-logical-design-G05.md`
+4. `outputs/02-erd-design-G05.md`
+5. `outputs/01-business-req-analysis-G05.md`
+6. `req/business-requirement.md`
+
+Do not override the schema registry with lower-priority sources.
+
 ---
 
 ## Schema compliance audit
@@ -59,21 +74,6 @@ For every business rule in the Business Rule Coverage section of `docs/schema-re
 **If any mismatch exists → STOP.**
 
 Do not generate DDL until the mismatch is resolved. Document the resolution in `docs/design-decisions.md` before continuing.
-
----
-
-## Source of truth order
-
-When any conflict exists between sources, resolve using this priority:
-
-1. `docs/schema-registry.md`
-2. `outputs/04-design-validation-G05.md`
-3. `outputs/03-logical-design-G05.md`
-4. `outputs/02-erd-design-G05.md`
-5. `outputs/01-business-req-analysis-G05.md`
-6. `req/business-requirement.md`
-
-Do not override the schema registry with lower-priority sources.
 
 ---
 
