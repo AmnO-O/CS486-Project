@@ -1012,3 +1012,451 @@ WHERE u.[department_id] = (SELECT [department_id] FROM [admin_dept])
   AND b.[requested_start_time] < DATEADD(DAY, @lookahead_days, GETDATE())
 ORDER BY b.[requested_start_time];
 GO
+
+-- ============================================================
+-- Query 16: Available computer/project lab for tutorial session
+-- ============================================================
+-- --student-name: Tran Dinh Quoc Thang
+-- --target-users: teaching_assistant
+-- --business-question: Which computer_lab or project_lab spaces
+--    are available for a tutorial/project session in a requested
+--    time slot with enough Computer workstations?
+-- ============================================================
+-- Business question:
+--   Which computer_lab or project_lab spaces are available in a
+--   given time slot, have enough Computer workstations for
+--   expected participants, exclude unavailable spaces and
+--   conflicting confirmed bookings, and optionally include a
+--   Projector for presentations?
+--
+-- Target user(s):
+--   Teaching Assistant
+--
+-- Why useful:
+--   Teaching Assistants need to reserve labs that can actually
+--   support a tutorial or project session. This query checks
+--   capacity, workstation count, optional projector availability,
+--   live space status, confirmed booking conflicts, and unresolved
+--   maintenance conflicts in one reusable availability search.
+-- ============================================================
+
+DECLARE @slot_start             DATETIME2    = '2026-07-05 13:00:00';
+DECLARE @slot_end               DATETIME2    = '2026-07-05 15:00:00';
+DECLARE @expected_participants  INT          = 20;
+DECLARE @minimum_computers      INT          = 20;
+DECLARE @require_projector      BIT          = 1;
+DECLARE @space_type_computer    VARCHAR(50)  = 'computer_lab';
+DECLARE @space_type_project     VARCHAR(50)  = 'project_lab';
+DECLARE @space_status_available VARCHAR(50)  = 'available';
+DECLARE @status_approved        VARCHAR(50)  = 'approved';
+DECLARE @status_checked_in      VARCHAR(50)  = 'checked_in';
+DECLARE @status_completed       VARCHAR(50)  = 'completed';
+DECLARE @maint_open             VARCHAR(50)  = 'open';
+DECLARE @maint_in_progress      VARCHAR(50)  = 'in_progress';
+DECLARE @facility_computer      NVARCHAR(255) = N'Computer';
+DECLARE @facility_projector     NVARCHAR(255) = N'Projector';
+
+WITH equipment_summary AS (
+    SELECT
+        sf.[space_id],
+        SUM(CASE WHEN f.[name] = @facility_computer
+                 THEN COALESCE(sf.[quantity], 1) ELSE 0 END) AS [computer_count],
+        MAX(CASE WHEN f.[name] = @facility_projector
+                 THEN 1 ELSE 0 END) AS [has_projector]
+    FROM [dbo].[space_facilities] sf
+    INNER JOIN [dbo].[facilities] f
+        ON sf.[facility_id] = f.[facility_id]
+    GROUP BY sf.[space_id]
+)
+SELECT
+    s.[space_code],
+    s.[space_name],
+    s.[space_type],
+    s.[building],
+    s.[floor],
+    s.[room_number],
+    s.[capacity],
+    es.[computer_count],
+    CASE WHEN es.[has_projector] = 1 THEN N'Yes' ELSE N'No' END AS [projector_available]
+FROM [dbo].[spaces] s
+INNER JOIN equipment_summary es
+    ON s.[space_id] = es.[space_id]
+WHERE s.[space_type] IN (@space_type_computer, @space_type_project)
+  AND s.[current_status] = @space_status_available
+  AND s.[capacity] >= @expected_participants
+  AND es.[computer_count] >= @minimum_computers
+  AND (@require_projector = 0 OR es.[has_projector] = 1)
+  AND NOT EXISTS (
+      SELECT 1
+      FROM [dbo].[bookings] b
+      WHERE b.[space_id] = s.[space_id]
+        AND b.[is_deleted] = 0
+        AND b.[status] IN (@status_approved, @status_checked_in, @status_completed)
+        AND @slot_start < b.[requested_end_time]
+        AND @slot_end > b.[requested_start_time]
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM [dbo].[maintenances] m
+      WHERE m.[space_id] = s.[space_id]
+        AND m.[is_deleted] = 0
+        AND m.[status] IN (@maint_open, @maint_in_progress)
+        AND m.[start_time] < @slot_end
+        AND (m.[completion_time] IS NULL OR m.[completion_time] > @slot_start)
+  )
+ORDER BY s.[building], s.[floor], s.[room_number], s.[space_code];
+-- Note: defaults match T06-LAB-001: computer_lab, available,
+-- capacity 30, 20 computers, projector, and no confirmed booking
+-- or unresolved maintenance conflict during the requested slot.
+GO
+
+-- ============================================================
+-- Query 17: Lecturer's personal booking timeline for a semester
+-- ============================================================
+-- --student-name: Tran Dinh Quoc Thang
+-- --target-users: lecturer
+-- --business-question: Show my own booking timeline within a
+--    semester date range, including all statuses and details.
+-- ============================================================
+-- Business question:
+--   A lecturer wants to see their own complete booking timeline
+--   within a given semester, covering all statuses (pending,
+--   approved, checked_in, completed, rejected, cancelled). The
+--   result includes room details, purpose, requested time,
+--   decision note, rejection reason, and approver name.
+--
+-- Target user(s):
+--   Lecturer
+--
+-- Why useful:
+--   A lecturer can review every request in chronological order,
+--   including the approval outcome and session details. This is
+--   useful for planning classes, checking rejected requests, and
+--   confirming whether approved sessions still need action.
+-- ============================================================
+
+DECLARE @lecturer_email NVARCHAR(255) = N't06.lecturer1@university.edu';
+-- Note: email is unique by UQ_users_email, so it is safe for lookup.
+DECLARE @semester_start DATETIME2 = '2026-06-01 00:00:00';
+DECLARE @semester_end   DATETIME2 = '2026-08-31 23:59:59';
+
+WITH lecturer_account AS (
+    SELECT u.[user_id], u.[full_name], u.[email]
+    FROM [dbo].[users] u
+    WHERE u.[email] = @lecturer_email
+)
+SELECT
+    b.[booking_id],
+    la.[full_name]                   AS [lecturer_name],
+    s.[space_code],
+    s.[space_name],
+    s.[space_type],
+    s.[building],
+    s.[floor],
+    s.[room_number],
+    b.[purpose],
+    b.[requested_start_time],
+    b.[requested_end_time],
+    DATEDIFF(MINUTE, b.[requested_start_time], b.[requested_end_time])
+                                       AS [scheduled_minutes],
+    b.[expected_participants],
+    b.[status],
+    approver.[full_name]             AS [approver_name],
+    b.[decision_time],
+    b.[decision_note],
+    b.[rejection_reason],
+    b.[actual_start_time],
+    b.[actual_end_time]
+FROM lecturer_account la
+INNER JOIN [dbo].[bookings] b
+    ON la.[user_id] = b.[requester_id]
+INNER JOIN [dbo].[spaces] s
+    ON b.[space_id] = s.[space_id]
+LEFT JOIN [dbo].[users] approver
+    ON b.[approver_id] = approver.[user_id]
+WHERE b.[is_deleted] = 0
+  AND b.[requested_start_time] >= @semester_start
+  AND b.[requested_start_time] < @semester_end
+ORDER BY b.[requested_start_time], b.[booking_id];
+-- Note: seed data includes Prof. Robert Chen with one rejected
+-- computer_lab request and two approved auditorium requests in
+-- the June-August 2026 semester window.
+GO
+
+-- ============================================================
+-- Query 18: TA's completed lab session history for a semester
+-- ============================================================
+-- --student-name: Tran Dinh Quoc Thang
+-- --target-users: teaching_assistant
+-- --business-question: Show my own completed computer_lab or
+--    project_lab sessions within a semester date range.
+-- ============================================================
+-- Business question:
+--   A Teaching Assistant wants to review their completed lab
+--   sessions (computer_lab or project_lab) within a given
+--   semester, including actual start/end time, actual duration,
+--   expected participants, space condition notes (initial and
+--   final), usage notes, and room details.
+--
+-- Target user(s):
+--   Teaching Assistant
+--
+-- Why useful:
+--   Teaching Assistants can produce a focused record of past lab
+--   sessions for teaching reports or issue follow-up. The result
+--   includes the actual session duration, check-in staff, room
+--   condition notes, usage notes, and available facility summary.
+-- ============================================================
+
+DECLARE @ta_email             NVARCHAR(255) = N't06.ta1@university.edu';
+-- Note: email is unique by UQ_users_email, so it is safe for lookup.
+DECLARE @semester_start       DATETIME2 = '2026-06-01 00:00:00';
+DECLARE @semester_end         DATETIME2 = '2026-08-31 23:59:59';
+DECLARE @status_completed     VARCHAR(50) = 'completed';
+DECLARE @space_type_computer  VARCHAR(50) = 'computer_lab';
+DECLARE @space_type_project   VARCHAR(50) = 'project_lab';
+
+WITH ta_account AS (
+    SELECT u.[user_id], u.[full_name], u.[email]
+    FROM [dbo].[users] u
+    WHERE u.[email] = @ta_email
+)
+SELECT
+    b.[booking_id],
+    ta.[full_name] AS [teaching_assistant],
+    s.[space_code],
+    s.[space_name],
+    s.[space_type],
+    s.[building],
+    s.[floor],
+    s.[room_number],
+    b.[purpose],
+    b.[expected_participants],
+    b.[actual_start_time],
+    b.[actual_end_time],
+    DATEDIFF(MINUTE, b.[actual_start_time], b.[actual_end_time])
+        AS [actual_duration_minutes],
+    checked_by.[full_name] AS [checked_in_by_staff],
+    b.[initial_condition],
+    b.[final_condition],
+    b.[usage_notes],
+    facilities.[facility_list]
+FROM ta_account ta
+INNER JOIN [dbo].[bookings] b
+    ON ta.[user_id] = b.[requester_id]
+INNER JOIN [dbo].[spaces] s
+    ON b.[space_id] = s.[space_id]
+LEFT JOIN [dbo].[users] checked_by
+    ON b.[checked_in_by] = checked_by.[user_id]
+OUTER APPLY (
+    SELECT STRING_AGG(
+               CONCAT(f.[name], N' x', COALESCE(CONVERT(NVARCHAR(20), sf.[quantity]), N'1')),
+               N', '
+           ) AS [facility_list]
+    FROM [dbo].[space_facilities] sf
+    INNER JOIN [dbo].[facilities] f
+        ON sf.[facility_id] = f.[facility_id]
+    WHERE sf.[space_id] = s.[space_id]
+) facilities
+WHERE b.[is_deleted] = 0
+  AND b.[status] = @status_completed
+  AND s.[space_type] IN (@space_type_computer, @space_type_project)
+  AND b.[actual_start_time] >= @semester_start
+  AND b.[actual_end_time] < @semester_end
+ORDER BY b.[actual_end_time] DESC, b.[booking_id] DESC;
+-- Note: returns zero rows if the TA has no completed lab sessions
+-- in the selected semester. Current seed data has a future pending
+-- TA lab request, so the query logic is valid even when the default
+-- result set is empty.
+GO
+
+-- ============================================================
+-- Query 19: Booking approval lead-time analysis by purpose,
+--            space type, and decision status
+-- ============================================================
+-- --student-name: Tran Dinh Quoc Thang
+-- --target-users: lecturer
+-- --business-question: Analyze my booking approval lead time
+--    by purpose, space type, and final decision status.
+-- ============================================================
+-- Business question:
+--   A lecturer wants to analyze how long their booking
+--   approvals/rejections take, broken down by purpose, space
+--   type, and final decision status. Lead time is calculated
+--   from created_at (submission) to decision_time.
+--
+-- Target user(s):
+--   Lecturer
+--
+-- Why useful:
+--   Lead-time analysis helps lecturers understand how early they
+--   should submit requests and whether some purposes or spaces
+--   receive slower decisions. The warning count also exposes seed
+--   rows whose generated audit timestamp is later than the stored
+--   decision timestamp.
+-- ============================================================
+
+DECLARE @lecturer_email  NVARCHAR(255) = N't06.lecturer1@university.edu';
+-- Note: email is unique by UQ_users_email, so it is safe for lookup.
+DECLARE @semester_start  DATETIME2 = '2026-06-01 00:00:00';
+DECLARE @semester_end    DATETIME2 = '2026-08-31 23:59:59';
+DECLARE @status_approved VARCHAR(50) = 'approved';
+DECLARE @status_rejected VARCHAR(50) = 'rejected';
+
+WITH lecturer_account AS (
+    SELECT u.[user_id]
+    FROM [dbo].[users] u
+    WHERE u.[email] = @lecturer_email
+),
+decided_bookings AS (
+    SELECT
+        s.[space_type],
+        b.[purpose],
+        b.[status],
+        DATEDIFF(MINUTE, b.[created_at], b.[decision_time]) AS [lead_minutes],
+        CASE WHEN b.[decision_time] < b.[created_at] THEN 1 ELSE 0 END
+            AS [decision_before_created_flag]
+    FROM lecturer_account la
+    INNER JOIN [dbo].[bookings] b
+        ON la.[user_id] = b.[requester_id]
+    INNER JOIN [dbo].[spaces] s
+        ON b.[space_id] = s.[space_id]
+    WHERE b.[is_deleted] = 0
+      AND b.[status] IN (@status_approved, @status_rejected)
+      AND b.[decision_time] IS NOT NULL
+      AND b.[requested_start_time] >= @semester_start
+      AND b.[requested_start_time] < @semester_end
+)
+SELECT
+    db.[space_type],
+    db.[purpose],
+    db.[status] AS [decision_status],
+    COUNT(*) AS [booking_count],
+    CAST(MIN(db.[lead_minutes]) / 60.0 AS DECIMAL(10,2))
+        AS [min_lead_time_hours],
+    CAST(AVG(CAST(db.[lead_minutes] AS DECIMAL(10,2))) / 60.0 AS DECIMAL(10,2))
+        AS [avg_lead_time_hours],
+    CAST(MAX(db.[lead_minutes]) / 60.0 AS DECIMAL(10,2))
+        AS [max_lead_time_hours],
+    SUM(db.[decision_before_created_flag])
+        AS [timestamp_warning_count]
+FROM decided_bookings db
+GROUP BY db.[space_type], db.[purpose], db.[status]
+ORDER BY db.[space_type], db.[purpose], db.[status];
+-- Note: seed data uses GETDATE() for created_at while decision_time
+-- is fixed in June/July 2026, so timestamp_warning_count can be
+-- nonzero in the sample database. In live data, created_at should
+-- represent the actual submission timestamp.
+GO
+
+-- ============================================================
+-- Query 20: Pre-session readiness check - upcoming lab bookings
+--            with space or maintenance issues
+-- ============================================================
+-- --student-name: Tran Dinh Quoc Thang
+-- --target-users: teaching_assistant
+-- --business-question: Which of my approved upcoming
+--    computer_lab/project_lab bookings starting within X days
+--    have a space that is not available or has unresolved
+--    maintenance?
+-- ============================================================
+-- Business question:
+--   A Teaching Assistant wants a proactive alert showing which
+--   of their approved upcoming lab bookings (starting within
+--   X days) might be disrupted because the space is not
+--   currently available or has overlapping unresolved
+--   maintenance.
+--
+-- Target user(s):
+--   Teaching Assistant
+--
+-- Why useful:
+--   This query acts as an early warning list for lab sessions
+--   that may need a backup room or facility-staff follow-up. It
+--   checks the current space status and unresolved maintenance
+--   that overlaps the approved booking window.
+-- ============================================================
+
+DECLARE @ta_email             NVARCHAR(255) = N't06.ta1@university.edu';
+-- Note: email is unique by UQ_users_email, so it is safe for lookup.
+DECLARE @as_of                DATETIME2 = GETDATE();
+DECLARE @lookahead_days       INT = 30;
+DECLARE @status_approved      VARCHAR(50) = 'approved';
+DECLARE @space_status_ready   VARCHAR(50) = 'available';
+DECLARE @space_type_computer  VARCHAR(50) = 'computer_lab';
+DECLARE @space_type_project   VARCHAR(50) = 'project_lab';
+DECLARE @maint_open           VARCHAR(50) = 'open';
+DECLARE @maint_in_progress    VARCHAR(50) = 'in_progress';
+
+WITH ta_account AS (
+    SELECT u.[user_id]
+    FROM [dbo].[users] u
+    WHERE u.[email] = @ta_email
+),
+upcoming_lab_bookings AS (
+    SELECT
+        b.[booking_id],
+        b.[space_id],
+        b.[purpose],
+        b.[requested_start_time],
+        b.[requested_end_time],
+        b.[expected_participants]
+    FROM ta_account ta
+    INNER JOIN [dbo].[bookings] b
+        ON ta.[user_id] = b.[requester_id]
+    WHERE b.[is_deleted] = 0
+      AND b.[status] = @status_approved
+      AND b.[requested_start_time] >= @as_of
+      AND b.[requested_start_time] < DATEADD(DAY, @lookahead_days, @as_of)
+)
+SELECT
+    ulb.[booking_id],
+    s.[space_code],
+    s.[space_name],
+    s.[space_type],
+    s.[building],
+    s.[floor],
+    s.[room_number],
+    ulb.[purpose],
+    ulb.[requested_start_time],
+    ulb.[requested_end_time],
+    ulb.[expected_participants],
+    s.[current_status] AS [space_status],
+    CASE
+        WHEN s.[current_status] <> @space_status_ready
+            THEN N'Space status is ' + s.[current_status]
+        WHEN active_maintenance.[maintenance_id] IS NOT NULL
+            THEN N'Overlapping unresolved maintenance'
+        ELSE N'Ready'
+    END AS [readiness_flag],
+    active_maintenance.[problem_description] AS [maintenance_issue],
+    active_maintenance.[status]              AS [maintenance_status],
+    active_maintenance.[start_time]          AS [maintenance_start_time]
+FROM upcoming_lab_bookings ulb
+INNER JOIN [dbo].[spaces] s
+    ON ulb.[space_id] = s.[space_id]
+OUTER APPLY (
+    SELECT TOP 1
+        m.[maintenance_id],
+        m.[problem_description],
+        m.[status],
+        m.[start_time]
+    FROM [dbo].[maintenances] m
+    WHERE m.[space_id] = ulb.[space_id]
+      AND m.[is_deleted] = 0
+      AND m.[status] IN (@maint_open, @maint_in_progress)
+      AND m.[start_time] < ulb.[requested_end_time]
+      AND (m.[completion_time] IS NULL OR m.[completion_time] > ulb.[requested_start_time])
+    ORDER BY m.[start_time]
+) active_maintenance
+WHERE s.[space_type] IN (@space_type_computer, @space_type_project)
+  AND (
+      s.[current_status] <> @space_status_ready
+      OR active_maintenance.[maintenance_id] IS NOT NULL
+  )
+ORDER BY ulb.[requested_start_time], s.[space_code];
+-- Note: returns zero rows when the TA has no approved upcoming
+-- lab bookings with readiness problems. Current seed data gives
+-- the TA a pending lab request, not an approved one, so the empty
+-- default result is expected.
+GO
