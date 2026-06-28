@@ -7,71 +7,65 @@
 -- ============================================================
 
 -- ============================================================
--- Query 1: Available spaces for a given time slot
+-- Query 1: Pending approvals for today
+-- --student-name: Nguyen Huu Phuoc
+-- --target-users: facility_staff
+-- --business-question: What bookings are waiting for my
+--    approval today?
 -- ============================================================
 -- Business question:
---   Which spaces are available for booking during a specific
---   time window with at least a given capacity?
+--   Which pending booking requests fall within today or the
+--   next 24 hours and need immediate attention?
 --
 -- Target user(s):
---   Lecturer, Teaching Assistant, Student, Facility Staff
+--   Facility Staff
 --
 -- Why useful:
---   Enables requesters and staff to quickly find suitable rooms
---   without manually cross-checking calendars, maintenance
---   schedules, and capacity limits.
+--   Facility staff need to review and approve/reject bookings
+--   in a timely manner. This query shows the most urgent
+--   requests first so that no requester is left waiting.
 -- ============================================================
 
-DECLARE @slot_start    DATETIME2 = '2026-07-01 08:00:00';
-DECLARE @slot_end      DATETIME2 = '2026-07-01 12:00:00';
-DECLARE @min_capacity  INT       = 30;
+DECLARE @staff_id INT = 5;
 
 SELECT
+    b.booking_id,
     s.space_code,
     s.space_name,
-    s.space_type,
-    s.building,
-    s.floor,
-    s.room_number,
-    s.capacity,
-    s.usage_policy
-FROM [dbo].[spaces] s
-WHERE s.current_status = 'available'
-  AND s.capacity >= @min_capacity
-  AND NOT EXISTS (
-      SELECT 1
-      FROM [dbo].[bookings] b
-      WHERE b.space_id = s.space_id
-        AND b.is_deleted = 0
-        AND b.status IN ('approved', 'checked_in', 'completed')
-        AND b.requested_start_time < @slot_end
-        AND b.requested_end_time > @slot_start
-  )
-  AND NOT EXISTS (
-      SELECT 1
-      FROM [dbo].[maintenances] m
-      WHERE m.space_id = s.space_id
-        AND m.is_deleted = 0
-        AND m.status IN ('open', 'in_progress')
-        AND m.start_time < @slot_end
-        AND (m.completion_time IS NULL OR m.completion_time > @slot_start)
-  )
-ORDER BY s.capacity DESC, s.space_code;
+    u.full_name   AS requester,
+    u.email       AS requester_email,
+    b.requested_start_time,
+    b.requested_end_time,
+    b.purpose,
+    b.expected_participants,
+    b.created_at  AS submitted_at
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON b.space_id = s.space_id
+INNER JOIN [dbo].[users] u ON b.requester_id = u.user_id
+WHERE b.status = 'pending'
+  AND b.is_deleted = 0
+  AND b.requested_start_time <= DATEADD(DAY, 1, GETDATE())
+ORDER BY b.requested_start_time;
 GO
 
 -- ============================================================
--- Query 2: Currently active bookings (real-time snapshot)
+-- Query 2: Real-time occupancy snapshot
+-- --student-name: Nguyen Huu Phuoc
+-- --target-users: facility_staff
+-- --business-question: Which spaces are currently occupied and
+--    by whom?
 -- ============================================================
 -- Business question:
---   What bookings are happening right now across all spaces?
+--   What is happening right now — which spaces are checked in
+--   or approved, who booked them, and when do they end?
 --
 -- Target user(s):
---   Facility Manager, Facility Staff
+--   Facility Staff
 --
 -- Why useful:
---   Provides a live dashboard of space occupancy so facility
---   staff can monitor usage, plan walkthroughs, and respond
---   to issues in real time.
+--   Provides a live dashboard for facility staff to monitor
+--   current occupancy, plan walkthroughs, and respond to
+--   issues or emergencies in real time.
 -- ============================================================
 
 DECLARE @now DATETIME2 = GETDATE();
@@ -83,12 +77,12 @@ SELECT
     s.building,
     s.room_number,
     u.full_name   AS requester,
-    u.email       AS requester_email,
     b.purpose,
     b.expected_participants,
     b.requested_start_time,
     b.requested_end_time,
-    b.status
+    b.status,
+    b.actual_start_time
 FROM [dbo].[bookings] b
 INNER JOIN [dbo].[spaces] s ON b.space_id = s.space_id
 INNER JOIN [dbo].[users] u ON b.requester_id = u.user_id
@@ -100,22 +94,25 @@ ORDER BY b.requested_start_time;
 GO
 
 -- ============================================================
--- Query 3: Active maintenance tickets with space details
+-- Query 3: Active maintenance tickets
+-- --student-name: Nguyen Huu Phuoc
+-- --target-users: facility_staff
+-- --business-question: What maintenance issues are open or
+--    in progress across all spaces?
 -- ============================================================
 -- Business question:
---   What are the unresolved maintenance issues, which spaces
---   are affected, and who is handling them?
+--   Which spaces are affected by unresolved maintenance,
+--   what is the problem, who is assigned, and how long has
+--   it been open?
 --
 -- Target user(s):
---   Facility Manager, Facility Staff
+--   Facility Staff
 --
 -- Why useful:
---   Gives a single view of all open/in-progress maintenance
---   across the campus, enabling workload prioritization and
---   resource allocation for the facility team.
+--   Gives a single view of all active maintenance across
+--   campus so staff can prioritize repairs and track
+--   assignment progress.
 -- ============================================================
-
-DECLARE @building NVARCHAR(100) = NULL;  -- NULL = all buildings
 
 SELECT
     m.maintenance_id,
@@ -126,186 +123,98 @@ SELECT
     m.problem_description,
     m.status,
     m.start_time,
-    u_reporter.full_name   AS reporter,
-    u_staff.full_name      AS assigned_staff,
-    DATEDIFF(DAY, m.start_time, GETDATE()) AS days_since_reported
+    u_reporter.full_name      AS reporter,
+    u_assigned.full_name      AS assigned_staff,
+    DATEDIFF(DAY, m.start_time, GETDATE()) AS days_open
 FROM [dbo].[maintenances] m
 INNER JOIN [dbo].[spaces] s ON m.space_id = s.space_id
 INNER JOIN [dbo].[users] u_reporter ON m.reporter_id = u_reporter.user_id
-LEFT JOIN [dbo].[users] u_staff ON m.assigned_staff_id = u_staff.user_id
+LEFT JOIN [dbo].[users] u_assigned ON m.assigned_staff_id = u_assigned.user_id
 WHERE m.is_deleted = 0
   AND m.status IN ('open', 'in_progress')
-  AND (@building IS NULL OR s.building = @building)
 ORDER BY m.status, m.start_time;
 GO
 
 -- ============================================================
--- Query 4: Space utilization analytics
+-- Query 4: Eligible check-in bookings
+-- --student-name: Nguyen Huu Phuoc
+-- --target-users: facility_staff
+-- --business-question: Which approved bookings have passed
+--    their start time but have not checked in yet?
 -- ============================================================
 -- Business question:
---   Which spaces had the highest usage (total booked hours and
---   average occupancy rate) over a given period?
+--   Which approved bookings have a start time in the past
+--   but no actual check-in recorded yet?
 --
 -- Target user(s):
---   Facility Manager, Department Administrator
+--   Facility Staff
 --
 -- Why useful:
---   Identifies overused and underused spaces to guide capacity
---   planning, scheduling policy, and renovation decisions.
+--   Enables staff to proactively identify no-shows or
+--   perform check-in for late arrivals, reducing idle
+--   space time and improving utilization.
 -- ============================================================
-
-DECLARE @start_date DATE = '2026-06-01';
-DECLARE @end_date   DATE = '2026-07-31';
-
-SELECT
-    s.space_code,
-    s.space_name,
-    s.space_type,
-    s.building,
-    s.capacity,
-    COUNT(b.booking_id)                                                      AS total_bookings,
-    ISNULL(SUM(DATEDIFF(HOUR, b.requested_start_time, b.requested_end_time)), 0) AS total_hours_booked,
-    ISNULL(AVG(b.expected_participants * 1.0), 0)                           AS avg_expected_participants,
-    CASE
-        WHEN s.capacity > 0
-        THEN CAST(ROUND(100.0 * AVG(CAST(b.expected_participants AS FLOAT)) / s.capacity, 1) AS DECIMAL(5,1))
-        ELSE 0
-    END                                                                     AS avg_utilization_pct
-FROM [dbo].[spaces] s
-LEFT JOIN [dbo].[bookings] b
-    ON s.space_id = b.space_id
-    AND b.is_deleted = 0
-    AND b.status IN ('approved', 'checked_in', 'completed')
-    AND b.requested_start_time >= @start_date
-    AND b.requested_end_time <= DATEADD(DAY, 1, @end_date)
-GROUP BY s.space_id, s.space_code, s.space_name, s.space_type, s.building, s.capacity
-ORDER BY total_hours_booked DESC, s.space_code;
-GO
-
--- ============================================================
--- Query 5: Rejection audit trail
--- ============================================================
--- Business question:
---   Show all booking rejections with the decision metadata —
---   who rejected, when, why, and what the booking was for.
---
--- Target user(s):
---   Facility Manager, Department Administrator
---
--- Why useful:
---   Provides an audit trail for rejected requests, ensuring
---   accountability and enabling review of rejection patterns
---   or unfair denials.
--- ============================================================
-
-DECLARE @start_date DATE = '2026-01-01';
-DECLARE @end_date   DATE = '2026-12-31';
 
 SELECT
     b.booking_id,
     s.space_code,
     s.space_name,
-    u_requester.full_name     AS requester,
-    u_requester.email         AS requester_email,
+    u.full_name   AS requester,
+    u.email       AS requester_email,
     b.requested_start_time,
     b.requested_end_time,
     b.purpose,
-    u_approver.full_name      AS rejected_by,
-    b.decision_time,
-    b.rejection_reason,
-    b.decision_note
+    b.expected_participants
 FROM [dbo].[bookings] b
 INNER JOIN [dbo].[spaces] s ON b.space_id = s.space_id
-INNER JOIN [dbo].[users] u_requester ON b.requester_id = u_requester.user_id
-LEFT JOIN [dbo].[users] u_approver ON b.approver_id = u_approver.user_id
-WHERE b.status = 'rejected'
+INNER JOIN [dbo].[users] u ON b.requester_id = u.user_id
+WHERE b.status = 'approved'
   AND b.is_deleted = 0
-  AND b.decision_time >= @start_date
-  AND b.decision_time < DATEADD(DAY, 1, @end_date)
-ORDER BY b.decision_time DESC;
+  AND b.requested_start_time <= GETDATE()
+  AND b.actual_start_time IS NULL
+ORDER BY b.requested_start_time;
 GO
 
 -- ============================================================
--- Query 6: No-show analysis by user
+-- Query 5: Session completion report for today
+-- --student-name: Nguyen Huu Phuoc
+-- --target-users: facility_staff
+-- --business-question: What sessions ended today and what
+--    was the final condition of each space?
 -- ============================================================
 -- Business question:
---   Which users have the highest number of no-show bookings,
---   broken down by department and role?
+--   Which sessions were completed today, what were the actual
+--   end times, and what final condition was noted for each
+--   space?
 --
 -- Target user(s):
---   Facility Manager
+--   Facility Staff
 --
 -- Why useful:
---   Identifies users who repeatedly fail to show up, enabling
---   targeted policy enforcement, warning notifications, or
---   restrictions to improve space utilization.
+--   Enables staff to review end-of-day space conditions,
+--   flag damage or cleaning needs, and verify all sessions
+--   were properly closed out before the next day.
 -- ============================================================
 
-DECLARE @start_date DATE = '2026-01-01';
-DECLARE @end_date   DATE = '2026-12-31';
+DECLARE @report_date DATE = '2026-07-01';
 
 SELECT
-    u.user_id,
-    u.full_name,
-    u.email,
-    u.role,
-    d.name        AS department,
-    COUNT(b.booking_id) AS no_show_count
-FROM [dbo].[users] u
-INNER JOIN [dbo].[departments] d ON u.department_id = d.department_id
-LEFT JOIN [dbo].[bookings] b
-    ON u.user_id = b.requester_id
-    AND b.status = 'no_show'
-    AND b.is_deleted = 0
-    AND b.requested_start_time >= @start_date
-    AND b.requested_end_time < DATEADD(DAY, 1, @end_date)
-GROUP BY u.user_id, u.full_name, u.email, u.role, d.name
-HAVING COUNT(b.booking_id) > 0
-ORDER BY no_show_count DESC, u.full_name;
-GO
-
--- ============================================================
--- Query 7: Space facility inventory
--- ============================================================
--- Business question:
---   What is the complete facility inventory for each space in
---   a given building or of a given space type?
---
--- Target user(s):
---   Facility Staff, Facility Manager
---
--- Why useful:
---   Helps requesters choose a space based on available equipment
---   (e.g. "find a classroom with a projector") and helps staff
---   audit equipment distribution across campus.
--- ============================================================
-
-DECLARE @building   NVARCHAR(100) = NULL;  -- NULL = all buildings
-DECLARE @space_type VARCHAR(50)   = NULL;  -- NULL = all types
-
-SELECT
+    b.booking_id,
     s.space_code,
     s.space_name,
-    s.space_type,
-    s.building,
-    s.floor,
-    s.room_number,
-    s.capacity,
-    s.current_status,
-    STRING_AGG(
-        CASE
-            WHEN sf.quantity IS NOT NULL
-            THEN f.name + N' (x' + CAST(sf.quantity AS NVARCHAR(10)) + N')'
-            ELSE f.name
-        END,
-        N', '
-    ) WITHIN GROUP (ORDER BY f.name) AS facilities
-FROM [dbo].[spaces] s
-LEFT JOIN [dbo].[space_facilities] sf ON s.space_id = sf.space_id
-LEFT JOIN [dbo].[facilities] f ON sf.facility_id = f.facility_id
-WHERE (@building IS NULL OR s.building = @building)
-  AND (@space_type IS NULL OR s.space_type = @space_type)
-GROUP BY s.space_id, s.space_code, s.space_name, s.space_type,
-         s.building, s.floor, s.room_number, s.capacity, s.current_status
-ORDER BY s.building, s.floor, s.space_code;
+    u.full_name           AS requester,
+    b.actual_start_time,
+    b.actual_end_time,
+    b.initial_condition,
+    b.final_condition,
+    b.usage_notes,
+    u_staff.full_name     AS checked_in_by_staff
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON b.space_id = s.space_id
+INNER JOIN [dbo].[users] u ON b.requester_id = u.user_id
+LEFT JOIN [dbo].[users] u_staff ON b.checked_in_by = u_staff.user_id
+WHERE b.status = 'completed'
+  AND b.is_deleted = 0
+  AND CAST(b.actual_end_time AS DATE) = @report_date
+ORDER BY b.actual_end_time;
 GO
