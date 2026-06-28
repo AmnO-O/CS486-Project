@@ -556,3 +556,428 @@ WHERE b.is_deleted = 0
 GROUP BY s.space_type
 ORDER BY total_requests DESC;
 GO
+
+-- ============================================================
+-- Query 11: Available classrooms / computer labs with Projector
+--            and Whiteboard
+-- ============================================================
+-- --student-name: Cao Quang Hung
+-- --target-user: student
+-- --business-question: Which Classrooms or Computer laboratories
+--    in a specific building are currently Available for the next
+--    X hours and contain both a Projector and a Whiteboard?
+-- ============================================================
+-- Business question:
+--   Which Classrooms or Computer laboratories in a specific
+--   building are currently Available for the next X hours and
+--   contain both a Projector and a Whiteboard?
+--
+-- Target user(s):
+--   Student
+--
+-- Why useful:
+--   Students and lecturers can quickly find teaching or study
+--   spaces equipped with both a Projector (for presentations)
+--   and a Whiteboard (for brainstorming) that are free to book
+--   within their desired time window, helping them prepare
+--   effectively for classes or group work.
+-- ============================================================
+
+DECLARE @building    NVARCHAR(100) = N'Building B';
+DECLARE @hours_ahead INT            = 4;
+DECLARE @window_end  DATETIME2      = DATEADD(HOUR, @hours_ahead, GETDATE());
+
+SELECT
+    s.space_code,
+    s.space_name,
+    s.space_type,
+    s.building,
+    s.floor,
+    s.room_number,
+    s.capacity,
+    s.usage_policy
+FROM [dbo].[spaces] s
+WHERE s.space_type IN ('classroom', 'computer_lab')
+  AND s.building = @building
+  AND s.current_status = 'available'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM [dbo].[bookings] b
+      WHERE b.space_id = s.space_id
+        AND b.is_deleted = 0
+        AND b.status IN ('approved', 'checked_in', 'completed')
+        AND b.requested_start_time < @window_end
+        AND b.requested_end_time > GETDATE()
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM [dbo].[space_facilities] sf
+      INNER JOIN [dbo].[facilities] f ON sf.facility_id = f.facility_id
+      WHERE sf.space_id = s.space_id
+        AND f.name = N'Projector'
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM [dbo].[space_facilities] sf
+      INNER JOIN [dbo].[facilities] f ON sf.facility_id = f.facility_id
+      WHERE sf.space_id = s.space_id
+        AND f.name = N'Whiteboard'
+  )
+ORDER BY s.space_code;
+GO
+
+-- ============================================================
+-- Query 12: Seminar / Student Activity events on a given date
+--            with capacity >= 20
+-- ============================================================
+-- --student-name: Cao Quang Hung
+-- --target-user: student
+-- --business-question: Which "Seminar" or "Student Activity"
+--    events are happening on a given date in spaces with
+--    capacity of 20 or more people, and who is organizing them?
+-- ============================================================
+-- Business question:
+--   Which "Seminar" or "Student Activity" events are happening
+--   on a given date in spaces with a capacity of 20 or more
+--   people, and who is organizing them?
+--
+-- Target user(s):
+--   Student
+--
+-- Why useful:
+--   Students frequently look for open academic events or
+--   large student activities to attend on campus. Instead
+--   of checking physical bulletin boards, this query allows
+--   a student to dynamically discover events happening on a
+--   specific date, pinpoint the exact building and room
+--   number, and see the organizer's name and department in
+--   case they need to reach out for an itinerary.
+-- ============================================================
+
+DECLARE @event_date    DATE = '2026-06-22';
+DECLARE @min_capacity  INT  = 20;
+
+SELECT
+    b.booking_id,
+    b.purpose,
+    b.requested_start_time,
+    b.requested_end_time,
+    s.space_name,
+    s.space_type,
+    s.building,
+    s.floor,
+    s.room_number,
+    s.capacity,
+    u.full_name           AS organizer_name,
+    u.email               AS organizer_email,
+    d.name                AS organizer_department
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON b.space_id = s.space_id
+INNER JOIN [dbo].[users] u ON b.requester_id = u.user_id
+INNER JOIN [dbo].[departments] d ON u.department_id = d.department_id
+WHERE b.purpose IN ('seminar', 'student_activity')
+  AND CAST(b.requested_start_time AS DATE) = @event_date
+  AND s.capacity >= @min_capacity
+  AND b.is_deleted = 0
+  AND b.status IN ('checked_in', 'completed', 'approved')
+ORDER BY b.requested_start_time;
+GO
+
+-- ============================================================
+-- Query 13: Alternative spaces when usual room is blocked
+-- ============================================================
+-- --student-name: Cao Quang Hung
+-- --target-user: student
+-- --business-question: If my usual requested space is "Under
+--    Maintenance" or "Temporarily Closed", what are the top 3
+--    alternative spaces on the same floor with an equal or
+--    greater capacity?
+-- ============================================================
+-- Business question:
+--   If my usual requested space (the one I book most
+--   frequently) is currently "Under Maintenance" or
+--   "Temporarily Closed", what are the top 3 alternative
+--   spaces on the same floor with an equal or greater
+--   capacity?
+--
+-- Target user(s):
+--   Student
+--
+-- Why useful:
+--   Students often develop a routine around a "go-to" study
+--   room or lab. When they arrive and find it closed for
+--   maintenance or renovation, they waste time wandering
+--   floor-by-floor looking for backup space. This query learns
+--   which room the student uses most from their booking
+--   history, checks if it is unavailable, and proactively
+--   recommends up to 3 alternatives on the same floor with at
+--   least as many seats — ranked by capacity. This turns a
+--   frustrating walk-in discovery into a one-click
+--   recommendation.
+-- ============================================================
+
+DECLARE @student_email    NVARCHAR(255) = N't06.student1@university.edu';
+DECLARE @blocked_statuses VARCHAR(100)  = 'under_maintenance, temporarily_closed';
+
+WITH
+student_user AS (
+    SELECT [user_id]
+    FROM [dbo].[users]
+    WHERE [email] = @student_email
+),
+usual_space AS (
+    SELECT TOP 1
+        s.[space_id],
+        s.[space_code],
+        s.[space_name],
+        s.[space_type],
+        s.[building],
+        s.[floor],
+        s.[room_number],
+        s.[capacity],
+        s.[current_status],
+        COUNT(*) AS [times_booked]
+    FROM [dbo].[bookings] b
+    INNER JOIN [dbo].[spaces] s ON b.[space_id] = s.[space_id]
+    WHERE b.[requester_id] = (SELECT [user_id] FROM [student_user])
+      AND b.[is_deleted] = 0
+    GROUP BY
+        s.[space_id], s.[space_code], s.[space_name], s.[space_type],
+        s.[building], s.[floor], s.[room_number], s.[capacity], s.[current_status]
+    ORDER BY COUNT(*) DESC
+),
+alternatives AS (
+    SELECT TOP 3
+        s.[space_code],
+        s.[space_name],
+        s.[space_type],
+        s.[building],
+        s.[floor],
+        s.[room_number],
+        s.[capacity],
+        ROW_NUMBER() OVER (ORDER BY s.[capacity]) AS [alt_rank]
+    FROM [dbo].[spaces] s
+    WHERE s.[building] = (SELECT [building] FROM [usual_space])
+      AND s.[floor] = (SELECT [floor] FROM [usual_space])
+      AND s.[space_id] <> (SELECT [space_id] FROM [usual_space])
+      AND s.[capacity] >= (SELECT [capacity] FROM [usual_space])
+      AND s.[current_status] = 'available'
+    ORDER BY s.[capacity]
+)
+-- Branch 1: No booking history
+SELECT
+    NULL                      AS [space_code],
+    N'No booking history found for this student.' AS [space_name],
+    NULL                      AS [building],
+    NULL                      AS [floor],
+    NULL                      AS [room_number],
+    NULL                      AS [capacity],
+    NULL                      AS [current_status],
+    NULL                      AS [times_booked],
+    N'Verify the student email and try again.' AS [recommendation],
+    NULL                      AS [alt_rank],
+    NULL                      AS [alt_reason]
+WHERE (SELECT COUNT(*) FROM [usual_space]) = 0
+
+UNION ALL
+
+-- Branch 2: Usual space is available (not blocked)
+SELECT
+    us.[space_code],
+    us.[space_name],
+    us.[building],
+    us.[floor],
+    us.[room_number],
+    us.[capacity],
+    us.[current_status],
+    us.[times_booked],
+    N'Your usual space — available' AS [recommendation],
+    NULL                      AS [alt_rank],
+    NULL                      AS [alt_reason]
+FROM [usual_space] us
+WHERE us.[current_status] NOT IN (
+    SELECT [value] FROM STRING_SPLIT(@blocked_statuses, ',')
+)
+  AND (SELECT COUNT(*) FROM [usual_space]) > 0
+
+UNION ALL
+
+-- Branch 3: Usual space is blocked → show alternatives
+SELECT
+    a.[space_code],
+    a.[space_name],
+    a.[building],
+    a.[floor],
+    a.[room_number],
+    a.[capacity],
+    N'available'              AS [current_status],
+    NULL                      AS [times_booked],
+    N'Alternative #' + CAST(a.[alt_rank] AS NVARCHAR(10))
+                              AS [recommendation],
+    a.[alt_rank],
+    N'Capacity ' + CAST(a.[capacity] AS NVARCHAR(10))
+    + N' ≥ ' + CAST((SELECT us2.[capacity] FROM [usual_space] us2) AS NVARCHAR(10))
+    + N' (your usual room)'   AS [alt_reason]
+FROM [alternatives] a
+WHERE EXISTS (
+    SELECT 1 FROM [usual_space] us
+    WHERE us.[current_status] IN (
+        SELECT [value] FROM STRING_SPLIT(@blocked_statuses, ',')
+    )
+)
+  AND (SELECT COUNT(*) FROM [alternatives]) > 0
+
+UNION ALL
+
+-- Branch 4: Usual space is blocked but no alternatives found
+SELECT
+    us.[space_code],
+    us.[space_name],
+    us.[building],
+    us.[floor],
+    us.[room_number],
+    us.[capacity],
+    us.[current_status],
+    us.[times_booked],
+    N'Your usual space is UNAVAILABLE — no alternatives on this floor with >= capacity'
+                              AS [recommendation],
+    NULL                      AS [alt_rank],
+    NULL                      AS [alt_reason]
+FROM [usual_space] us
+WHERE us.[current_status] IN (
+    SELECT [value] FROM STRING_SPLIT(@blocked_statuses, ',')
+)
+  AND (SELECT COUNT(*) FROM [alternatives]) = 0
+  AND (SELECT COUNT(*) FROM [usual_space]) > 0
+ORDER BY [alt_rank];
+GO
+
+-- ============================================================
+-- Query 14: Lab availability by day of week
+-- ============================================================
+-- --student-name: Cao Quang Hung
+-- --target-user: student
+-- --business-question: Based on booking history from the past
+--    year, which days of the week have the most available
+--    project and computer laboratories?
+-- ============================================================
+-- Business question:
+--   Based on booking history from the past year, which days
+--   of the week have the most available project and computer
+--   laboratories?
+--
+-- Target user(s):
+--   Student
+--
+-- Why useful:
+--   A student looking for a lab to work in can quickly see
+--   which days of the week have the most free lab spaces,
+--   helping them plan their visit on a high-availability day.
+-- ============================================================
+
+DECLARE @space_types   VARCHAR(255) = 'computer_lab,project_lab';
+DECLARE @lookback_year INT          = 1;
+
+WITH lab_spaces AS (
+    SELECT [space_id]
+    FROM [dbo].[spaces]
+    WHERE [space_type] IN (
+        SELECT [value] FROM STRING_SPLIT(@space_types, ',')
+    )
+),
+total_labs AS (
+    SELECT COUNT(*) AS [cnt] FROM [lab_spaces]
+),
+booked_days AS (
+    SELECT DISTINCT
+        (DATEPART(WEEKDAY, b.[requested_start_time]) + @@DATEFIRST + 6) % 7 + 1
+            AS [dow_num],
+        b.[space_id]
+    FROM [dbo].[bookings] b
+    WHERE b.[space_id] IN (SELECT [space_id] FROM [lab_spaces])
+      AND b.[is_deleted] = 0
+      AND b.[status] IN ('approved', 'checked_in', 'completed')
+      AND b.[requested_start_time] >= DATEADD(YEAR, -@lookback_year, GETDATE())
+      AND b.[requested_start_time] < GETDATE()
+)
+SELECT
+    d.[day_name]                              AS [day_of_week],
+    t.[cnt] - COUNT(DISTINCT bd.[space_id])   AS [available_labs],
+    t.[cnt]                                   AS [total_labs],
+    CASE
+        WHEN COUNT(DISTINCT bd.[space_id]) = 0 THEN N'All labs available'
+        ELSE N'Reduced availability'
+    END                                       AS [status]
+FROM (VALUES
+    (1, N'Monday'), (2, N'Tuesday'), (3, N'Wednesday'),
+    (4, N'Thursday'), (5, N'Friday'), (6, N'Saturday'),
+    (7, N'Sunday')
+) AS d([dow_num], [day_name])
+CROSS JOIN [total_labs] t
+LEFT JOIN [booked_days] bd ON bd.[dow_num] = d.[dow_num]
+GROUP BY d.[dow_num], d.[day_name], t.[cnt]
+ORDER BY d.[dow_num];
+GO
+
+-- ============================================================
+-- Query 15: Department admin — upcoming approved bookings
+--            by department members
+-- ============================================================
+-- --student-name: Cao Quang Hung
+-- --target-user: department_administrator
+-- --business-question: What are the upcoming approved bookings
+--    made by users in my department for the next two weeks?
+-- ============================================================
+-- Business question:
+--   What are the upcoming approved bookings made by users in
+--   my department for the next two weeks?
+--
+-- Target user(s):
+--   Department Administrator
+--
+-- Why useful:
+--   Department Administrators can monitor all approved upcoming
+--   bookings made by members of their department — seeing who
+--   booked which space, for what purpose, and when. This helps
+--   them plan around department events, identify scheduling
+--   conflicts, and ensure fair resource allocation within the
+--   department.
+-- ============================================================
+
+DECLARE @admin_email    NVARCHAR(255) = N't06.deptadmin1@university.edu';
+DECLARE @lookahead_days INT           = 14;
+
+WITH admin_dept AS (
+    SELECT [department_id]
+    FROM [dbo].[users]
+    WHERE [email] = @admin_email
+      AND [role] = 'department_admin'
+)
+SELECT
+    b.[booking_id],
+    u.[full_name]            AS [requester_name],
+    u.[email]                AS [requester_email],
+    u.[role]                 AS [requester_role],
+    s.[space_code],
+    s.[space_name],
+    s.[space_type],
+    s.[building],
+    s.[floor],
+    s.[room_number],
+    s.[capacity],
+    b.[purpose],
+    b.[requested_start_time],
+    b.[requested_end_time],
+    b.[expected_participants],
+    DATEDIFF(DAY, GETDATE(), b.[requested_start_time])
+                             AS [days_until_start]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON b.[space_id] = s.[space_id]
+INNER JOIN [dbo].[users] u ON b.[requester_id] = u.[user_id]
+WHERE u.[department_id] = (SELECT [department_id] FROM [admin_dept])
+  AND b.[is_deleted] = 0
+  AND b.[status] = 'approved'
+  AND b.[requested_start_time] >= GETDATE()
+  AND b.[requested_start_time] < DATEADD(DAY, @lookahead_days, GETDATE())
+ORDER BY b.[requested_start_time];
+GO
