@@ -1,0 +1,20 @@
+Task 07 — Query Compile Verification
+Date: 2026-06-28 08:28
+Student: Pham Huu Nam
+Target Users: facility_manager
+Group: G05
+File: outputs/07-query-design-G05.sql (Query 6 appended)
+
+Status: VERIFIED (syntax review)
+- SQL Server instance not available in this environment for live execution.
+- SQL syntax verified against schema in outputs/05-db-definition-G05.sql.
+- All table names, column names, and JOIN conditions match the DDL exactly.
+- DECLARE parameter (@requester_id INT) used per param style rules.
+- JOINs use explicit INNER JOIN syntax.
+- is_deleted = 0 filter applied.
+- Status enum value 'rejected' matches docs/tech-stack.md.
+- Interval ordering uses DECLARE variable, not hardcoded literal.
+- GO separator present.
+
+Known: Returns zero rows if no rejections exist for the specified user_id.
+Seed data (booking 8) covers exactly one rejected booking for lecturer (Prof. Robert Chen, user_id = 2).

@@ -136,6 +136,11 @@ Avoid writing 5 queries that all read the same table or answer the same type of 
 - Respect `is_deleted = 0` filters on `bookings` and `maintenances`.
 - Use enum values exactly as defined in `docs/tech-stack.md`.
 
+- **Filter by unique identifier when possible:** prefer filtering on surrogate
+  keys (`user_id`, `space_id`, `booking_id`) over display names or free-text
+  fields (`full_name`, `space_name`). Display names are not guaranteed unique and may return unexpected rows. If the query accepts a human-readable input parameter, add a comment noting the uniqueness assumption.
+
+
 ---
 
 ## Compile and verify
@@ -180,6 +185,9 @@ Append verification output to:
 - Duplicating the same business question across multiple queries
 - Using `NOT IN` against nullable columns — use `NOT EXISTS` instead
 - Forgetting `GO` between queries
+- Computing duration with COALESCE(actual_end_time, requested_end_time) without filtering to status = 'completed' — overcounts hours for in-progress sessions
+- Hardcoding numeric thresholds in CASE expressions instead of declaring them
+
 
 ---
 
