@@ -10,10 +10,10 @@
 | Task 4 | Design validation | `outputs/04-design-validation-G05.md` | ✅ Approved | Task 3 |
 | Task 5 | SQL DDL | `outputs/05-db-definition-G05.sql` | ✅ Approved | Task 4 ✅ freeze |
 | Task 6 | Sample data | `outputs/06-sample-data-G05.sql` | ✅ Approved | Task 5 |
-| Task 7 | Query design | `outputs/07-query-design-G05.sql` | ⬜ Not started | Task 5 |
-| — | Logs agent improvement | `improvement_logs.md` | ⬜ ongoing | — |
+| Task 7 | Query design | `outputs/07-query-design-G05.sql` | ✅ Approved  | Task 5 |
+| — | Logs agent improvement | `improvement_logs.md` | ✅ Approved  | — |
 | — | Git repository | — | ✅ Approved | — |
-| — | Report PDF | `outputs/report-G05.pdf` | ⬜ Not started | All tasks |
+| — | Report PDF | `outputs/report-G05.pdf` | ✅ Approved  | All tasks |
 
 ## Status legend
 
