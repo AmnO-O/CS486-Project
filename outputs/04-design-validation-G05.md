@@ -2,391 +2,382 @@
 
 **Group:** G05
 **Course:** CS486 — Introduction to Database System
-**Date:** 2026-06-17
-**Status:** ✅ Pass — Schema freeze recommended after minor corrections
-**Re-validated:** 2026-06-18 (after Task 02 conceptual revision — attribute counts and type mapping updated)
-**Re-validated:** 2026-06-26 (cross-file consistency audit — naming anomaly documented)
+**Validation Date:** 2026-07-01
+**Status:** REVISION REQUIRED (minor documentation fixes)
 
 ---
 
-## 1. ERD Fidelity
+## 1. Validation Scope
 
-### 1.1 Entity Coverage
+This report evaluates the relational logical schema (`outputs/03-logical-design-G05.md`) against:
+- The conceptual ERD (`outputs/02-erd-design-G05.md`)
+- The business requirements (`outputs/01-business-req-analysis-G05.md`)
+- The entity registry (`docs/entity-registry.md`)
+- The schema registry (`docs/schema-registry.md`)
 
-| # | Entity (ERD) | Table (Logical) | Status |
-|---|---|---|---|
-| 1 | Departments | `departments` | ✅ Present |
-| 2 | Users | `users` | ✅ Present |
-| 3 | Spaces | `spaces` | ✅ Present |
-| 4 | Facilities | `facilities` | ✅ Present |
-| 5 | Space_Facilities | `space_facilities` | ✅ Present |
-| 6 | Bookings | `bookings` | ✅ Present |
-| 7 | Maintenance | `maintenance` | ✅ Present |
+---
 
-**Verdict:** ✅ PASS — All 7 entities from the ERD have corresponding tables in the logical schema.
+## 2. ERD Fidelity — Pass (with minor documentation notes)
 
-### 1.2 Attribute Coverage
+### 2.1 Entity Coverage
 
-| Table | ERD Attributes | Logical Columns | Match |
-|---|---|---|---|
-| departments | 2 | 4 | ⚠️ 2/4 |
-| users | 7 | 9 | ⚠️ 7/9 |
-| spaces | 10 | 12 | ⚠️ 10/12 |
-| facilities | 2 | 4 | ⚠️ 2/4 |
-| space_facilities | 3 | 3 | ✅ 3/3 |
-| bookings | 18 | 21 | ⚠️ 18/21 |
-| maintenance | 9 | 12 | ⚠️ 9/12 |
+Every entity defined in the ERD maps to exactly one table in the logical schema:
 
-**Note on mismatch:** The ERD is conceptual-level (per Task 02 SKILL.md Rule F) and intentionally omits:
-- Audit columns (`created_at`, `updated_at`) — present in all 7 logical tables
-- Soft-delete flag (`is_deleted`) — present in `bookings` and `maintenance` only
-
-These omitted columns are physical-layer implementation details, not conceptual attributes. The 3 columns in `space_facilities` have a perfect 3/3 match because the junction table carries no audit columns in either representation.
-
-**Verdict:** ✅ PASS — All conceptual attributes are present; the attribute count delta is intentional per the conceptual ERD convention.
-
-### 1.3 Data Type Consistency
-
-| Conceptual Type (ERD) | SQL Type (Logical) | Status |
+| ERD Entity | Logical Table | Status |
 |---|---|---|
-| int | INT | ✅ |
-| string | NVARCHAR(n) / VARCHAR(50) | ✅ |
-| datetime | DATETIME2 | ✅ |
-| boolean | BIT | ✅ |
+| Departments | `departments` | ✅ Present |
+| Users | `users` | ✅ Present |
+| Spaces | `spaces` | ✅ Present |
+| Facilities | `facilities` | ✅ Present |
+| Space_Facilities | `space_facilities` | ✅ Present |
+| Bookings | `bookings` | ✅ Present |
+| Booking_Approvals | `booking_approvals` | ✅ Present |
+| Booking_Sessions | `booking_sessions` | ✅ Present |
+| Maintenance | `maintenance` | ✅ Present |
 
-**Verdict:** ✅ PASS — Conceptual types in the ERD map consistently to their SQL Server counterparts in the logical schema.
+No orphan tables exist (every table has a corresponding ERD entity).
+
+### 2.2 Attribute Completeness
+
+Each entity's attributes (including audit columns and soft-delete flags) match exactly between the entity registry and the logical schema:
+
+| Entity | Attributes in Registry | Attributes in Logical Schema | Match |
+|---|---|---|---|
+| Departments | 4 | 4 | ✅ |
+| Users | 9 | 9 | ✅ |
+| Spaces | 12 | 12 | ✅ |
+| Facilities | 4 | 4 | ✅ |
+| Space_Facilities | 3 | 3 | ✅ |
+| Bookings | 11 | 11 | ✅ |
+| Booking_Approvals | 9 | 9 | ✅ |
+| Booking_Sessions | 10 | 10 | ✅ |
+| Maintenance | 11 | 11 | ✅ |
+
+All attribute names, data types, nullability, and constraints (PK, FK, UQ, CHECK, DEFAULT) are consistent between the entity registry and the logical schema.
+
+### 2.3 Relationship Registry Coverage
+
+All 11 relationships (R1–R11) from the ERD and entity-registry are represented in the logical schema:
+
+| Relationship | Logical Implementation | Status |
+|---|---|---|
+| R1: Departments → Users (1:N) | FK `users.department_id` → `departments.department_id` | ✅ |
+| R2: Users → Bookings (1:N) | FK `bookings.requester_id` → `users.user_id` | ✅ |
+| R3: Users → Booking_Approvals (1:N) | FK `booking_approvals.approver_id` → `users.user_id` | ✅ |
+| R4: Users → Booking_Sessions (1:N) | FK `booking_sessions.checked_in_by` → `users.user_id` | ✅ |
+| R5: Spaces → Bookings (1:N) | FK `bookings.space_id` → `spaces.space_id` | ✅ |
+| R6: Spaces ↔ Facilities (M:N) | Junction table `space_facilities` | ✅ |
+| R7: Spaces → Maintenance (1:N) | FK `maintenance.space_id` → `spaces.space_id` | ✅ |
+| R8: Users → Maintenance reporter (1:N) | FK `maintenance.reporter_id` → `users.user_id` | ✅ |
+| R9: Users → Maintenance assignee (1:N) | FK `maintenance.assigned_staff_id` → `users.user_id` (nullable) | ✅ |
+| R10: Bookings → Booking_Approvals (1:0..1) | FK `booking_approvals.booking_id` + UNIQUE | ✅ |
+| R11: Bookings → Booking_Sessions (1:0..1) | FK `booking_sessions.booking_id` + UNIQUE | ✅ |
 
 ---
 
-## 2. Business Rule Coverage
+## 3. Business Rule Coverage — Pass (with minor documentation gap)
 
-| BR # | Business Rule | Enforcement Mechanism | Level | Status |
+### 3.1 Business Rule Traceability Matrix
+
+| BR | Rule | Enforcement Mechanism | Level | Verdict |
 |---|---|---|---|---|
 | BR1 | No overlapping approved bookings | `uq_bookings_active_overlap` (filtered unique index) + `trg_bookings_prevent_overlap` (interval overlap trigger) | Database | ✅ Enforced |
-| BR2 | Unavailable spaces cannot be booked | `trg_bookings_check_space_status` — rejects if space status NOT IN ('available','in_use') | Database | ✅ Enforced |
-| BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` — compares against `spaces.capacity` | Database | ✅ Enforced |
-| BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` — checks for overlapping maintenance with status IN ('open','in_progress') | Database | ✅ Enforced |
-| BR5 | Maintenance assigned staff tracking | `assigned_staff_id` FK → `users(user_id)` | Database | ✅ Enforced |
-| BR6 | Decision recording (approver, time, note) | `trg_bookings_approval_validation` — enforces NOT NULL on status transition to approved/rejected | Database | ✅ Enforced |
-| BR7 | Rejection requires reason | `trg_bookings_rejection_reason` — enforces NOT NULL when status = 'rejected' | Database | ✅ Enforced |
-| BR8 | Actual time recording at check-in/completion | `actual_start_time`, `actual_end_time` columns + `trg_bookings_checkin_enforcement`, `trg_bookings_completion_enforcement` — enforce NOT NULL on status transition to checked_in/completed | Database | ✅ Enforced |
-| BR9 | Space condition tracking | `initial_condition`, `final_condition` columns + same triggers as BR8 | Database | ✅ Enforced |
+| BR2 | Unavailable spaces cannot be approved | `trg_booking_approvals_check_space` trigger | Database | ✅ Enforced |
+| BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` trigger | Database | ✅ Enforced |
+| BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` trigger | Database | ✅ Enforced |
+| BR5 | Maintenance assigned staff tracking | FK `assigned_staff_id` → `users.user_id` ON DELETE SET NULL | Database | ✅ Enforced |
+| BR6 | Decision recording (approver, time, decision) | `trg_booking_approvals_decision` trigger | Database | ✅ Enforced |
+| BR7 | Rejection requires reason | `trg_booking_approvals_rejection` trigger | Database | ✅ Enforced |
+| BR8 | Actual time recording at check-in/completion | `trg_booking_sessions_checkin` + `trg_booking_sessions_completion` triggers | Database | ✅ Enforced |
+| BR9 | Space condition tracking | `initial_condition`, `final_condition` + same triggers as BR8 | Database | ✅ Enforced |
 | BR10 | Unique identification (email, space_code) | UNIQUE constraints on `users(email)`, `spaces(space_code)`, `departments(name)`, `facilities(name)` | Database | ✅ Enforced |
-| BR11 | Soft deletes for bookings/maintenance | `is_deleted BIT NOT NULL DEFAULT 0` on both tables | Database | ✅ Enforced |
-| BR12 | Audit trail (created_at, updated_at) | All 7 tables have `created_at` + `updated_at` with `DEFAULT GETDATE()` | Database | ✅ Enforced |
-| BR13 | Historical records preservation | Soft delete + no hard DELETE operations | Application + DB | ✅ Enforced |
-| BR14 | Staff view reports (history, upcoming, maintenance, no-shows) | Indexes: `idx_bookings_requester_id`, `idx_bookings_status`, `idx_bookings_requested_start`, `idx_maintenance_status` | Database | ✅ Enforced |
+| BR11 | Soft deletes for audit trail | `is_deleted BIT NOT NULL DEFAULT 0` on bookings and maintenance | Database | ✅ Enforced |
+| BR12 | Audit trail (created_at, updated_at) | Both columns with `DEFAULT GETDATE()` on all 9 tables | Database | ✅ Enforced |
+| BR13 | Historical records preservation | Soft delete pattern; FKs use NO ACTION or SET NULL | App + DB | ✅ Enforced |
+| BR14 | Staff view reports | Supporting indexes present | Database | ✅ Enforced |
+| BR15 | Approver must be facility staff/manager | `trg_booking_approvals_check_role` trigger | Database | ✅ Enforced |
+| BR16 | Check-in staff must be facility staff/manager | `trg_booking_sessions_check_role` trigger | Database | ✅ Enforced |
+| BR17 | Assigned maintenance staff must be facility staff | `trg_maintenance_check_assignee_role` trigger | Database | ✅ Enforced |
+| BR18 | Cancellation validity and space cleanup | `trg_bookings_cancellation` trigger | Database | ✅ Enforced |
+| BR19 | Maintenance completion restores space status | `trg_maintenance_completion_space_status` trigger | Database | ✅ Enforced |
 
-**Coverage:**
-- 14/14 rules: ✅ Fully enforced at database level
+### 3.2 Finding: BR numbering gap
 
-**Verdict:** ✅ PASS — All 14 business rules are addressed and fully enforced at the database level.
-
----
-
-## 3. Key Adequacy
-
-### 3.1 Primary Keys
-
-| Table | PK Column | Strategy | Status |
-|---|---|---|---|
-| departments | `department_id` | INT IDENTITY(1,1) | ✅ |
-| users | `user_id` | INT IDENTITY(1,1) | ✅ |
-| spaces | `space_id` | INT IDENTITY(1,1) | ✅ |
-| facilities | `facility_id` | INT IDENTITY(1,1) | ✅ |
-| space_facilities | `(space_id, facility_id)` | Composite, no IDENTITY | ✅ |
-| bookings | `booking_id` | INT IDENTITY(1,1) | ✅ |
-| maintenance | `maintenance_id` | INT IDENTITY(1,1) | ✅ |
-
-### 3.2 Candidate / Business Keys with UNIQUE Constraints
-
-| Table | Business Key | UNIQUE Constraint | Status |
-|---|---|---|---|
-| departments | `name` | ✅ UNIQUE | ✅ |
-| users | `email` | ✅ UNIQUE | ✅ |
-| spaces | `space_code` | ✅ UNIQUE | ✅ |
-| facilities | `name` | ✅ UNIQUE | ✅ |
-
-### 3.3 Issues
-
-- **None identified.** All PKs are well-chosen. Surrogate keys are used appropriately. Business keys are protected by UNIQUE constraints.
-
-**Verdict:** ✅ PASS
+**F3 — Minor:** BR19 is defined in `docs/schema-registry.md` (line 334) and implemented via `trg_maintenance_completion_space_status`, but `outputs/03` §7 BR table (lines 301–319) lists only BR1–BR18. The trigger is documented in the trigger details section but not in the numbered BR table.
 
 ---
 
-## 4. Relationship Translation
+## 4. Key Adequacy — Pass
 
-### 4.1 ERD → Logical Mapping
+### 4.1 Primary Key Coverage
 
-| # | Relationship | ERD Cardinality | Logical Implementation | Participation (ERD) | Nullable | Status |
-|---|---|---|---|---|---|---|
-| R1 | Departments → Users | 1:N | FK `department_id` in `users` | Users total | NOT NULL | ✅ |
-| R2 | Users → Bookings (requester) | 1:N | FK `requester_id` in `bookings` | Bookings total | NOT NULL | ✅ |
-| R3 | Users → Bookings (approver) | 1:N | FK `approver_id` in `bookings` | Bookings partial | NULL | ✅ |
-| R4 | Users → Bookings (checked_in_by) | 1:N | FK `checked_in_by` in `bookings` | Bookings partial | NULL | ✅ |
-| R5 | Spaces → Bookings | 1:N | FK `space_id` in `bookings` | Bookings total | NOT NULL | ✅ |
-| R6 | Spaces ↔ Facilities | M:N | Junction `space_facilities` | Both partial | NOT NULL (PK) | ✅ |
-| R7 | Spaces → Maintenance | 1:N | FK `space_id` in `maintenance` | Maintenance total | NOT NULL | ✅ |
-| R8 | Users → Maintenance (reporter) | 1:N | FK `reporter_id` in `maintenance` | Maintenance total | NOT NULL | ✅ |
-| R9 | Users → Maintenance (assigned staff) | 1:N | FK `assigned_staff_id` in `maintenance` | Maintenance partial | NULL | ✅ |
-
-### 4.2 Referential Integrity Actions
-
-| FK | Parent | ON DELETE | ON UPDATE | Status |
+| Table | PK Column | Type | Surrogate? | Natural UQ Present |
 |---|---|---|---|---|
-| users.department_id | departments | NO ACTION | NO ACTION | ✅ Appropriate |
-| bookings.requester_id | users | NO ACTION | NO ACTION | ✅ Preserves audit trail |
-| bookings.approver_id | users | SET NULL | NO ACTION | ✅ Optional FK |
-| bookings.checked_in_by | users | SET NULL | NO ACTION | ✅ Optional FK |
-| bookings.space_id | spaces | NO ACTION | NO ACTION | ✅ Preserves audit trail |
-| space_facilities.space_id | spaces | CASCADE | NO ACTION | ✅ Junction cleanup |
-| space_facilities.facility_id | facilities | CASCADE | NO ACTION | ✅ Junction cleanup |
-| maintenance.reporter_id | users | NO ACTION | NO ACTION | ✅ Preserves audit trail |
-| maintenance.assigned_staff_id | users | SET NULL | NO ACTION | ✅ Optional FK |
-| maintenance.space_id | spaces | NO ACTION | NO ACTION | ✅ Preserves audit trail |
+| departments | department_id | INT IDENTITY | Yes | name (UQ) |
+| users | user_id | INT IDENTITY | Yes | email (UQ) |
+| spaces | space_id | INT IDENTITY | Yes | space_code (UQ) |
+| facilities | facility_id | INT IDENTITY | Yes | name (UQ) |
+| space_facilities | (space_id, facility_id) | Composite | N/A (natural composite) | — |
+| bookings | booking_id | INT IDENTITY | Yes | — (no natural key) |
+| booking_approvals | approval_id | INT IDENTITY | Yes | booking_id (UQ) |
+| booking_sessions | session_id | INT IDENTITY | Yes | booking_id (UQ) |
+| maintenance | maintenance_id | INT IDENTITY | Yes | — (no natural key) |
 
-**Verdict:** ✅ PASS — All 9 relationships correctly translated. Cardinalities and participation constraints match. ON DELETE actions are appropriate.
+### 4.2 Surrogate Key Justification
 
----
+- **departments, users, spaces, facilities**: Surrogate PKs with UNIQUE business keys — best-of-both-worlds hybrid approach. Consistent with `docs/design-decisions.md` decision on surrogate keys.
+- **bookings, maintenance**: No natural key exists (a booking is identified by the system; multiple attributes collectively define a unique row but no single business key).
+- **booking_approvals, booking_sessions**: No natural key; `booking_id` UNIQUE enforces the 1:0..1 parent relationship.
+- **space_facilities**: Natural composite PK `(space_id, facility_id)` — the most appropriate choice for a junction table.
 
-## 5. Constraint Completeness
-
-### 5.1 NOT NULL Constraints
-
-All mandatory columns per entity-registry have NOT NULL. No gaps.
-
-### 5.2 CHECK Constraints
-
-| Table | CHECK Constraint | Status |
-|---|---|---|
-| spaces | `capacity > 0` | ✅ |
-| spaces | `space_type IN (...6 values...)` | ✅ Matching tech-stack |
-| spaces | `current_status IN (...5 values...)` | ✅ Matching tech-stack |
-| users | `role IN (...6 values...)` | ✅ Matching tech-stack |
-| users | `account_status IN ('active','inactive','suspended')` | ✅ |
-| bookings | `requested_end_time > requested_start_time` | ✅ |
-| bookings | `purpose IN (...7 values...)` | ✅ Matching tech-stack |
-| bookings | `expected_participants > 0` | ✅ |
-| bookings | `status IN (...7 values...)` | ✅ Matching tech-stack |
-| maintenance | `status IN ('open','in_progress','resolved')` | ✅ |
-
-### 5.3 DEFAULT Values
-
-| Table | Column | DEFAULT | Status |
-|---|---|---|---|
-| All tables | `created_at` | `GETDATE()` | ✅ |
-| All tables | `updated_at` | `GETDATE()` | ✅ |
-| users | `account_status` | `'active'` | ✅ |
-| spaces | `current_status` | `'available'` | ✅ |
-| bookings | `status` | `'pending'` | ✅ |
-| bookings | `is_deleted` | `0` | ✅ |
-| maintenance | `status` | `'open'` | ✅ |
-| maintenance | `is_deleted` | `0` | ✅ |
-
-### 5.4 Gaps Identified
-
-| # | Gap | Severity | Recommendation |
-|---|---|---|---|
-| C1 | `space_facilities.quantity` nullable with no CHECK to ensure `quantity > 0` | Minor | Add `CHECK (quantity IS NULL OR quantity > 0)` |
-| C2 | No CHECK enforcing `completion_time >= start_time` on maintenance | Minor | Add `CHECK (completion_time IS NULL OR completion_time >= start_time)` |
-| C3 | No CHECK enforcing `actual_end_time >= actual_start_time` on bookings (when both present) | Minor | Add `CHECK (actual_end_time IS NULL OR actual_start_time IS NULL OR actual_end_time >= actual_start_time)` |
-
-**Verdict:** ✅ PASS with minor recommendations — all critical constraints are present.
+All tables have appropriate primary keys; surrogate keys are used only where justified.
 
 ---
 
-## 6. Naming Consistency
+## 5. Relationship Translation — Pass
+
+### 5.1 Translation Pattern Verification
+
+| Relationship | ERD Cardinality | Logical Implementation | Correctness |
+|---|---|---|---|
+| R1: Department → Users | 1:N (User total) | FK `users.department_id` NOT NULL | ✅ Correct |
+| R2: User → Bookings (requester) | 1:N (Bookings total) | FK `bookings.requester_id` NOT NULL | ✅ Correct |
+| R3: User → Booking_Approvals (approver) | 1:N (Approvals total) | FK `booking_approvals.approver_id` NOT NULL | ✅ Correct |
+| R4: User → Booking_Sessions (checks_in) | 1:N (Sessions total) | FK `booking_sessions.checked_in_by` NOT NULL | ✅ Correct |
+| R5: Spaces → Bookings | 1:N (Bookings total) | FK `bookings.space_id` NOT NULL | ✅ Correct |
+| R6: Spaces ↔ Facilities | M:N (both partial) | Junction table `space_facilities` with composite PK `(space_id, facility_id)` | ✅ Correct |
+| R7: Spaces → Maintenance | 1:N (Maintenance total) | FK `maintenance.space_id` NOT NULL | ✅ Correct |
+| R8: Users → Maintenance (reporter) | 1:N (Maintenance total) | FK `maintenance.reporter_id` NOT NULL | ✅ Correct |
+| R9: Users → Maintenance (assignee) | 1:N (Maintenance partial) | FK `maintenance.assigned_staff_id` NULLABLE | ✅ Correct |
+| R10: Bookings → Booking_Approvals | 1:0..1 (Approvals total) | FK `booking_approvals.booking_id` + UNIQUE | ✅ Correct |
+| R11: Bookings → Booking_Sessions | 1:0..1 (Sessions total) | FK `booking_sessions.booking_id` + UNIQUE | ✅ Correct |
+
+### 5.2 Referential Integrity Actions
+
+| FK | Child | Parent | ON DELETE | ON UPDATE | Justified? |
+|---|---|---|---|---|---|
+| department_id | users | departments | NO ACTION | NO ACTION | ✅ Prevents orphan users |
+| requester_id | bookings | users | NO ACTION | NO ACTION | ✅ Preserves booking history |
+| space_id | bookings | spaces | NO ACTION | NO ACTION | ✅ Preserves booking history |
+| space_id | space_facilities | spaces | CASCADE | NO ACTION | ✅ Junction child of space |
+| facility_id | space_facilities | facilities | CASCADE | NO ACTION | ✅ Junction child of facility |
+| booking_id | booking_approvals | bookings | CASCADE | NO ACTION | ✅ Dependent child |
+| approver_id | booking_approvals | users | NO ACTION | NO ACTION | ✅ Preserves approval history |
+| booking_id | booking_sessions | bookings | CASCADE | NO ACTION | ✅ Dependent child |
+| checked_in_by | booking_sessions | users | NO ACTION | NO ACTION | ✅ Preserves check-in history |
+| space_id | maintenance | spaces | NO ACTION | NO ACTION | ✅ Preserves maintenance history |
+| reporter_id | maintenance | users | NO ACTION | NO ACTION | ✅ Preserves reporter history |
+| assigned_staff_id | maintenance | users | SET NULL | NO ACTION | ✅ Nullifies assignment on user deletion |
+
+All referential integrity actions match the business requirements (preserve historical records, avoid SQL Server cascade path conflicts).
+
+---
+
+## 6. Constraint Completeness — Pass (with minor suggestion)
+
+### 6.1 Constraint Inventory
+
+Every CHECK, UNIQUE, NOT NULL, DEFAULT, and FK constraint from the entity-registry is present in the logical schema. Specific verification:
+
+| Constraint Type | Status |
+|---|---|
+| NOT NULL on all required columns | ✅ All mandatory attributes NOT NULL |
+| CHECK capacity > 0 on `spaces.capacity` | ✅ Present |
+| CHECK end > start on `bookings.requested_end_time` | ✅ Present |
+| CHECK expected_participants > 0 on `bookings.expected_participants` | ✅ Present |
+| CHECK on all status/role enums (8 total) | ✅ All present |
+| UNIQUE on business keys (4 total) | ✅ All present |
+| UNIQUE on 1:0..1 FKs (2 total) | ✅ All present |
+| DEFAULT values (statuses, timestamps, flags) | ✅ All correct |
+| FK constraints (12 total) | ✅ All present with correct parents |
+| Trigger-enforced rules (12 triggers) | ✅ All documented |
+
+### 6.2 Suggestion: Optional quantity CHECK
+
+**F5 — Minor:** The `quantity` column on `space_facilities` is nullable with no CHECK constraint. Consider adding `CHECK (quantity IS NULL OR quantity > 0)` to prevent zero or negative quantities if provided.
+
+---
+
+## 7. Naming Consistency — Pass
+
+### 7.1 Convention Audit
 
 | Convention | Expected | Actual | Status |
 |---|---|---|---|
-| Table names | snake_case, plural | `departments`, `users`, `spaces`, `facilities`, `space_facilities`, `bookings`, `maintenance` | ✅ |
-| Column names | snake_case | `actual_start_time`, `decision_note`, `problem_description` | ✅ |
-| PK naming | `<table_singular>_id` | `department_id`, `user_id`, `space_id`, `facility_id`, `booking_id`, `maintenance_id` | ✅ |
-| FK naming | Same as referenced PK | All FKs match referenced PK names | ✅ |
-| Junction table | `<tableA>_<tableB>` (alpha) | `space_facilities` (s < f) | ✅ |
-| Enum values | lowercase_underscores | `checked_in`, `no_show`, `under_maintenance` | ✅ |
-| Index naming | `idx_<table>_<column>` | `idx_bookings_space_id`, `idx_users_email` | ✅ |
-| Output naming | `-G05` suffix | `04-design-validation-G05.md` | ✅ |
+| Table names | snake_case, plural | `departments`, `booking_approvals`, `space_facilities` | ✅ |
+| Column names | snake_case | `actual_start_time`, `rejection_reason` | ✅ |
+| PK naming | `<table_singular>_id` | `booking_id`, `space_id`, `approval_id` | ✅ |
+| FK naming | Same as referenced PK | `space_id`, `department_id`, `requester_id` | ✅ |
+| Junction table | `<tableA>_<tableB>` (alpha) | `space_facilities` | ✅ |
+| Enum/status values | lowercase_with_underscores | `checked_in`, `under_maintenance`, `facility_staff` | ✅ |
+| Index naming | `idx_<table>_<column>` | `idx_bookings_space_id` | ✅ |
+| PK constraint | `PK_<table>` | `PK_bookings`, `PK_users` | ✅ |
+| UQ constraint | `UQ_<table>_<column>` | `UQ_users_email`, `UQ_booking_approvals_booking_id` | ✅ |
+| FK constraint | `FK_<child>_<col>` | `FK_bookings_space_id` | ✅ |
+| CK constraint | `CK_<table>_<rule>` | `CK_spaces_capacity`, `CK_bookings_status` | ✅ |
+| DF constraint | `DF_<table>_<column>` | `DF_bookings_is_deleted`, `DF_users_created_at` | ✅ |
+| Trigger | `trg_<table>_<action>` | `trg_bookings_prevent_overlap` | ✅ |
 
-**Anomaly flagged:**
-
-| File | Table Name | Convention Compliance |
-|---|---|---|
-| `outputs/03-logical-design-G05.md` | `maintenance` | Singular — violates plural rule |
-| `docs/entity-registry.md` | `maintenance` | Singular — violates plural rule |
-| `docs/schema-registry.md` | `maintenances` | Plural — follows convention |
-
-**Issue:** The table is named `maintenance` in the entity-registry and logical design, but `maintenances` in the schema-registry. This cross-file inconsistency must be resolved before DDL generation (Task 05) to avoid a table-name mismatch in the `CREATE TABLE` statement.
-
-**Recommendation:** Standardise on `maintenance` across all files (upstream convention, natural uncountable noun) or align schema-registry to `maintenance` for consistency.
-
-**Verdict:** ✅ PASS with minor cross-file naming inconsistency (see D6)
+All naming conventions are consistent and follow the conventions defined in `outputs/03` §6.
 
 ---
 
-## 7. Normalization (3NF)
+## 8. Normalization (≥ 3NF) — Pass
 
-### 7.1 1NF Check
+### 8.1 1NF Verification
 
-| Condition | Status |
-|---|---|
-| All columns atomic | ✅ All 7 tables |
-| No repeating groups | ✅ M:N resolved via junction table |
-| No multi-valued attributes | ✅ |
+All 9 tables have atomic columns with no repeating groups. The M:N relationship between spaces and facilities is resolved via the junction table `space_facilities`.
 
-### 7.2 2NF Check
-
-| Condition | Status |
-|---|---|
-| Single-column PKs (6 tables) | ✅ No partial dependency possible |
-| Composite PK (space_facilities) | ✅ `quantity` depends on full composite key |
-
-### 7.3 3NF Check
-
-| Table | Transitive Dependencies | Status |
+| Table | 1NF | Evidence |
 |---|---|---|
-| departments | None | ✅ |
-| users | None (`department_id` is FK, not transitive) | ✅ |
-| spaces | None | ✅ |
-| facilities | None | ✅ |
-| space_facilities | None | ✅ |
-| bookings | None (`rejection_reason` conceptually depends on `status` but enforced via trigger, not a functional dependency) | ✅ |
-| maintenance | None | ✅ |
+| departments | ✅ | Atomic columns |
+| users | ✅ | Atomic columns |
+| spaces | ✅ | Atomic columns |
+| facilities | ✅ | Atomic columns |
+| space_facilities | ✅ | Junction resolves M:N |
+| bookings | ✅ | Atomic columns |
+| booking_approvals | ✅ | Atomic columns |
+| booking_sessions | ✅ | Atomic columns |
+| maintenance | ✅ | Atomic columns |
 
-**Verdict:** ✅ PASS — All 7 tables satisfy 3NF.
+### 8.2 2NF Verification
 
----
+All tables with single-column PKs have no partial dependencies (impossible by definition). The only composite PK table (`space_facilities`) has `quantity` depending on the full composite key.
 
-## 8. Index Strategy Review
-
-### 8.1 Cross-File Index Consistency
-
-After synchronization on 2026-06-18, all indexes in `outputs/03-logical-design-G05.md` §4 are now present in `docs/schema-registry.md`:
-
-| Index | Table | Columns | Status |
+| Table | PK | 2NF | Evidence |
 |---|---|---|---|
-| `idx_bookings_checked_in_by` | bookings | checked_in_by | ✅ Added |
-| `idx_bookings_requested_start` | bookings | requested_start_time | ✅ Added |
-| `uq_bookings_active_overlap` | bookings | (space_id, requested_start_time) filtered | ✅ Added |
-| `idx_maintenance_assigned_staff_id` | maintenance | assigned_staff_id | ✅ Added |
+| departments | department_id (single) | ✅ | No partial dependency possible |
+| users | user_id (single) | ✅ | No partial dependency possible |
+| spaces | space_id (single) | ✅ | No partial dependency possible |
+| facilities | facility_id (single) | ✅ | No partial dependency possible |
+| space_facilities | (space_id, facility_id) | ✅ | quantity depends on full composite key |
+| bookings | booking_id (single) | ✅ | No partial dependency possible |
+| booking_approvals | approval_id (single) | ✅ | No partial dependency possible |
+| booking_sessions | session_id (single) | ✅ | No partial dependency possible |
+| maintenance | maintenance_id (single) | ✅ | No partial dependency possible |
 
-### 8.2 Index Name Inconsistency
+### 8.3 3NF Verification
 
-The naming conflict has been resolved: `idx_bookings_overlap` → `idx_bookings_time_range` in `docs/schema-registry.md`, matching `outputs/03`.
+No transitive dependencies exist. All non-key attributes depend solely on the primary key. Foreign key columns reference other tables and are not transitive dependencies (they are direct dependencies on the PK of the referenced table).
 
-### 8.3 Extra Index in schema-registry
+| Table | 3NF | Evidence |
+|---|---|---|
+| departments | ✅ | name depends solely on department_id |
+| users | ✅ | All attributes depend solely on user_id |
+| spaces | ✅ | All attributes depend solely on space_id |
+| facilities | ✅ | name depends solely on facility_id |
+| space_facilities | ✅ | quantity depends solely on (space_id, facility_id) |
+| bookings | ✅ | All attributes depend solely on booking_id |
+| booking_approvals | ✅ | All attributes depend solely on approval_id |
+| booking_sessions | ✅ | All attributes depend solely on session_id |
+| maintenance | ✅ | All attributes depend solely on maintenance_id |
 
-| Index | Present in schema-registry | Present in outputs/03 | Assessment |
-|---|---|---|---|
-| `idx_space_facilities_facility_id` | ✅ | ❌ | This index on the FK column of the junction table is a valid addition; FK indexes are recommended practice. No action needed. |
-
-**Verdict:** ✅ PASS — All indexes are now synchronized between `outputs/03` and `docs/schema-registry.md`.
+**Verdict:** All 9 tables satisfy 3NF. No partial or transitive dependencies detected.
 
 ---
 
 ## 9. Discrepancy Log
 
-| # | Severity | Category | Description | Source | Status |
-|---|---|---|---|---|---|
-| D1 | **Major** | Cross-file inconsistency | `docs/schema-registry.md` missing 4 indexes that are defined in `outputs/03` §4: `idx_bookings_checked_in_by`, `idx_bookings_requested_start`, `uq_bookings_active_overlap`, `idx_maintenance_assigned_staff_id` | outputs/03 vs schema-registry | ✅ Resolved 2026-06-18 |
-| D2 | **Major** | Cross-file inconsistency | Index `idx_bookings_time_range` in outputs/03 is named `idx_bookings_overlap` in schema-registry — same columns, different name | outputs/03 vs schema-registry | ✅ Resolved 2026-06-18 |
-| D3 | **Minor** | Missing CHECK | `space_facilities.quantity` missing `CHECK (quantity IS NULL OR quantity > 0)` | Logical design | ⏳ Deferred to DDL |
-| D4 | **Minor** | Missing CHECK | `maintenance` missing `CHECK (completion_time IS NULL OR completion_time >= start_time)` | Logical design | ⏳ Deferred to DDL |
-| D5 | **Minor** | Missing CHECK | `bookings` missing `CHECK (actual_end_time IS NULL OR actual_start_time IS NULL OR actual_end_time >= actual_start_time)` | Logical design | ⏳ Deferred to DDL |
-| D6 | **Minor** | Cross-file naming inconsistency | `maintenance` (entity-registry / logical design) vs `maintenances` (schema-registry) — table name differs between registry files | Cross-file audit 2026-06-26 | ⏳ Resolve before DDL (Task 05) |
+### Legend
+- **Critical**: Schema cannot correctly store or enforce required data.
+- **Major**: Missing constraint or relationship.
+- **Minor**: Documentation, naming, or optional improvement.
+
+### Findings
+
+| ID | Severity | Category | Description | Affected File(s) |
+|---|---|---|---|---|
+| F1 | Minor | Documentation | Entity-registry describes R3 participation as "Booking_Approvals partial". The correct interpretation is that Users' participation is partial (not all users are approvers), while Booking_Approvals' participation is total (every approval has an `approver_id` NOT NULL). The logical schema correctly uses NOT NULL; the registry note is ambiguous. | `docs/entity-registry.md` line 59 |
+| F2 | Minor | Documentation | Entity-registry describes R4 participation as "Booking_Sessions partial". Same issue as F1 — Users' participation is partial; Booking_Sessions' participation is total (`checked_in_by` NOT NULL). | `docs/entity-registry.md` line 61 |
+| F3 | Minor | Documentation | BR19 (Maintenance completion restores space status, implemented via `trg_maintenance_completion_space_status`) is listed in schema-registry BR coverage (line 334) and in `outputs/03` trigger details (line 338), but is absent from the numbered BR table in `outputs/03` §7 (lines 301–319) which ends at BR18. | `outputs/03-logical-design-G05.md` §7 |
+| F4 | Minor | Cross-file sync | Schema registry "Design validation passed" date (2026-06-17/18) predates the latest logical schema version (2026-07-01). Freeze status needs updating after this validation. | `docs/schema-registry.md` line 346 |
+| F5 | Minor | Constraint improvement | `space_facilities.quantity` has no CHECK constraint. Consider adding `CHECK (quantity IS NULL OR quantity > 0)` to prevent zero/negative values if provided. | `outputs/03-logical-design-G05.md` §2.5 |
+| F6 | Minor | Documentation | `outputs/03` §7 trigger descriptions use "Before insert/update" wording, but the triggers are AFTER triggers that use RAISERROR + ROLLBACK. The wording is misleading about trigger timing. | `outputs/03-logical-design-G05.md` §7 |
+
+### Findings Summary
+
+| Severity | Count |
+|---|---|
+| Critical | 0 |
+| Major | 0 |
+| Minor | 6 |
+
+No critical or major issues found. Six minor documentation/suggestion items identified.
 
 ---
 
 ## 10. Recommendations
 
-| Priority | Recommendation | Target |
+| Finding | Recommendation | Priority |
 |---|---|---|
-| **Medium** | Add `CHECK (quantity IS NULL OR quantity > 0)` to `space_facilities.quantity` | DDL (Task 05) |
-| **Medium** | Add `CHECK (completion_time IS NULL OR completion_time >= start_time)` to `maintenance` | DDL (Task 05) |
-| **Medium** | Add `CHECK (actual_end_time IS NULL OR actual_start_time IS NULL OR actual_end_time >= actual_start_time)` to `bookings` | DDL (Task 05) |
-| **Low** | Add trigger to enforce `checked_in_by` role IN ('facility_staff','facility_manager') — currently documented only at application level | Logical design |
-| **High** | Resolve `maintenance` vs `maintenances` naming conflict across all registry/docs before DDL | Cross-file (entity-registry, schema-registry, logical design) |
+| F1 | Update `docs/entity-registry.md` R3 participation note to clarify: "Users partial (not all users are approvers); Booking_Approvals total (every approval has an approver)". Use the same format as R9 (which correctly distinguishes the two sides). | Low |
+| F2 | Update `docs/entity-registry.md` R4 participation note to clarify: "Users partial (not all users are check-in staff); Booking_Sessions total (every session has a checked_in_by)". | Low |
+| F3 | Add BR19 to the numbered Business Rule table in `outputs/03-logical-design-G05.md` §7, referencing `trg_maintenance_completion_space_status`. Re-number existing BR19 (Cancellation) to BR18 if needed, or append as BR19. | Low |
+| F4 | Update `docs/schema-registry.md` "Design validation passed" date to 2026-07-01 and set SCHEMA FREEZE status after this validation report is accepted. | Low |
+| F5 | Add `CHECK (quantity IS NULL OR quantity > 0)` to `space_facilities.quantity` in `outputs/03` or in the DDL (Task 05). | Low |
+| F6 | Update trigger descriptions in `outputs/03-logical-design-G05.md` §7 to accurately state the trigger timing (e.g., "AFTER INSERT, UPDATE — validates and rolls back if constraint violated" instead of "Before insert/update..."). | Low |
 
 ---
 
-## 11. Schema Freeze Recommendation
+## 11. Cross-File Synchronization Check
 
-Based on this validation:
-
-### Passed Checks
-- ✅ ERD fidelity: 7/7 entities, all attributes, all relationships
-- ✅ Business rules: 14/14 addressed, 14 database-level enforced
-- ✅ Key adequacy: PKs, UNIQUE constraints all present
-- ✅ Relationship translation: All 9 relationships correct
-- ✅ Index consistency: outputs/03 and schema-registry.md synchronized
-- ⚠️ Naming conventions: Cross-file anomaly (D6 — `maintenance` vs `maintenances`)
-- ✅ Normalization: All tables in 3NF
-
-### Remaining Before Freeze
-1. Minor CHECK constraints (D3–D5) — deferred to DDL (Task 05)
-2. Naming anomaly (D6) — resolve before DDL to avoid `CREATE TABLE` mismatch
-
-### Recommendation
-**✅ SCHEMA FREEZE READY — Minor naming anomaly tracked. No structural blockers remain.**
-
-The schema is structurally sound, fully normalized, covers all business requirements, and has nearly synchronized documentation across all registry files (D6 tracked for resolution). No blockers remain for DDL generation.
-
----
-
-## 12. Entity and Schema Registry Lock Status
-
-| Registry | Current Status | Task 04 Action |
+| Pair | Status | Notes |
 |---|---|---|
-| `docs/entity-registry.md` | 🔒 Locked (since Task 03) | ✅ Verified — no changes needed |
-| `docs/schema-registry.md` | 🔒 Locked → ⚠️ Minor naming delta | ✅ Re-validated 2026-06-26 — table name `maintenances` conflicts with upstream `maintenance` (see D6). Index sync verified. Schema freeze stands with deferred resolution. |
+| `docs/entity-registry.md` ↔ `outputs/03-logical-design-G05.md` | ✅ In sync | All 9 entities and attributes match. |
+| `docs/schema-registry.md` ↔ `outputs/03-logical-design-G05.md` | ✅ In sync (with finding F3) | All 30 indexes match. Business rule coverage matches except BR19 numbering (see F3). |
+| `docs/schema-registry.md` ↔ `docs/entity-registry.md` | ✅ In sync | Table-to-entity mappings are correct. |
+| `outputs/01-business-req-analysis-G05.md` ↔ `outputs/03-logical-design-G05.md` | ✅ In sync | All 14 business rules + 5 derived rules (BR15–BR19) from logical design requirements are addressed. |
 
 ---
 
-## 13. Self-Check Checklist
+## 12. Registry Lock Status
 
-Per the updated SKILL.md — verify each item before finalizing:
+| Registry | Current Status | Date | Notes |
+|---|---|---|---|
+| `docs/entity-registry.md` | 🔒 Locked | 2026-07-01 | All 9 entities finalized. Minor documentation fixes recommended (F1, F2). |
+| `docs/schema-registry.md` | 🔒 Locked | 2026-07-01 | Schema registry regenerated with 9-table schema. Freeze date needs update (F4). |
 
-- [x] **Entity coverage** — every entity in the ERD (`outputs/02`) maps to exactly one table in the logical schema (`outputs/03`); no table exists without a corresponding ERD entity.
-- [x] **Attribute completeness** — for each entity, every conceptual attribute in the ERD/entity-registry appears as a column in its mapped table; attribute names, types, and nullability match.
-- [x] **Business rule coverage** — every business rule from `outputs/01` is traced to a schema mechanism (CHECK, UNIQUE, FK, trigger, etc.) and labelled *Enforced*, *Partial*, or *Missing*.
-- [x] **Relationship translation** — each relationship (R1–R9) in the entity-registry is translated with correct cardinality, correct participation, and correct referential-integrity actions.
-- [x] **Key adequacy** — every table has a PRIMARY KEY; natural/business candidate keys are declared as UNIQUE; surrogate keys are used only where no suitable natural key exists.
-- [x] **Normalization (3NF)** — no partial or transitive dependencies remain.
-- [x] **Discrepancy log quality** — each entry is classified as *Critical* / *Major* / *Minor* with a concrete, actionable recommendation.
-- [x] **Discrepancy log completeness** — every finding discovered during the checks above is recorded.
-- [x] **Cross-file synchronisation** — `docs/schema-registry.md` index sync verified; remaining naming delta documented as D6.
-- [x] **Lock status documented** — Section 12 above lists both registries with current status and actions taken.
-- [x] **Verdict summary** — SCHEMA FREEZE READY with deferred items (D3–D6).
+**Actions taken:** Both registries were cross-verified against `outputs/03-logical-design-G05.md` and are fully synchronized. Minor documentation clarifications recommended but no structural changes required.
 
 ---
 
-## 14. Idempotency
+## 13. Evaluation Criteria Summary
 
-- Running with the **same set of input files** (unchanged `outputs/01`, `outputs/02`, `outputs/03`, `docs/entity-registry.md`, `docs/schema-registry.md`) **must produce the same verdict and the same discrepancy log**.
-- Discrepancy entries must not contain **timestamps, random sort orders, or volatile identifiers** that would change between runs.
-- If a discrepancy is resolved between runs, the log must reflect the new state (e.g., entry moved to "Resolved") — but for identical inputs, output must be deterministic.
-
-**Verification:** This report is deterministic — all discrepancy entries are ordered by severity then category; no random/variable identifiers are used. D6's timestamp (`2026-06-26`) is part of its description context and is stable within the same re-validation session.
+| # | Criterion | Verdict |
+|---|---|---|
+| 1 | Correctly represents the ERD | **Pass** — All 9 entities, all attributes, all 11 relationships present with correct structure. |
+| 2 | Satisfies business rules | **Pass** — All 19 business rules are enforced via CHECK, UNIQUE, FK, triggers, or indexes. One minor documentation gap (BR19 numbering, F3). |
+| 3 | Uses appropriate keys | **Pass** — Every table has a PK. Business keys have UNIQUE constraints. Surrogate keys used only where justified. |
+| 4 | Uses appropriate relationships | **Pass** — 1:N via FK on many-side. M:N via junction table. 1:0..1 via FK + UNIQUE. Cardinalities and participation match ERD. |
+| 5 | Uses appropriate constraints | **Pass** — NOT NULL, UNIQUE, CHECK, DEFAULT, referential integrity actions all correctly applied. One optional improvement (F5: quantity CHECK). |
 
 ---
 
-## 15. Validation Checklist
+## 14. Self-Check Checklist
 
-- [x] All 7 entities from ERD → 7 tables in logical schema
-- [x] All ERD conceptual attributes present with matching physical types (intentional delta on audit/soft-delete columns)
-- [x] All 9 relationships correctly translated (FK or junction table)
-- [x] Participation constraints (total/partial) match nullable/NOT NULL
-- [x] All PKs defined with appropriate strategy
-- [x] Business keys have UNIQUE constraints
-- [x] All 14 business rules addressed
-- [x] CHECK constraints for all enum values
-- [x] Default values for status fields
-- [x] Naming conventions consistent
-- [x] No partial or transitive dependencies (3NF)
-- [x] Indexes support FK joins, overlap detection, and filtering
-- [x] Schema-registry indexes synchronized with logical design (D1/D2 resolved 2026-06-18)
+- [x] **Entity coverage** — every entity in the ERD maps to exactly one table in the logical schema; no orphan tables.
+- [x] **Attribute completeness** — every conceptual attribute appears in the mapped table with matching name, type, and nullability.
+- [x] **Business rule coverage** — every business rule is traced to a schema mechanism and labelled Enforced.
+- [x] **Relationship translation** — each of R1–R11 is translated with correct cardinality, participation, and referential integrity.
+- [x] **Key adequacy** — every table has a PRIMARY KEY; natural candidate keys have UNIQUE constraints; surrogate keys justified.
+- [x] **Normalization (3NF)** — no partial or transitive dependencies; all 9 tables satisfy 3NF.
+- [x] **Discrepancy log quality** — each entry classified as Critical/Major/Minor with actionable recommendation; no vague entries.
+- [x] **Discrepancy log completeness** — all findings discovered during checks are recorded (6 findings).
+- [x] **Cross-file synchronisation** — all file pairs verified; F3 (BR19 numbering) is the only delta, logged in discrepancy log.
+- [x] **Lock status documented** — Section 12 lists both registries with current status and actions taken.
+- [x] **Verdict summary** — stated below.
+
+---
+
+## 15. Verdict
+
+**SCHEMA FREEZE READY — with deferred minor documentation fixes.**
+
+The logical schema (`outputs/03-logical-design-G05.md`) correctly represents the ERD, satisfies all 19 business rules, uses appropriate keys and relationships, includes proper constraints, and is normalized to 3NF. The six findings (F1–F6) are all minor documentation or optional improvement items — none blocks a schema freeze.
+
+**Recommended action:** Accept the schema as validated. Address F1–F6 before or during DDL generation (Task 05) since those are documentation-only changes. The schema registry freeze date (F4) should be updated after this validation report is accepted.
 
 ---
 
 *Generated for CS486 Group G05 — Campus Space Management System*
+*Validation performed against: outputs/01 v2026-06-12, outputs/02 v2026-06-18, outputs/03 v2026-07-01, entity-registry v2026-07-01, schema-registry v2026-07-01*

@@ -345,7 +345,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | Schema registry populated | ✅ 🔒 | Task 03 (2026-07-01) — regenerated with 9-table schema |
 | Design validation passed | ✅ | Task 04 (2026-06-17) — re-validated 2026-06-18 |
 | Index sync | ✅ Resolved | 2026-06-18 |
-| **SCHEMA FREEZE** | ✅ 🔒 | — |
+| **SCHEMA FREEZE** |  | — |
 
 ---
 

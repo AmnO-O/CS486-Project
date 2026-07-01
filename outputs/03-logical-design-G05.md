@@ -341,11 +341,10 @@ The following triggers enforce cross-row and cross-table business rules that can
 **Note on overlap detection (BR1):** The filtered unique index `uq_bookings_active_overlap` provides a lightweight pre-check for exact (space_id, requested_start_time) duplicates on confirmed bookings, while `trg_bookings_prevent_overlap` handles the general interval-overlap case. Both operate at the database level, ensuring data integrity even with concurrent submissions.
 
 ---
-
 ## 8. Deviations from ERD (with Justification)
 
 | # | ERD Element | Logical Design | Deviation | Justification |
-|---|---|---|---|---|---|
+|---|---|---|---|---|
 | D1 | `docs/entity-registry.md` lists `account_status` as provisional enum | Finalized as `CHECK IN ('active','inactive','suspended')` with DEFAULT 'active' | Finalization | Requirement §2 states "Account Status" exists but does not enumerate values. Standard account lifecycle values chosen. |
 | D2 | ERD does not show explicit `is_deleted` on maintenance | `is_deleted BIT NOT NULL DEFAULT 0` on maintenance | Included | Assumption A4 requires soft deletion for both bookings and maintenance. |
 | D3 | ERD does not define triggers for check-in/completion fields | `trg_booking_sessions_checkin` and `trg_booking_sessions_completion` added | Added | Business rules BR8 and BR9 require actual time and condition recording. The new `booking_sessions` table has nullable columns; triggers enforce NOT NULL on status transition, providing defense-in-depth beyond the application layer. |
