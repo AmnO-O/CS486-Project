@@ -368,10 +368,40 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 
 ---
 
+### Decision: Split Bookings into three tables (SRP refactor)
+
+**Task:** Post-Task 5 (Architectural refactor)
+**Date:** 2026-06-18
+
+**Problem:** The `bookings` table violated Single Responsibility Principle — it contained attributes for booking requests (space, time, purpose), approval decisions (approver_id, decision_time, rejection_reason), and session check-in/out (actual_start_time, checked_in_by, initial/final_condition). When a booking was in `pending` status, up to 10 attributes were NULL, causing schema bloat and making the lifecycle hard to reason about.
+
+**Options considered:**
+- Option A: Keep monolithic `bookings` table — simpler but violates SRP; many nullable columns; no status-change history
+- Option B: Split into `bookings` (request) + `booking_approvals` (decision) + `booking_sessions` (check-in/out) — each table focuses on one lifecycle phase; no unnecessary NULLs
+
+**Decision:** We chose Option B because:
+- Each table adheres to SRP — only columns relevant to its phase
+- Eliminates NULL sprawl (approval/session columns only exist when applicable)
+- Booking_Approvals captures the approval decision (approved/rejected) with a clean `decision` column replacing the old `status`-based inference
+- Booking_Sessions captures the check-in/out workflow with mandatory `actual_start_time` and `checked_in_by` at check-in time
+- `booking_id` is a UNIQUE FK in both child tables, enforcing 1:0..1 cardinality
+
+**Impact:**
+- `bookings` loses 10 attributes; gains no new ones (plus `is_deleted` restored per BR11)
+- Existing triggers and indexes on `bookings` must be re-evaluated and migrated to the appropriate new tables
+- Application code for approval and check-in flows must target the new tables
+- Reporting queries now JOIN `bookings` → `booking_approvals` / `booking_sessions` for approval/session data
+- `docs/entity-registry.md` updated; `docs/schema-registry.md` and `outputs/` pending update
+
+**Requirement reference:** SRP design principle; BR6 (decision recording), BR7 (rejection reason), BR8 (actual time recording), BR9 (space condition tracking)
+
+---
+
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---|
+| 2026-06-18 | Split `bookings` into `bookings` + `booking_approvals` + `booking_sessions` (SRP refactor) | Agent | Post-Task 5 refactor |
 | 2026-06-18 | Added `updated_at` auto-stamp triggers (6 tables) — `AFTER UPDATE` keeps timestamps current beyond the initial INSERT | Agent | Task 05 DDL |
 | 2026-06-18 | Maintenance-completion trigger: `NOT EXISTS` check prevents premature space-status flip with concurrent tickets | Agent | Task 05 DDL |
 | 2026-06-18 | BR7 trigger scoped to status transition — `LEFT JOIN deleted` prevents false rejections on non-status updates | Agent | Task 05 DDL |

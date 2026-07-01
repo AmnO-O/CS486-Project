@@ -45,7 +45,7 @@ Column rules:
 
 Discovery-status legend: ⬜ draft · 🔄 refining · 🔒 locked (post-Task 03).
 
-> ✅ **All entities below are 🔒 locked as of Task 03 (2026-06-15).**
+> ✅ **All entities below are 🔒 locked as of Task 03 (2026-06-15) — except Bookings (🔄 refining) and new entities (⬜ draft).**
 
 ---
 ## Relationships registry
@@ -56,13 +56,15 @@ _(Populate from `outputs/01` §Relationships; confirm cardinalities in Task 2.)_
 |---|---|---|---|---|
 | R1 | Departments → Users | 1:N | Users total (each user belongs to a department) | outputs/01 §2, §3.3 |
 | R2 | Users → Bookings (requester) | 1:N | Bookings total on requester | outputs/01 §4.1 |
-| R3 | Users → Bookings (approver) | 1:N | Bookings partial (approver set only after approval/rejection) | outputs/01 §5.1 |
-| R4 | Users → Bookings (checked-in by) | 1:N | Bookings partial (set only at check-in) | outputs/01 §4.3 |
+| R3 | Users → Booking_Approvals (approver) | 1:N | Booking_Approvals partial (approver set only when a decision is made) | outputs/01 §5.1 |
+| R4 | Users → Booking_Sessions (checks_in) | 1:N | Booking_Sessions partial (set only at check-in) | outputs/01 §4.3 |
 | R5 | Spaces → Bookings | 1:N | Bookings total on space | outputs/01 §4.1 |
 | R6 | Spaces ↔ Facilities | M:N (via Space_Facilities) | both partial | outputs/01 §3.2 |
 | R7 | Spaces → Maintenance | 1:N | Maintenance total on space | outputs/01 §6.2 |
 | R8 | Users → Maintenance (reporter) | 1:N | Maintenance total on reporter | outputs/01 §6.2 |
 | R9 | Users → Maintenance (assigned staff) | 1:N | Maintenance partial (assignee may be set later) | outputs/01 §6.2 |
+| R10 | Bookings → Booking_Approvals | 1:0..1 | Booking_Approvals total (each decision belongs to exactly one booking) | outputs/01 §5 |
+| R11 | Bookings → Booking_Sessions | 1:0..1 | Booking_Sessions total (each session belongs to exactly one booking) | outputs/01 §4.3 |
 
 ---
 
@@ -189,9 +191,9 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 ### Bookings
 
-**Description:** Space-usage requests with approval, check-in/out, and session-completion lifecycle.
+**Description:** Space-usage requests submitted by users, tracking scheduling and lifecycle status.
 **Maps to table:** `bookings`
-**Source:** outputs/01 §4, §5
+**Source:** outputs/01 §4
 
 **Candidate keys:**
 - `booking_id` (surrogate, PK)
@@ -208,19 +210,58 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | purpose | VARCHAR(50) | NO | — | `CHECK IN ('lecture','examination','seminar','workshop','meeting','student_activity','administrative_event')` | |
 | expected_participants | INT | NO | — | `CHECK (expected_participants > 0)` | vs capacity (BR3) |
 | status | VARCHAR(50) | NO | — | `CHECK IN ('pending','approved','rejected','cancelled','checked_in','completed','no_show')` | DEFAULT 'pending' |
-| approver_id | INT | YES | FK | `FK → users.user_id` | Set on decision (R3) |
-| decision_time | DATETIME2 | YES | — | — | |
-| decision_note | NVARCHAR(MAX) | YES | — | — | |
-| rejection_reason | NVARCHAR(MAX) | YES | — | — | See Q1 |
-| actual_start_time | DATETIME2 | YES | — | — | At check-in |
-| checked_in_by | INT | YES | FK | `FK → users.user_id` | Staff (R4) |
-| initial_condition | NVARCHAR(MAX) | YES | — | — | At check-in |
-| actual_end_time | DATETIME2 | YES | — | — | At completion |
-| final_condition | NVARCHAR(MAX) | YES | — | — | At completion |
-| usage_notes | NVARCHAR(MAX) | YES | — | — | At completion |
 | is_deleted | BIT | NO | — | — | DEFAULT 0 (A4, soft delete) |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
+
+---
+
+### Booking_Approvals
+
+**Description:** Record of an approval or rejection decision made by authorized staff on a booking request.
+**Maps to table:** `booking_approvals`
+**Source:** outputs/01 §5
+
+**Candidate keys:**
+- `approval_id` (surrogate, PK)
+- `booking_id` (business, UNIQUE)
+
+**Attributes:**
+
+| Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
+|---|---|---|---|---|---|
+| approval_id | INT | NO | PK | — | IDENTITY(1,1) |
+| booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | One decision per booking |
+| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager |
+| decision_time | DATETIME2 | NO | — | — | |
+| decision | VARCHAR(50) | NO | — | `CHECK IN ('approved','rejected')` | |
+| rejection_reason | NVARCHAR(MAX) | YES | — | — | Required when decision = 'rejected' (BR7) |
+| decision_note | NVARCHAR(MAX) | YES | — | — | |
+
+---
+
+### Booking_Sessions
+
+**Description:** Check-in and check-out session tracking for an approved booking.
+**Maps to table:** `booking_sessions`
+**Source:** outputs/01 §4.3
+
+**Candidate keys:**
+- `session_id` (surrogate, PK)
+- `booking_id` (business, UNIQUE)
+
+**Attributes:**
+
+| Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
+|---|---|---|---|---|---|
+| session_id | INT | NO | PK | — | IDENTITY(1,1) |
+| booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | One session per booking |
+| actual_start_time | DATETIME2 | NO | — | — | |
+| checked_in_by | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager |
+| initial_condition | NVARCHAR(MAX) | YES | — | — | |
+| actual_end_time | DATETIME2 | YES | — | — | |
+| final_condition | NVARCHAR(MAX) | YES | — | — | |
+| usage_notes | NVARCHAR(MAX) | YES | — | — | |
 
 ---
 
@@ -256,6 +297,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-06-18 | Split Bookings into Bookings + Booking_Approvals + Booking_Sessions per SRP | Architectural refactor based on new_proposed_erd.md |
 | 2026-06-15 | Revision 1: no entity changes — trigger/index decisions captured in schema-registry | Task 03 revision |
 | 2026-06-15 | Finalized all attribute types, constraints, and locked (🔒) all entities | Task 03 registry maintenance — logical design |
 | 2026-06-13 | Confirmed and refined 9 relationships and 7 entities for ERD generation | Task 02 registry maintenance |
