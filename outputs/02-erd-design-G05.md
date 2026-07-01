@@ -38,8 +38,8 @@ erDiagram
     Spaces ||--o{ Maintenance : "requires_maintenance"
     Users ||--o{ Maintenance : "reports"
     Users |o--o{ Maintenance : "assigned_to"
-    Bookings ||--o| Booking_Approvals : "has_decision"
-    Bookings ||--o| Booking_Sessions : "has_session"
+    Bookings ||--o| Booking_Approvals : "is_reviewed_in"
+    Bookings ||--o| Booking_Sessions : "is_executed_as"
 ```
 
 ### Diagram 2 — Full Detail
@@ -139,8 +139,8 @@ erDiagram
     Spaces ||--o{ Maintenance : "requires_maintenance"
     Users ||--o{ Maintenance : "reports"
     Users |o--o{ Maintenance : "assigned_to"
-    Bookings ||--o| Booking_Approvals : "has_decision"
-    Bookings ||--o| Booking_Sessions : "has_session"
+    Bookings ||--o| Booking_Approvals : "is_reviewed_in"
+    Bookings ||--o| Booking_Sessions : "is_executed_as"
 ```
 
 ---
