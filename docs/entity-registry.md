@@ -45,7 +45,7 @@ Column rules:
 
 Discovery-status legend: ⬜ draft · 🔄 refining · 🔒 locked (post-Task 03).
 
-> ✅ **All entities below are 🔒 locked as of Task 03 (2026-06-15) — except Bookings (🔄 refining) and new entities (⬜ draft).**
+> ✅ **All entities below are 🔒 locked as of Task 03 (2026-07-01).**
 
 ---
 ## Relationships registry
@@ -237,6 +237,8 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | decision | VARCHAR(50) | NO | — | `CHECK IN ('approved','rejected')` | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Required when decision = 'rejected' (BR7) |
 | decision_note | NVARCHAR(MAX) | YES | — | — | |
+| created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+| updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
 
 ---
 
@@ -262,6 +264,8 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | actual_end_time | DATETIME2 | YES | — | — | |
 | final_condition | NVARCHAR(MAX) | YES | — | — | |
 | usage_notes | NVARCHAR(MAX) | YES | — | — | |
+| created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+| updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
 
 ---
 
@@ -297,6 +301,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-07-01 | Finalized and locked all 9 entities — added audit columns to Booking_Approvals and Booking_Sessions | Task 03 regeneration — logical design finalization |
 | 2026-06-18 | Split Bookings into Bookings + Booking_Approvals + Booking_Sessions per SRP | Architectural refactor based on new_proposed_erd.md |
 | 2026-06-15 | Revision 1: no entity changes — trigger/index decisions captured in schema-registry | Task 03 revision |
 | 2026-06-15 | Finalized all attribute types, constraints, and locked (🔒) all entities | Task 03 registry maintenance — logical design |
