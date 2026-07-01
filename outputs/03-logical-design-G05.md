@@ -188,6 +188,7 @@ Composite PK: (space_id, facility_id). This junction table resolves the M:N rela
 | PK_spaces | spaces(space_id) | CLUSTERED | — | PK | Default clustered PK |
 | PK_facilities | facilities(facility_id) | CLUSTERED | — | PK | Default clustered PK |
 | PK_space_facilities | space_facilities(space_id, facility_id) | CLUSTERED | — | PK | Default clustered composite PK |
+| idx_space_facilities_facility_id | space_facilities(facility_id) | NONCLUSTERED | — | FK join, facility→space lookup (R6) | Accelerate queries filtering by facility_id alone |
 | PK_bookings | bookings(booking_id) | CLUSTERED | — | PK | Default clustered PK |
 | PK_booking_approvals | booking_approvals(approval_id) | CLUSTERED | — | PK | Default clustered PK |
 | PK_booking_sessions | booking_sessions(session_id) | CLUSTERED | — | PK | Default clustered PK |
@@ -299,19 +300,23 @@ Data types follow `docs/tech-stack.md`: INT IDENTITY for surrogate PKs, NVARCHAR
 | BR | Business Rule | Object Name | Implementation | Enforcement Level |
 |----|-------------|-------------|----------------|-------------------|
 | BR1 | No overlapping approved bookings | `uq_bookings_active_overlap` + `trg_bookings_prevent_overlap` | Filtered unique index prevents exact (space_id, start_time) collisions; AFTER INSERT/UPDATE trigger checks interval overlap against existing confirmed bookings | Database (index + trigger) |
-| BR2 | Unavailable spaces cannot be booked | `trg_bookings_check_space_status` | AFTER INSERT/UPDATE trigger reads `spaces.current_status` and rejects if NOT IN ('available','in_use') | Database (trigger) |
+| BR2 | Unavailable spaces cannot be approved | `trg_booking_approvals_check_space` | AFTER INSERT trigger on `booking_approvals` checks space availability via `spaces.current_status` when `decision='approved'`; pending bookings allowed on any space | Database (trigger) |
 | BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` | AFTER INSERT/UPDATE trigger rejects if `expected_participants > (SELECT capacity FROM spaces WHERE space_id = new.space_id)` | Database (trigger) |
 | BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` | AFTER INSERT/UPDATE trigger rejects if overlapping maintenance record exists for the same space with status IN ('open','in_progress') | Database (trigger) |
 | BR5 | Maintenance assigned staff tracking | FK_maintenance_assigned_staff | `assigned_staff_id` FK → `users(user_id)` with ON DELETE SET NULL | FK constraint |
 | BR6 | Decision recording (approver, time, decision) | `trg_booking_approvals_decision` | AFTER INSERT trigger on `booking_approvals` enforces `approver_id`, `decision_time` are NOT NULL; updates `bookings.status` to match `decision` | Database (trigger) |
 | BR7 | Rejection requires reason | `trg_booking_approvals_rejection` | AFTER INSERT trigger on `booking_approvals` enforces `rejection_reason IS NOT NULL` when `decision = 'rejected'` | Database (trigger) |
-| BR8 | Actual time recording | `trg_booking_sessions_checkin` + `trg_booking_sessions_completion` | INSERT trigger on `booking_sessions` validates `actual_start_time` is set; UPDATE trigger validates `actual_end_time` is set at completion and updates `bookings.status` | Database (trigger) |
+| BR8 | Actual time recording | `trg_booking_sessions_checkin` + `trg_booking_sessions_completion` | INSERT trigger on `booking_sessions` validates booking is `'approved'` and sets `actual_start_time`; UPDATE trigger validates `actual_end_time` is set at completion and updates `bookings.status` | Database (trigger) |
 | BR9 | Space condition tracking | Same as BR8 triggers | INSERT trigger validates `initial_condition` is provided at check-in; UPDATE trigger validates `final_condition` is provided at completion | Database (trigger) |
 | BR10 | Unique identification (email, space_code) | `UQ_users_email`, `UQ_spaces_space_code`, `UQ_departments_name`, `UQ_facilities_name` | UNIQUE constraints on business key columns | Database (UNIQUE index) |
 | BR11 | Soft deletes for audit trail | `DF_bookings_is_deleted`, `DF_maintenance_is_deleted` | `is_deleted BIT NOT NULL DEFAULT 0` on bookings and maintenance; no hard DELETE operations | Database (DEFAULT) |
 | BR12 | Audit trail (created_at, updated_at) | Per-table columns | All 9 tables have `created_at DATETIME2 NOT NULL DEFAULT GETDATE()` and `updated_at DATETIME2 NOT NULL DEFAULT GETDATE()` | Database (DEFAULT) |
 | BR13 | Historical records preservation | Soft-delete pattern | Soft delete (`is_deleted = 1`) instead of hard DELETE; all FKs use NO ACTION or SET NULL to preserve references | Application + Database |
 | BR14 | Staff views (history, upcoming, maintenance, no-shows) | Multiple indexes | `idx_bookings_requester_id`, `idx_bookings_status`, `idx_bookings_requested_start`, `idx_maintenance_status`, etc. | Database (indexes) |
+| BR15 | Approver must be facility staff or facility manager | `trg_booking_approvals_check_role` | AFTER INSERT trigger on `booking_approvals` checks `users.role` of `approver_id` and rejects if NOT IN ('facility_staff','facility_manager') | Database (trigger) |
+| BR16 | Check-in staff must be facility staff or facility manager | `trg_booking_sessions_check_role` | AFTER INSERT trigger on `booking_sessions` checks `users.role` of `checked_in_by` and rejects if NOT IN ('facility_staff','facility_manager') | Database (trigger) |
+| BR17 | Assigned maintenance staff must be facility staff | `trg_maintenance_check_assignee_role` | AFTER INSERT, UPDATE trigger on `maintenance` checks `users.role` of `assigned_staff_id` when non-NULL and rejects if NOT IN ('facility_staff') | Database (trigger) |
+| BR18 | Cancellation validity and space cleanup | `trg_bookings_cancellation` | AFTER UPDATE trigger on `bookings` validates cancellation only from `pending` or `approved`; sets `spaces.current_status = 'available'` if the related space was `'in_use'` | Database (trigger) |
 
 ### Trigger Implementation Details
 
@@ -320,14 +325,18 @@ The following triggers enforce cross-row and cross-table business rules that can
 | Trigger | Fires On | Enforcement Logic |
 |---------|----------|-------------------|
 | `trg_bookings_prevent_overlap` | bookings INSERT, UPDATE | Before insert/update, check if any existing row with same `space_id` has status IN ('approved','checked_in','completed'), `is_deleted = 0`, and overlapping time range: `requested_start_time < new.requested_end_time AND requested_end_time > new.requested_start_time`. If overlap found, RAISERROR and rollback. |
-| `trg_bookings_check_space_status` | bookings INSERT, UPDATE | Before insert/update, read `spaces.current_status` for the booked space. Reject if NOT IN ('available','in_use'). |
 | `trg_bookings_check_capacity` | bookings INSERT, UPDATE | Reject if `new.expected_participants > (SELECT capacity FROM spaces WHERE space_id = new.space_id)`. |
 | `trg_bookings_check_maintenance` | bookings INSERT, UPDATE | Reject if there exists an overlapping maintenance record for the same space WHERE status IN ('open','in_progress') AND `start_time < new.requested_end_time AND (completion_time IS NULL OR completion_time > new.requested_start_time)`. |
 | `trg_booking_approvals_decision` | booking_approvals INSERT | Enforce `approver_id` and `decision_time` are NOT NULL. Update `bookings.status` to match the `decision` value ('approved' or 'rejected'). |
+| `trg_booking_approvals_check_space` | booking_approvals INSERT | When `new.decision = 'approved'`, read `spaces.current_status` via JOIN `bookings.space_id`. Reject if NOT IN ('available','in_use'). |
 | `trg_booking_approvals_rejection` | booking_approvals INSERT | When `new.decision = 'rejected'`, enforce `new.rejection_reason IS NOT NULL`. If NULL, RAISERROR and rollback. |
-| `trg_booking_sessions_checkin` | booking_sessions INSERT | Update `bookings.status` to 'checked_in' and `spaces.current_status` to 'in_use' for the related space. Enforce `initial_condition` is provided. |
+| `trg_booking_sessions_checkin` | booking_sessions INSERT | Validate `bookings.status = 'approved'` for the related booking — reject if not. Update `bookings.status` to 'checked_in' and `spaces.current_status` to 'in_use'. Enforce `initial_condition` is provided. |
 | `trg_booking_sessions_completion` | booking_sessions UPDATE | When `actual_end_time` transitions from NULL to NOT NULL, update `bookings.status` to 'completed' and `spaces.current_status` to 'available'. Enforce `final_condition` is provided. |
+| `trg_booking_approvals_check_role` | booking_approvals INSERT | Read `users.role` for `new.approver_id`. If role NOT IN ('facility_staff','facility_manager'), RAISERROR and rollback. | 
+| `trg_booking_sessions_check_role` | booking_sessions INSERT | Read `users.role` for `new.checked_in_by`. If role NOT IN ('facility_staff','facility_manager'), RAISERROR and rollback. | 
+| `trg_maintenance_check_assignee_role` | maintenance INSERT, UPDATE | When `new.assigned_staff_id IS NOT NULL`, read `users.role`. If role != 'facility_staff', RAISERROR and rollback. |
 | `trg_maintenance_completion_space_status` | maintenance UPDATE | When `new.status = 'resolved'` AND `old.status != 'resolved'`, auto-update `spaces.current_status = 'available'` for the related space IF no other unresolved maintenance tickets exist for the same space (prevents premature status flip when concurrent tickets exist). |
+| `trg_bookings_cancellation` | bookings UPDATE | When `new.status = 'cancelled'` AND `old.status != 'cancelled'`, validate `old.status IN ('pending','approved')` — reject if cancelled from other states. If a `booking_sessions` row exists (space was `'in_use'`), set `spaces.current_status = 'available'`. |
 
 **Note on overlap detection (BR1):** The filtered unique index `uq_bookings_active_overlap` provides a lightweight pre-check for exact (space_id, requested_start_time) duplicates on confirmed bookings, while `trg_bookings_prevent_overlap` handles the general interval-overlap case. Both operate at the database level, ensuring data integrity even with concurrent submissions.
 
@@ -336,15 +345,12 @@ The following triggers enforce cross-row and cross-table business rules that can
 ## 8. Deviations from ERD (with Justification)
 
 | # | ERD Element | Logical Design | Deviation | Justification |
-|---|---|---|---|---|
-| D1 | Mermaid ERD shows `Users |o--o{ Bookings: "approves"` (partial) | `booking_approvals.approver_id INT NOT NULL` with FK → users | Migrated | The approver relationship now lives on the new `booking_approvals` table per the SRP split. |
-| D2 | Mermaid ERD shows `Users |o--o{ Bookings: "checks_in"` (partial) | `booking_sessions.checked_in_by INT NOT NULL` with FK → users | Migrated | The check-in relationship now lives on the new `booking_sessions` table per the SRP split. |
-| D3 | ERD entity-registry lists `account_status` as provisional enum | Finalized as `CHECK IN ('active','inactive','suspended')` with DEFAULT 'active' | Finalization | Requirement §2 states "Account Status" exists but does not enumerate values. Standard account lifecycle values chosen. |
-| D4 | ERD does not show explicit `is_deleted` on maintenance | `is_deleted BIT NOT NULL DEFAULT 0` on maintenance | Included | Assumption A4 requires soft deletion for both bookings and maintenance. |
-| D5 | Building/floor as reference tables vs varchar fields | Stored as free-text `NVARCHAR` fields on `spaces` | No deviation from entity-registry | Consistent with entity-registry specification and Q5 decision. |
-| D6 | ERD does not define triggers for check-in/completion fields | `trg_booking_sessions_checkin` and `trg_booking_sessions_completion` added | Added | Business rules BR8 and BR9 require actual time and condition recording. The new `booking_sessions` table has nullable columns; triggers enforce NOT NULL on status transition, providing defense-in-depth beyond the application layer. |
-| D7 | ERD shows 7 tables (monolithic bookings) | 9 tables — Bookings split into Bookings + Booking_Approvals + Booking_Sessions | Architecture change | Single Responsibility Principle: each table handles one lifecycle phase, eliminating NULL sprawl. See `docs/design-decisions.md` (SRP split decision). |
-| D8 | Audit columns not shown on Booking_Approvals, Booking_Sessions | `created_at` and `updated_at` added per BR12 | Added | BR12 requires audit trail on all core tables. These tables were created during the SRP split and need audit columns. |
+|---|---|---|---|---|---|
+| D1 | `docs/entity-registry.md` lists `account_status` as provisional enum | Finalized as `CHECK IN ('active','inactive','suspended')` with DEFAULT 'active' | Finalization | Requirement §2 states "Account Status" exists but does not enumerate values. Standard account lifecycle values chosen. |
+| D2 | ERD does not show explicit `is_deleted` on maintenance | `is_deleted BIT NOT NULL DEFAULT 0` on maintenance | Included | Assumption A4 requires soft deletion for both bookings and maintenance. |
+| D3 | ERD does not define triggers for check-in/completion fields | `trg_booking_sessions_checkin` and `trg_booking_sessions_completion` added | Added | Business rules BR8 and BR9 require actual time and condition recording. The new `booking_sessions` table has nullable columns; triggers enforce NOT NULL on status transition, providing defense-in-depth beyond the application layer. |
+| D4 | Audit columns not shown on Booking_Approvals, Booking_Sessions | `created_at` and `updated_at` added per BR12 | Added | BR12 requires audit trail on all core tables. These tables were created during the SRP split and need audit columns. |
+| D5 | ERD Section 4 (Logical Constraints) lists role constraints as application-level but does not specify database triggers | Three triggers added: `trg_booking_approvals_check_role`, `trg_booking_sessions_check_role`, `trg_maintenance_check_assignee_role` | Upgraded | Role constraints were previously marked as application-only; upgraded to database-level enforcement via triggers for defense-in-depth. |
 
 ### Resolved ambiguities
 
@@ -361,7 +367,11 @@ The following triggers enforce cross-row and cross-table business rules that can
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.0 | 2026-07-01 | Regenerated with 9-table schema after SRP split of Bookings → Bookings + Booking_Approvals + Booking_Sessions. Updated all sections: 12-column table definitions (7-col format), 11 relationships + separate RI rules (6-col), 28 index entries (6-col format), 9-table normalization proof, 14 BRs with 8 triggers, updated deviations and resolved ambiguities. |
+| 2.4 | 2026-07-01 | Added `idx_space_facilities_facility_id` to §4 Index Strategy (30 total). |
+| 2.3 | 2026-07-01 | Added `bookings.status = 'approved'` validation to `trg_booking_sessions_checkin` — prevents check-in for pending/rejected bookings per §5.2 approval rules. |
+| 2.2 | 2026-07-01 | Space availability check moved from INSERT-block to approval-time (`trg_booking_approvals_check_space` replacing `trg_bookings_check_space_status`); pending bookings now allowed on any space. Added `trg_bookings_cancellation` (BR18) — validates cancel-from states and cleans up space status. | 
+| 2.1 | 2026-07-01 | Added 3 role-enforcement triggers (BR15-BR17): approver must be facility_staff/facility_manager, check-in staff must be facility_staff/facility_manager, assigned maintenance staff must be facility_staff. Upgraded from application-level to database-level enforcement. Added D9 deviation. | 
+| 2.0 | 2026-07-01 | Regenerated with 9-table schema after SRP split of Bookings → Bookings + Booking_Approvals + Booking_Sessions. Updated all sections: 12-column table definitions (7-col format), 11 relationships + separate RI rules (6-col), 29 index entries (6-col format), 9-table normalization proof, 14 BRs with 8 triggers, updated deviations and resolved ambiguities. |
 | 1.2 | 2026-06-18 | Added check-in/completion enforcement triggers; BR8/BR9 upgraded from Application to Database enforcement. |
 | 1.1 | 2026-06-15 | Added filtered unique index; replaced generic enforcement with 7 trigger definitions; resolved Q3, Q4; added per-FK ON DELETE rules. |
 | 1.0 | 2026-06-15 | Initial logical design (7 tables, monolithic bookings). |

@@ -232,7 +232,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 |---|---|---|---|---|---|
 | approval_id | INT | NO | PK | — | IDENTITY(1,1) |
 | booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | One decision per booking |
-| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager |
+| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager — enforced via trigger (BR15) |
 | decision_time | DATETIME2 | NO | — | — | |
 | decision | VARCHAR(50) | NO | — | `CHECK IN ('approved','rejected')` | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Required when decision = 'rejected' (BR7) |
@@ -259,7 +259,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | session_id | INT | NO | PK | — | IDENTITY(1,1) |
 | booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | One session per booking |
 | actual_start_time | DATETIME2 | NO | — | — | |
-| checked_in_by | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager |
+| checked_in_by | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager — enforced via trigger (BR16) |
 | initial_condition | NVARCHAR(MAX) | YES | — | — | |
 | actual_end_time | DATETIME2 | YES | — | — | |
 | final_condition | NVARCHAR(MAX) | YES | — | — | |
@@ -285,7 +285,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | maintenance_id | INT | NO | PK | — | IDENTITY(1,1) |
 | space_id | INT | NO | FK | `FK → spaces.space_id` | Related space (R7) |
 | reporter_id | INT | NO | FK | `FK → users.user_id` | Reporter (R8) |
-| assigned_staff_id | INT | YES | FK | `FK → users.user_id` | Assignee (R9) |
+| assigned_staff_id | INT | YES | FK | `FK → users.user_id` | Assignee (R9); must be facility_staff when set — enforced via trigger (BR17) |
 | problem_description | NVARCHAR(MAX) | NO | — | — | |
 | start_time | DATETIME2 | NO | — | — | When reported |
 | completion_time | DATETIME2 | YES | — | — | When resolved |
