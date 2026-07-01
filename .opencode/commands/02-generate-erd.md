@@ -17,10 +17,14 @@ generate-erd docs/entity-registry.md --group G05
 Prompt:
   Generate the ERD for the Campus Space Management System, group G05.
 
-  Input sources:  `docs/entity-registry.md`
-  Output: `outputs/02-erd-design-G{{group}}.md`
+  Input sources:  
+  - Read the entity registry in `docs/entity-registry.md`
+  - if ambiguous, check `outputs/01-business-req-analysis-G05.md`.
+  
+Output: `outputs/02-erd-design-G{{group}}.md`
 
 Notes:
   - Use `--group G05` as the default group.
-  - This command file defines the invocation interface only; the skill contains the task behavior.
+  - This command file defines the invocation interface only.
+  - Read the skill definition in `.opencode/skills/db-design-pipeline/02-erd/SKILL.md` for the ERD generation rules.
   - Overwrite `outputs/02-erd-design-G05.md` if it already exists.
