@@ -99,8 +99,10 @@ A booking progresses through the following statuses:
 
 ```
 pending → approved     → checked_in → completed
-       → rejected         → no_show
+       → rejected
        → cancelled
+
+approved → no_show   (when no check-in occurs past requested_end_time)
 ```
 
 | Status | Description |
@@ -251,6 +253,7 @@ A space with status `under_maintenance` cannot have approved bookings during the
 | A5 | The `no_show` status is set by facility staff after the requested start time passes without check-in. | The requirement lists `no_show` as a booking status but does not specify how it is triggered. |
 | A6 | The `in_use` space status is set automatically when a booking is checked in and reverted to `available` when completed. | Logical consequence of space lifecycle management; not explicitly stated in requirements. |
 | A7 | Phone number is optional for users. | No explicit mention of phone being mandatory. |
+| A8 | Each user has exactly one role. | The requirement lists roles but does not specify multi-role support. Single-role-per-user simplifies schema design; a junction table can be introduced later if needed. |
 
 ### Unresolved Ambiguities
 
@@ -270,7 +273,7 @@ Each business rule (BR1–BR14) is mapped to its source paragraph in `req/busine
 
 | BR # | Business Rule | Source in `req/business-requirement.md` | Nature |
 |---|---|---|---|
-| BR1 | No overlapping approved bookings | § "Booking Requests" → "Booking Constraints", lines 143–148 | Explicit |
+| BR1 | No overlapping approved bookings | § "Booking Requests" → "Booking Constraints", lines 143–148 | Explicit + **Inferred** — Explicit for approved; inferred extension to checked_in/completed |
 | BR2 | Unavailable spaces cannot be booked | § "Booking Requests" → "Booking Constraints", lines 147–148 | Explicit |
 | BR3 | Expected participants ≤ space capacity | § "Space Management" line 82 (`capacity`) + § "Booking Requests" line 119 (`expected participants`) — no explicit ≤ rule stated | **Inferred** — derived from two separate attribute lists |
 | BR4 | Maintenance blocks booking | § "Maintenance Management" → "Maintenance Constraint", lines 211–213 | Explicit |
