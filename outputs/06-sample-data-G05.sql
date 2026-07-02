@@ -320,6 +320,73 @@ WHERE [booking_id] = @booking_no_show;
 INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status], [is_deleted])
 VALUES (@sp_class, @student2, DATEADD(day, -20, @now), DATEADD(hour, 1, DATEADD(day, -20, @now)), 'student_activity', 25, 'cancelled', 1);
 
+PRINT 'SECTION 6B: Additional Task 07 support data for non-empty query results';
+
+INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
+VALUES (N't06.student3@university.edu', N'Quang Phan', N'090-100-0009', 'student', @dept_cs, 'active');
+DECLARE @student3 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student3@university.edu');
+IF @student3 IS NULL
+    THROW 51006, 'Task 06 setup failed: Task 07 support student lookup returned NULL.', 1;
+
+-- Query 4 support: approved booking whose start time has passed and no session exists.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_class, @student, DATEADD(minute, -45, @now), DATEADD(minute, 75, @now), 'workshop', 20);
+DECLARE @booking_q07_late_no_checkin INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_late_no_checkin, @staff, DATEADD(minute, -90, @now), 'approved', N'Task 07 support: approved past-start booking without check-in.');
+
+-- Query 5 and Query 9 support: completed session today for an active student.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_workspace, @student, DATEADD(hour, -4, @now), DATEADD(hour, -2, @now), 'student_activity', 18);
+DECLARE @booking_q07_completed_today INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_completed_today, @manager, DATEADD(hour, -5, @now), 'approved', N'Task 07 support: completed today for final condition report.');
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+VALUES (@booking_q07_completed_today, DATEADD(hour, -4, @now), @staff, N'Workspace clean and ready at check-in.');
+UPDATE [dbo].[booking_sessions]
+SET [actual_end_time] = DATEADD(hour, -2, @now),
+    [final_condition] = N'Workspace returned clean; chairs arranged.',
+    [usage_notes] = N'Task 07 support session completed today.'
+WHERE [booking_id] = @booking_q07_completed_today;
+
+-- Query 6 support: rejected lecturer booking audit trail.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_class, @lecturer, DATEADD(day, 15, @now), DATEADD(hour, 2, DATEADD(day, 15, @now)), 'seminar', 40);
+DECLARE @booking_q07_lecturer_rejected INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [rejection_reason], [decision_note])
+VALUES (@booking_q07_lecturer_rejected, @manager, DATEADD(minute, 12, @now), 'rejected', N'Classroom is reserved for accreditation review preparation.', N'Task 07 support: rejected lecturer audit row.');
+
+-- Query 9 support: competing active student requests for the same meeting-room slot.
+DECLARE @q07_compete_start DATETIME2 = DATEADD(day, 9, @now);
+DECLARE @q07_compete_end DATETIME2 = DATEADD(hour, 2, @q07_compete_start);
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @student, @q07_compete_start, @q07_compete_end, 'meeting', 8);
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @student3, DATEADD(minute, 30, @q07_compete_start), DATEADD(minute, 30, @q07_compete_end), 'meeting', 6);
+
+-- Query 13 support: completed lab session requested by the teaching assistant.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_lab, @ta, DATEADD(day, -4, @now), DATEADD(hour, 2, DATEADD(day, -4, @now)), 'workshop', 28);
+DECLARE @booking_q07_ta_completed_lab INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_ta_completed_lab, @staff, DATEADD(day, -5, @now), 'approved', N'Task 07 support: TA completed lab workshop.');
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+VALUES (@booking_q07_ta_completed_lab, DATEADD(day, -4, @now), @staff2, N'Lab computers available; projector tested.');
+UPDATE [dbo].[booking_sessions]
+SET [actual_end_time] = DATEADD(hour, 2, DATEADD(day, -4, @now)),
+    [final_condition] = N'All lab machines signed out and shut down.',
+    [usage_notes] = N'TA lab workshop completed with normal equipment handover.'
+WHERE [booking_id] = @booking_q07_ta_completed_lab;
+
+-- Query 15 support: approved upcoming TA lab booking later disrupted by unresolved maintenance.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_lab, @ta, DATEADD(day, 14, @now), DATEADD(hour, 2, DATEADD(day, 14, @now)), 'workshop', 32);
+DECLARE @booking_q07_ta_upcoming_lab INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_ta_upcoming_lab, @manager, DATEADD(minute, 15, @now), 'approved', N'Task 07 support: upcoming TA lab booking.');
+INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [completion_time], [status], [result_note])
+VALUES (@sp_lab, @ta, @staff, N'Task 07 support: network switch inspection overlaps upcoming TA lab booking.', DATEADD(day, 13, @now), NULL, 'open', NULL);
+
 PRINT 'SECTION 7: Audit update proofs';
 
 DECLARE @class_updated_before DATETIME2 = (SELECT [updated_at] FROM [dbo].[spaces] WHERE [space_id] = @sp_class);

@@ -839,17 +839,17 @@ GO
 -- Query 14: Approval Lead-Time Analysis
 -- ============================================================
 -- student-name: Tran Dinh Quoc Thang
--- target-users: facility_manager, department_admin
+-- target-users: lecturer
 -- business-question:
 --   How long do approved and rejected lecturer bookings take to receive
 --   a decision when grouped by purpose, space type, and decision status?
 --
 -- Target user(s):
---   Facility Manager, Department Administrator
+--   Lecturer
 --
 -- Why useful:
 --   Summarizes minimum, average, and maximum decision lead time so lecturers
---   and administrators can plan future submissions with realistic approval
+--   can plan future submissions with realistic approval
 --   windows.
 -- ============================================================
 
