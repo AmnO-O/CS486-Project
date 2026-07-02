@@ -1,316 +1,280 @@
-
 -- ============================================================
--- Query 6: Booking Rejection Audit Trail for a Lecturer
+-- Query 6: Rejected Booking Audit Trail for a Lecturer
 -- ============================================================
 -- student-name: Pham Huu Nam
 -- target-users: facility_manager
--- business-question: Professor submitted consecutive booking
---   requests that were all rejected. Need complete audit trail
---   including refusal reasons, timestamps, and staff who
---   processed them.
---
--- Business question (full):
---   A professor submitted consecutive booking requests that were
---   all rejected. Need a complete audit trail including refusal
---   reasons, timestamps, and staff who processed them.
---
--- Target user(s):
---   Facility Manager
+-- business-question:
+--   Professor submitted consecutive booking requests that were all
+--   rejected. Need complete audit trail including refusal reasons,
+--   timestamps, and staff who processed them.
 --
 -- Why useful:
---   Facility Managers can review rejection patterns to identify
---   systemic issues (e.g., recurring room conflicts, policy gaps)
---   and follow up with staff who handled the decisions, ensuring
---   consistent and fair approval practices.
+--   Enables the facility manager to investigate possible bias or
+--   procedural issues in booking handling, review staff
+--   decision-making, and identify rejection patterns targeting a
+--   specific requester — supporting fairness and accountability.
 -- ============================================================
 
 DECLARE @lecturer_email NVARCHAR(255) = N't06.lecturer1@university.edu';
+-- Note: email is the natural unique key for users per BR10; using
+--       user_id would require a lookup step. Email is UNIQUE.
 
 SELECT
     b.booking_id,
-    s.space_code,
-    s.space_name,
+    b.purpose,
     b.requested_start_time,
     b.requested_end_time,
-    b.purpose,
     b.expected_participants,
-    ba.decision_time          AS rejection_time,
+    b.status             AS booking_status,
+    ba.decision_time,
+    ba.decision          AS approval_decision,
     ba.rejection_reason,
     ba.decision_note,
-    approver.full_name        AS processed_by_staff,
-    approver.role             AS staff_role
-FROM [dbo].[bookings] b
-INNER JOIN [dbo].[spaces] s
-    ON s.space_id = b.space_id
-INNER JOIN [dbo].[users] requester
+    approver.full_name   AS processed_by_staff,
+    approver.role        AS staff_role
+FROM bookings b
+INNER JOIN users requester
     ON requester.user_id = b.requester_id
-INNER JOIN [dbo].[booking_approvals] ba
+LEFT JOIN booking_approvals ba
     ON ba.booking_id = b.booking_id
-INNER JOIN [dbo].[users] approver
+    AND ba.decision = 'rejected'
+LEFT JOIN users approver
     ON approver.user_id = ba.approver_id
 WHERE requester.email = @lecturer_email
-  AND ba.decision = 'rejected'
+  AND requester.role = 'lecturer'
   AND b.is_deleted = 0
-ORDER BY b.requested_start_time ASC;
-GO
-
--- Note: returns zero rows for the sample data because lecturer1 has no rejected
--- bookings (the only rejected booking belongs to a TA). The SQL logic is correct;
--- seed additional rejected bookings for a lecturer to exercise this query.
+  AND b.status = 'rejected'
+ORDER BY b.requested_start_time DESC;
 GO
 
 -- ============================================================
--- Query 7: Space Maintenance Risk Profile with Upcoming Bookings
+-- Query 7: Spaces with Upcoming Bookings but No Recent Maintenance
 -- ============================================================
 -- student-name: Pham Huu Nam
 -- target-users: facility_manager
--- business-question: Which spaces have encountered resolved
---   maintenance issues within the past six months, and what are
---   their upcoming approved bookings for the next seven days?
---
--- Business question (full):
---   Which spaces have encountered resolved maintenance issues
---   within the past six months, and what are their upcoming
---   approved bookings for the next seven days? The facility
---   manager needs this comprehensive risk profile to identify
---   rooms with a history of failure and leverage their available
---   gap times (or empty slots) for preventive maintenance before
---   new schedules are disrupted.
---
--- Target user(s):
---   Facility Manager
+-- business-question:
+--   Which spaces have approved bookings scheduled within the
+--   next 10 days but have NOT undergone any maintenance or
+--   quality inspection within the past 1 months? The facility
+--   manager needs this list to dispatch technicians for urgent
+--   pre-use checks on long-neglected rooms.
 --
 -- Why useful:
---   Surfaces every space with a recent maintenance history
---   alongside its immediate booking pipeline, so the Facility
---   Manager can proactively schedule preventive maintenance
---   during unused time windows before new disruptions occur.
+--   Proactively identifying high-risk spaces (upcoming use + no
+--   recent inspection) lets the facility manager prioritize
+--   technician dispatch before events begin, reducing the chance
+--   of equipment failure or safety issues during booked sessions.
 -- ============================================================
 
-DECLARE @six_months_ago    DATETIME2 = DATEADD(MONTH, -6, GETDATE());
-DECLARE @seven_days_ahead  DATETIME2 = DATEADD(DAY, 7, GETDATE());
+DECLARE @lookahead_days       INT = 10;
+DECLARE @maintenance_months   INT = 1;
 
 SELECT
-    s.space_id,
     s.space_code,
     s.space_name,
     s.building,
-    s.floor,
-    s.current_status,
-    m.maintenance_id         AS resolved_maint_id,
-    m.problem_description,
-    m.completion_time        AS maint_completion_time,
-    m.result_note,
-    b.booking_id             AS upcoming_booking_id,
-    b.requested_start_time   AS booking_start,
-    b.requested_end_time     AS booking_end,
-    b.purpose                AS booking_purpose,
-    b.expected_participants
-FROM [dbo].[spaces] s
-LEFT JOIN [dbo].[maintenance] m
-    ON m.space_id = s.space_id
-   AND m.status = 'resolved'
-   AND m.completion_time >= @six_months_ago
-   AND m.is_deleted = 0
-LEFT JOIN [dbo].[bookings] b
+    s.room_number,
+    s.space_type,
+    s.capacity,
+    COUNT(b.booking_id) AS upcoming_booking_count,
+    STRING_AGG(
+        FORMAT(b.requested_start_time, 'yyyy-MM-dd HH:mm') + N' - ' +
+        FORMAT(b.requested_end_time, 'HH:mm'),
+        N'; '
+    ) AS upcoming_slots
+FROM spaces s
+INNER JOIN bookings b
     ON b.space_id = s.space_id
-   AND b.status = 'approved'
-   AND b.requested_start_time >= GETDATE()
-   AND b.requested_start_time <= @seven_days_ahead
-   AND b.is_deleted = 0
-WHERE (m.maintenance_id IS NOT NULL OR b.booking_id IS NOT NULL)
-ORDER BY s.space_code, m.completion_time, b.requested_start_time;
+    AND b.is_deleted = 0
+    AND b.status IN ('approved', 'checked_in')
+    AND b.requested_start_time >= GETDATE()
+    AND b.requested_start_time < DATEADD(DAY, @lookahead_days, GETDATE())
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM maintenance m
+    WHERE m.space_id = s.space_id
+      AND m.is_deleted = 0
+      AND (
+            (m.status = 'resolved' AND m.completion_time >= DATEADD(MONTH, -@maintenance_months, GETDATE()))
+            OR 
+            (m.status = 'under_maintenance' AND m.completion_time IS NULL)
+          )
+)
+GROUP BY
+    s.space_code,
+    s.space_name,
+    s.building,
+    s.room_number,
+    s.space_type,
+    s.capacity
+ORDER BY upcoming_booking_count DESC, s.building, s.room_number;
 GO
 
--- Note: sample data has resolved maintenance records for T06-CLS-201,
--- T06-PROJ-110, T06-SW-020, and T06-MTG-012 within the past 6 months,
--- but no approved bookings starting within the 7-day window (only one
--- approved booking exists on July 20, outside the range). The query
--- correctly returns maintenance history rows with NULL booking columns;
--- seed additional approved bookings for a complete joined result.
-GO
 
 -- ============================================================
--- Query 8: Department No-Show Rate Report for the Semester
+-- Query 8: Department No-Show Rate Analysis for Semester
 -- ============================================================
 -- student-name: Pham Huu Nam
 -- target-users: facility_manager
--- business-question: During high-demand weeks, certain departments
---   have a habit of booking multiple spaces "just in case" but
---   failing to check in, creating artificial room shortages.
---
--- Business question (full):
---   During high-demand weeks, certain departments have a habit
---   of booking multiple spaces "just in case" but failing to
---   check in, creating artificial room shortages. The Facility
---   Manager needs a report identifying departments with the
---   highest No-Show rates this semester to enforce strict
---   reservation penalties.
---
--- Target user(s):
---   Facility Manager
+-- business-question:
+--   During high-demand weeks, certain departments have a habit of
+--   booking multiple spaces "just in case" but failing to check in,
+--   creating artificial room shortages. The Facility Manager needs
+--   a report identifying departments with the highest No-Show rates
+--   this semester to enforce strict reservation penalties.
 --
 -- Why useful:
---   Quantifies no-show behaviour by department so the Facility
---   Manager can target enforcement actions (booking caps,
---   penalties) at the worst offenders, freeing artificially
---   reserved spaces for legitimate users.
+--   Highlights departments that over-reserve and under-utilize
+--   spaces, enabling the facility manager to implement targeted
+--   booking policies (e.g., deposit requirements, reduced
+--   concurrent-booking limits) and recover real capacity during
+--   peak periods.
 -- ============================================================
 
-DECLARE @semester_start DATETIME2 = '2026-06-01T00:00:00';
+DECLARE @semester_start DATETIME2 = '2026-01-01 00:00:00';
+DECLARE @semester_end   DATETIME2 = '2026-06-30 23:59:59';
 
+WITH confirmed_bookings AS (
+    SELECT
+        b.booking_id,
+        b.requester_id,
+        b.status
+    FROM bookings b
+    WHERE b.is_deleted = 0
+      AND b.status IN ('approved', 'checked_in', 'completed', 'no_show')
+      AND b.requested_start_time >= @semester_start
+      AND b.requested_start_time < @semester_end
+)
 SELECT
-    d.department_id,
-    d.name                         AS department_name,
-    COUNT(*)                       AS total_approved_bookings,
-    SUM(CASE WHEN b.status = 'no_show' THEN 1 ELSE 0 END)
-                                   AS no_show_count,
-    ROUND(
-        SUM(CASE WHEN b.status = 'no_show' THEN 1.0 ELSE 0.0 END)
-        / NULLIF(COUNT(*), 0) * 100,
-        1
-    )                              AS no_show_rate_pct
-FROM [dbo].[bookings] b
-INNER JOIN [dbo].[users] u
-    ON u.user_id = b.requester_id
-INNER JOIN [dbo].[departments] d
-    ON d.department_id = u.department_id
-INNER JOIN [dbo].[booking_approvals] ba
-    ON ba.booking_id = b.booking_id
-   AND ba.decision = 'approved'
-WHERE b.requested_end_time >= @semester_start
-  AND b.requested_end_time < GETDATE()
-  AND b.is_deleted = 0
+    d.name          AS department_name,
+    COUNT(cb.booking_id)                                                        AS total_confirmed_bookings,
+    SUM(CASE WHEN cb.status = 'no_show' THEN 1 ELSE 0 END)                       AS no_show_count,
+    ROUND(100.0 * SUM(CASE WHEN cb.status = 'no_show' THEN 1 ELSE 0 END)
+          / NULLIF(COUNT(cb.booking_id), 0), 2)                                  AS no_show_rate_pct
+FROM confirmed_bookings cb
+INNER JOIN users u        ON u.user_id = cb.requester_id
+INNER JOIN departments d  ON d.department_id = u.department_id
 GROUP BY d.department_id, d.name
-ORDER BY no_show_rate_pct DESC;
-GO
-
--- Note: with sample data (semester_start = 2026-06-01), two departments
--- appear: School of Computer Science (1 no-show out of 2 approved past
--- bookings = 50.0%) and Department of Physics (1 no-show out of 1 = 100.0%).
--- Physics ranks first; seed more data to see a richer distribution.
+HAVING COUNT(cb.booking_id) >= 1
+ORDER BY no_show_rate_pct DESC, total_confirmed_bookings DESC;
 GO
 
 -- ============================================================
--- Query 9: Cumulative Space Usage Hours Per Requester This Month
+-- Query 9: Cumulative Monthly Usage Hours for Competing Students
 -- ============================================================
 -- student-name: Pham Huu Nam
 -- target-users: facility_manager
--- business-question: When multiple students submit competing
---   booking requests for the same meeting room and time slot,
---   how many cumulative hours has each requester actually used
---   university shared spaces during the current month?
---
--- Business question (full):
---   When multiple students submit competing booking requests for
---   the same meeting room and time slot, how many cumulative
---   hours has each requester actually used university shared
---   spaces during the current month? The facility manager needs
---   this information to support fair allocation by prioritizing
---   users who have received less access to shared facilities.
---
--- Target user(s):
---   Facility Manager
+-- business-question:
+--   When multiple students submit competing booking requests for the
+--   same meeting room and time slot, how many cumulative hours has
+--   each requester actually used university shared spaces during the
+--   current month? The department administrator needs this information
+--   to support fair allocation by prioritizing users who have received
+--   less access to shared facilities.
 --
 -- Why useful:
---   Enables evidence-based allocation when multiple requesters
---   compete for the same room — users with fewer actual hours
---   get priority, preventing well-connected users from
---   monopolising shared spaces.
+--   Enables the facility manager to make data-driven approval decisions
+--   when multiple students compete for the same room and slot. By
+--   prioritizing under-served requesters (low cumulative hours this
+--   month), the system supports equitable access and prevents
+--   high-frequency users from dominating shared spaces.
 -- ============================================================
 
-DECLARE @month_start DATETIME2 = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
-DECLARE @month_end   DATETIME2 = DATEADD(MONTH, 1, @month_start);
+DECLARE @target_space_code NVARCHAR(50) = N'T06-MR-401';
+-- space_code is UNIQUE — acts as stable identifier for human input
+DECLARE @slot_start     DATETIME2 = DATEADD(DAY,   9, GETDATE());
+DECLARE @slot_end       DATETIME2 = DATEADD(HOUR,  2, @slot_start);
+DECLARE @month_start    DATETIME2 = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
+DECLARE @month_end      DATETIME2 = DATEADD(MONTH, 1, @month_start);
 
+WITH competing_requesters AS (
+    SELECT DISTINCT b.requester_id
+    FROM bookings b
+    INNER JOIN spaces s ON s.space_id = b.space_id
+    WHERE s.space_code = @target_space_code
+      AND b.is_deleted = 0
+      AND b.status IN ('pending', 'approved')
+      AND b.requested_start_time < @slot_end
+      AND b.requested_end_time   > @slot_start
+),
+user_monthly_hours AS (
+    SELECT
+        b.requester_id,
+        ROUND(SUM(DATEDIFF(SECOND, bs.actual_start_time, bs.actual_end_time)) / 3600.0, 2) AS cumulative_hours
+    FROM bookings b
+    INNER JOIN booking_sessions bs
+        ON bs.booking_id = b.booking_id
+        AND bs.actual_end_time IS NOT NULL
+    WHERE b.is_deleted = 0
+      AND b.requester_id IN (SELECT requester_id FROM competing_requesters)
+      AND bs.actual_start_time >= @month_start
+      AND bs.actual_start_time <  @month_end
+    GROUP BY b.requester_id
+)
 SELECT
     u.user_id,
-    u.full_name                          AS requester_name,
-    u.email                              AS requester_email,
-    d.name                               AS department_name,
-    COUNT(DISTINCT bs.session_id)        AS completed_sessions,
-    ROUND(
-        SUM(
-            DATEDIFF(SECOND, bs.actual_start_time, bs.actual_end_time)
-        ) / 3600.0,
-        2
-    )                                    AS cumulative_hours
-FROM [dbo].[bookings] b
-INNER JOIN [dbo].[users] u
-    ON u.user_id = b.requester_id
-INNER JOIN [dbo].[departments] d
-    ON d.department_id = u.department_id
-INNER JOIN [dbo].[booking_sessions] bs
-    ON bs.booking_id = b.booking_id
-WHERE bs.actual_end_time IS NOT NULL
-  AND bs.actual_end_time >= @month_start
-  AND bs.actual_end_time < @month_end
-  AND b.is_deleted = 0
-GROUP BY u.user_id, u.full_name, u.email, d.name
-ORDER BY cumulative_hours ASC;
-GO
-
--- Note: with sample data (June 2026), only one completed session exists:
--- T06-COMP-301 seminar by Dr. Linh Pham (lecturer1, CS) on 2026-06-10,
--- lasting 1.83 hours (08:05 → 09:55). Returns 1 row. Seed more completed
--- sessions for a richer distribution.
+    u.full_name,
+    u.email,
+    d.name                          AS department_name,
+    COALESCE(umh.cumulative_hours, 0) AS cumulative_hours_this_month
+FROM competing_requesters cr
+INNER JOIN users u            ON u.user_id = cr.requester_id
+INNER JOIN departments d      ON d.department_id = u.department_id
+LEFT  JOIN user_monthly_hours umh ON umh.requester_id = u.user_id
+WHERE u.role = 'student'
+  AND u.account_status = 'active'
+ORDER BY cumulative_hours_this_month ASC, u.full_name;
 GO
 
 -- ============================================================
--- Query 10: Semester Room-Type Demand & Approval Summary
+-- Query 10: Semester Room-Type Request Summary for Expansion Analysis
 -- ============================================================
 -- student-name: Pham Huu Nam
 -- target-users: facility_manager
--- business-question: Provide a summary of the past semester
---   regarding which room type was most frequently requested,
---   including its successful approval rate and the number of
---   unique users attracted.
---
--- Business question (full):
---   Provide a summary of the past semester regarding which room
---   type (classroom, laboratory, meeting_room) was most
---   frequently requested, including its successful approval rate
---   and the number of unique users attracted, in order to
---   evaluate potential expansion or consolidation.
---
--- Target user(s):
---   Facility Manager
+-- business-question:
+--   Provide a summary of the past semester regarding which room type
+--   (classroom, laboratory, meeting_room) was most frequently
+--   requested, including its successful approval rate and the number
+--   of unique users attracted, in order to evaluate potential
+--   expansion or consolidation.
 --
 -- Why useful:
---   Reveals which space types carry the heaviest demand and
---   which are under-utilised, guiding capital decisions about
---   which room types to expand, consolidate, or re-purpose for
---   the next academic year.
+--   Enables the facility manager to make data-driven decisions about
+--   space expansion (which room types need more capacity) and
+--   consolidation (which room types are underutilized), based on
+--   actual request volumes, approval success rates, and user reach.
 -- ============================================================
 
-DECLARE @semester_start DATETIME2 = '2026-06-01T00:00:00';
-DECLARE @semester_end   DATETIME2 = '2026-08-01T00:00:00';
+DECLARE @semester_start DATETIME2 = '2026-01-01 00:00:00';
+DECLARE @semester_end   DATETIME2 = '2026-07-01 00:00:00';
 
+WITH categorized_requests AS (
+    SELECT
+        b.booking_id,
+        CASE
+            WHEN s.space_type IN ('computer_lab', 'project_lab') THEN N'laboratory'
+            ELSE s.space_type
+        END AS room_category,
+        b.status,
+        b.requester_id
+    FROM bookings b
+    INNER JOIN spaces s
+        ON s.space_id = b.space_id
+    WHERE b.is_deleted = 0
+      AND b.requested_start_time >= @semester_start
+      AND b.requested_start_time < @semester_end
+      AND s.space_type IN ('classroom', 'computer_lab', 'project_lab', 'meeting_room', 'auditorium')
+)
 SELECT
-    s.space_type,
-    COUNT(*)                                            AS total_requests,
-    COUNT(DISTINCT b.requester_id)                      AS unique_requesters,
-    COUNT(DISTINCT CASE WHEN ba.decision = 'approved'
-                        THEN b.booking_id END)          AS approved_count,
+    room_category,
+    COUNT(*)                                                                  AS total_requests,
+    SUM(CASE WHEN status IN ('approved', 'checked_in', 'completed', 'no_show') THEN 1 ELSE 0 END) AS approved_count,
     ROUND(
-        COUNT(DISTINCT CASE WHEN ba.decision = 'approved'
-                            THEN b.booking_id END) * 100.0
-        / NULLIF(COUNT(*), 0),
-        1
-    )                                                   AS approval_rate_pct
-FROM [dbo].[bookings] b
-INNER JOIN [dbo].[spaces] s
-    ON s.space_id = b.space_id
-LEFT JOIN [dbo].[booking_approvals] ba
-    ON ba.booking_id = b.booking_id
-WHERE b.requested_start_time >= @semester_start
-  AND b.requested_start_time < @semester_end
-  AND b.is_deleted = 0
-GROUP BY s.space_type
+        100.0 * SUM(CASE WHEN status IN ('approved', 'checked_in', 'completed', 'no_show') THEN 1 ELSE 0 END)
+        / NULLIF(COUNT(*), 0), 2
+    )                                                                         AS approval_rate_pct,
+    COUNT(DISTINCT requester_id)                                              AS unique_users
+FROM categorized_requests
+GROUP BY room_category
 ORDER BY total_requests DESC;
 GO
-
--- Note: with sample data (Jun–Aug 2026 semester), auditorium leads with
--- 3 requests (2 approved = 66.7%, 2 unique requesters), followed by
--- classroom (2 requests, 0 approved) and computer_lab (2, 100%). Project_lab
--- and student_workspace each have 1 request. Seed more data to see fuller
--- ranking across all 6 room types.
