@@ -174,25 +174,6 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
-### Decision: Rejection reason as separate column
-
-**Task:** 3 (Logical Design)
-**Date:** 2026-06-15
-
-**Problem:** Should the rejection reason be stored as a separate column or merged into the decision note (Q1)?
-
-**Options considered:**
-- Option A: Merge into `decision_note` — pros: fewer columns; cons: harder to query/validate separately
-- Option B: Separate `rejection_reason` column — pros: clear semantic distinction, easier to enforce BR7
-
-**Decision:** We chose Option B because Business Rule 7 explicitly requires "rejection reason must be stored" — a dedicated column makes enforcement and querying cleaner.
-
-**Impact:** The `bookings` table has an additional nullable `rejection_reason NVARCHAR(MAX)` column.
-
-**Requirement reference:** Business Rule 7, outputs/01 §7.3.
-
----
-
 ### Decision: Usage policy as free-text NVARCHAR(MAX)
 
 **Task:** 3 (Logical Design)
@@ -269,6 +250,216 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
+### Decision: Rejection reason as separate column on booking_approvals (Q1)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** Should the rejection reason be stored as a separate column or merged into the decision note (Q1), and on which table after the SRP split?
+
+**Options considered:**
+- Option A: Merge into `decision_note` on `booking_approvals` — pros: fewer columns; cons: harder to query/validate separately
+- Option B: Separate `rejection_reason NVARCHAR(MAX) NULL` column on `booking_approvals` — pros: clear semantic distinction, easier to enforce BR7 via trigger
+
+**Decision:** We chose Option B because Business Rule 7 explicitly requires "rejection reason must be stored" — a dedicated column on `booking_approvals` makes enforcement and querying cleaner.
+
+**Impact:** `booking_approvals.rejection_reason` is optional (`NULL`), with trigger-level enforcement requiring it when `decision = 'rejected'`.
+
+**Requirement reference:** Business Rule 7, outputs/01 §7.3.
+
+---
+
+### Decision: Role-enforcement triggers upgraded to database-level (BR15–BR17)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** The ERD Section 4 lists role constraints (approver must be facility_staff/manager, check-in staff must be facility_staff/manager, assigned maintenance staff must be facility_staff) as application-level only, providing no defense if the application layer is bypassed.
+
+**Options considered:**
+- Option A: Keep at application-level only — pros: simpler schema; cons: no database-level enforcement
+- Option B: Database-level triggers — pros: defense-in-depth; cons: more objects to maintain
+
+**Decision:** We chose Option B — three `AFTER INSERT/UPDATE` triggers validate user roles before allowing operations:
+- `trg_booking_approvals_check_role` on `booking_approvals`
+- `trg_booking_sessions_check_role` on `booking_sessions`
+- `trg_maintenances_check_assignee_role` on `maintenances`
+
+**Impact:** Role validation is enforced at both application and database layers. Trigger names follow `trg_<table>_<action>` convention.
+
+**Requirement reference:** ERD Section 4 (Logical Constraints), BR15–BR17.
+
+---
+
+### Decision: Space availability check moved to approval-time (BR2)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** The old design blocked booking INSERT when `spaces.current_status NOT IN ('available','in_use')`. This prevented users from submitting pending bookings for temporarily unavailable spaces (e.g., under maintenance), forcing them to wait until the space became available again.
+
+**Options considered:**
+- Option A: Block at booking INSERT — space must be available at request time (pros: no wasted pending bookings; cons: users cannot pre-submit for soon-to-be-available spaces)
+- Option B: Block only at approval time — pending bookings allowed on any space; `trg_booking_approvals_check_space` rejects approval when space is unavailable (pros: users can submit requests in advance; cons: some approved bookings may later be blocked)
+
+**Decision:** We chose Option B because the booking workflow should allow pending requests on any space. The space status check is meaningful only at the point of approval — a space that was `under_maintenance` at request time may be `available` at approval time.
+
+**Impact:** Pending bookings can be created on any `spaces.current_status`. Approval triggers (`trg_booking_approvals_check_space`) reject `decision = 'approved'` when space is `under_maintenance`, `temporarily_closed`, or `retired`.
+
+**Requirement reference:** BR2, outputs/03 §7, revision v2.2.
+
+---
+
+### Decision: Cancellation trigger with state validation and space cleanup (BR18)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** Cancelling a booking requires (a) validating that cancellation is only allowed from `pending` or `approved` states, and (b) cleaning up `spaces.current_status` if the space was `in_use`. Application-level handling is fragile under concurrent operations.
+
+**Options considered:**
+- Option A: Application-level only — pros: no trigger maintenance; cons: race conditions, bypass risk
+- Option B: Database trigger `trg_bookings_cancellation` — pros: atomic validation + cleanup; cons: trigger complexity
+
+**Decision:** We chose Option B — `trg_bookings_cancellation` fires on `bookings UPDATE` when `status` transitions to `'cancelled'`. It rejects cancellations from states other than `pending`/`approved` and sets `spaces.current_status = 'available'` if a related `booking_sessions` row exists.
+
+**Impact:** Cancellation is atomic — validation and space cleanup happen in the same transaction. No orphaned `in_use` spaces.
+
+**Requirement reference:** BR18, outputs/03 §7.
+
+---
+
+### Decision: Check-in requires approved booking status (BR8 enhancement)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** Without a status check, a user could check in to a `pending` or `rejected` booking, bypassing the approval workflow.
+
+**Options considered:**
+- Option A: Allow check-in regardless of booking status — pros: simpler trigger; cons: approval workflow can be bypassed
+- Option B: Require `bookings.status = 'approved'` — pros: enforces workflow; cons: edge case if status changes concurrently
+
+**Decision:** We chose Option B — `trg_booking_sessions_checkin` validates that the related booking is `'approved'` before allowing INSERT into `booking_sessions`. Rejects check-in for `pending`, `rejected`, `cancelled`, or `completed` bookings.
+
+**Impact:** Check-in is gated on booking approval, ensuring the approval→check-in→completion lifecycle is enforced at the database level.
+
+**Requirement reference:** BR8, outputs/03 revision v2.3.
+
+---
+
+### Decision: FK CASCADE on dependent child tables after SRP split
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** After splitting `bookings` into `bookings` + `booking_approvals` + `booking_sessions`, the child tables `booking_approvals` and `booking_sessions` have no independent meaning without their parent `bookings`. SQL Server cascade path rules restrict multiple CASCADE/SET NULL FKs referencing the same parent.
+
+**Options considered:**
+- Option A: NO ACTION on all child FKs — pros: safest, no cascade path conflicts; cons: orphan records if parent is deleted
+- Option B: CASCADE on `booking_approvals.booking_id` and `booking_sessions.booking_id` → bookings; NO ACTION on all FKs → users (preserves cascade path rule)
+
+**Decision:** We chose Option B because:
+- `booking_approvals` and `booking_sessions` are strictly dependent child tables — deleting a booking should cascade to its approval and session
+- All FKs → users use NO ACTION to avoid multiple cascade paths (SQL Server Msg 1785)
+- `maintenances.assigned_staff_id` → users uses SET NULL (single FK from maintenances → users, no conflict)
+
+**Impact:**
+| FK | Child → Parent | ON DELETE |
+|---|---|---|
+| `booking_approvals.booking_id` → `bookings` | CASCADE |
+| `booking_sessions.booking_id` → `bookings` | CASCADE |
+| All FKs → `users` (except assigned_staff_id) | NO ACTION |
+| `maintenances.assigned_staff_id` → `users` | SET NULL |
+
+**Requirement reference:** SQL Server cascade path limitation (Msg 1785), SRP split, BR13.
+
+---
+
+### Decision: Dual-layer overlap detection (filtered unique index + interval trigger) for BR1
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** Preventing overlapping bookings for the same space requires two distinct checks: (a) exact collisions on `(space_id, requested_start_time)` for confirmed bookings, and (b) arbitrary interval overlaps (e.g. 10–12 vs. 11–13). A single mechanism cannot handle both efficiently.
+
+**Options considered:**
+- Option A: Trigger only — `trg_bookings_prevent_overlap` handles all overlap cases (pros: single mechanism; cons: trigger fires on every INSERT/UPDATE even when no collision is possible, higher overhead for exact matches)
+- Option B: Filtered unique index only — `uq_bookings_active_overlap` prevents exact `(space_id, requested_start_time)` duplicates (pros: lightweight, no trigger overhead for exact matches; cons: cannot detect interval overlaps like 10–12 vs. 11–13)
+- Option C: Both — filtered unique index for cheap exact-match prevention + trigger for interval overlap (pros: best performance + complete coverage; cons: two mechanisms to maintain)
+
+**Decision:** We chose Option C because:
+- The filtered unique index rejects exact start-time collisions at the index level (no trigger invocation needed)
+- The trigger catches interval overlaps that the index cannot express
+- Both are database-level, ensuring integrity even with concurrent submissions
+
+**Impact:** Two enforcement points for BR1. The index is a lightweight pre-check; the trigger is the full interval check. Documented in outputs/03 §4 notes and §7.
+
+**Requirement reference:** BR1, outputs/03 §4, §7.
+
+---
+
+### Decision: Decision status sync via trigger (trg_booking_approvals_decision) for BR6
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** After the SRP split, the approval decision is recorded in `booking_approvals.decision`, but `bookings.status` must reflect the decision (`'approved'` or `'rejected'`) for querying and workflow purposes. If application code updates both tables separately, a race condition or bug could leave them out of sync.
+
+**Options considered:**
+- Option A: Application-level sync — the app inserts into `booking_approvals` and separately updates `bookings.status` (pros: no trigger; cons: risk of inconsistent state if one operation fails)
+- Option B: Trigger-level sync — `trg_booking_approvals_decision` auto-updates `bookings.status` atomically in the same transaction (pros: guaranteed consistency; cons: couples the two tables via trigger logic)
+
+**Decision:** We chose Option B because the status sync is critical for data integrity — a booking with `booking_approvals.decision = 'approved'` but `bookings.status = 'pending'` would be unreachable. The trigger guarantees they stay in lockstep.
+
+**Impact:** `bookings.status` is automatically updated on `booking_approvals` INSERT. No application code needs to manage this sync. Trigger also validates `approver_id` and `decision_time` are NOT NULL.
+
+**Requirement reference:** BR6, outputs/03 §7.
+
+---
+
+### Decision: Session completion trigger (trg_booking_sessions_completion) for BR8/BR9
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** Completing a booking session requires: (a) recording `actual_end_time`, (b) validating `final_condition` is provided, (c) updating `bookings.status` to `'completed'`, and (d) freeing `spaces.current_status` to `'available'`. These must happen atomically to avoid inconsistent states (e.g., session marked complete but space remains `in_use`).
+
+**Options considered:**
+- Option A: Application-level completion — app updates `booking_sessions`, then `bookings`, then `spaces` separately (pros: no trigger; cons: three separate operations risk partial failure)
+- Option B: Trigger-level completion — `trg_booking_sessions_completion` handles all side effects atomically (pros: guaranteed atomicity; cons: trigger couples three tables)
+
+**Decision:** We chose Option B because the teardown sequence (session → booking → space) must be atomic. The trigger fires on `booking_sessions UPDATE` when `actual_end_time` transitions from NULL to NOT NULL, updating `bookings.status` and `spaces.current_status` in the same transaction.
+
+**Impact:** Completion is a single operation from the application's perspective. Counterpart to check-in trigger — together they form the complete session lifecycle.
+
+**Requirement reference:** BR8, BR9, outputs/03 §7.
+
+---
+
+### Decision: updated_at auto-stamp triggers (all 9 tables)
+
+**Task:** 3 (Logical Design)
+**Date:** 2026-07-01
+
+**Problem:** Every table has an `updated_at DATETIME2 NOT NULL DEFAULT GETDATE()` column, but `DEFAULT` fires only on INSERT. On subsequent UPDATEs, the column must be explicitly set by the application or kept current automatically. Manual handling is error-prone.
+
+**Options considered:**
+- Option A: Application-level — the application sets `updated_at = GETDATE()` on every UPDATE (pros: no trigger overhead; cons: every code path must remember to set it; ORMs may omit it from payload)
+- Option B: Trigger-level — `AFTER UPDATE` trigger on each table auto-stamps `updated_at = GETDATE()` (pros: guaranteed currency, no application burden; cons: 9 triggers to maintain)
+- Option C: Trigger-level with recursion guard — same as B but with `IF NOT UPDATE([updated_at])` to prevent infinite recursion when `RECURSIVE_TRIGGERS` is ON (pros: safest; cons: slightly more complex trigger body)
+
+**Decision:** We chose Option C because:
+- Eliminates application burden for timestamp management
+- Recursion guard (`IF NOT UPDATE([updated_at])`) prevents infinite loops if a trigger's own inner UPDATE retriggers itself
+- Pattern repeated across all 9 tables for consistency
+
+**Impact:** All tables have an `AFTER UPDATE` trigger that sets `updated_at = GETDATE()` when any other column changes. The guard ensures that updating only `updated_at` (e.g., from the trigger itself) is a no-op.
+
+**Requirement reference:** BR12, outputs/03 §6, outputs/05 DDL implementation.
+
+---
+
 ## Assumptions documented during design
 
 1. **Assumption:** Users have unique email addresses.
@@ -282,52 +473,6 @@ _(To be populated during Tasks 1–4.)_
 3. **Assumption:** Building/floor as free-text fields is sufficient.
    - **Rationale:** No requirement demands reference-table normalization for buildings/floors.
    - **Task documented:** Task 3
-
----
-
-## Trade-offs and rejected options
-
-_(To be filled in during design phases.)_
-
-| Rejected option | Why rejected | Task |
-|---|---|---|
-| (Example) Repeating groups for facilities | Not normalized to 3NF | Task 2 |
-| (To be documented) | | |
-
----
-
-## Open design questions
-
-_(Unresolved items that affect schema. Should be zero by end of Task 4.)_
-
-1. **Do we need a rejection reason field?** — If a booking is rejected, should the reason be stored?
-   - **Decision needed:** Add `rejection_reason NVARCHAR(MAX)` to `booking_requests`?
-   - **Status:** [To be discussed during Task 1]
-
-2. (To be added during tasks)
-
----
-
-### Decision: FK cascade actions changed from SET NULL to NO ACTION
-
-**Task:** 5 (DDL Generation)
-**Date:** 2026-06-18
-
-**Problem:** SQL Server prevents multiple foreign keys on the same table referencing the same parent when any use `ON DELETE SET NULL` or `CASCADE` (Msg 1785 — "may cause cycles or multiple cascade paths").
-
-**Options considered:**
-- Option A: Keep SET NULL on `bookings.approver_id` and `bookings.checked_in_by` → SQL Server rejects the DDL (multiple cascade paths: both FK → users)
-- Option B: Change all 3 optional FKs to NO ACTION → compiles, but unnecessarily loses SET NULL where it would work
-- Option C: Change only the 2 conflicting FKs on `bookings` to NO ACTION; keep SET NULL on `maintenances.assigned_staff_id` (only 1 FK from maintenances → users, so no conflict)
-
-**Decision:** Option C — `bookings.approver_id` and `bookings.checked_in_by` use `ON DELETE NO ACTION` to avoid the cascade path conflict (multiple FKs from bookings → users). `maintenances.assigned_staff_id` uses `ON DELETE SET NULL` since it is the only FK from maintenances → users, and setting it null correctly preserves the maintenance record while clearing the assignment reference.
-
-**Impact:** 
-- `bookings.approver_id` and `bookings.checked_in_by` → NO ACTION: preserves historical user reference even if the user is deleted (soft-delete is preferred per BR13)
-- `maintenances.assigned_staff_id` → SET NULL: if the assigned staff user is deleted, the assignment reference is nullified; the maintenance record and reporter reference remain intact
-- Application-level checks handle display logic for deleted users in all cases
-
-**Requirement reference:** BR13 (Historical Records Preservation), SQL Server cascade path limitation (Msg 1785).
 
 ---
 
@@ -391,7 +536,7 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 - Existing triggers and indexes on `bookings` must be re-evaluated and migrated to the appropriate new tables
 - Application code for approval and check-in flows must target the new tables
 - Reporting queries now JOIN `bookings` → `booking_approvals` / `booking_sessions` for approval/session data
-- `docs/entity-registry.md` updated; `docs/schema-registry.md` and `outputs/` pending update
+- `docs/entity-registry.md`, `docs/schema-registry.md`, `outputs/02-erd-design-G05.md`, and `outputs/03-logical-design-G05.md` updated accordingly
 
 **Requirement reference:** SRP design principle; BR6 (decision recording), BR7 (rejection reason), BR8 (actual time recording), BR9 (space condition tracking)
 
@@ -405,7 +550,6 @@ _(Unresolved items that affect schema. Should be zero by end of Task 4.)_
 | 2026-06-18 | Added `updated_at` auto-stamp triggers (6 tables) — `AFTER UPDATE` keeps timestamps current beyond the initial INSERT | Agent | Task 05 DDL |
 | 2026-06-18 | Maintenance-completion trigger: `NOT EXISTS` check prevents premature space-status flip with concurrent tickets | Agent | Task 05 DDL |
 | 2026-06-18 | BR7 trigger scoped to status transition — `LEFT JOIN deleted` prevents false rejections on non-status updates | Agent | Task 05 DDL |
-| 2026-06-18 | FK cascade actions: SET NULL → NO ACTION for 3 FKs (SQL Server cascade path limitation) | Agent | Task 05 DDL |
 | 2026-06-15 | Revision 1: added Q3 (maintenance auto-status) and Q4 (auto no-show) decisions; filtered unique index for overlap | Copilot | Task 03 revision |
 | 2026-06-15 | Filled in dates for all Task 2/3 decisions; added account_status, building/floor, rejection_reason, usage_policy decisions | Copilot | Task 03 |
 | — | Template created | Copilot | Planning |
