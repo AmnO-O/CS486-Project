@@ -7,6 +7,7 @@
 - Put `SET QUOTED_IDENTIFIER ON;` and `SET NOCOUNT ON;` near the top. `QUOTED_IDENTIFIER` is required for tables with filtered indexes.
 - Use `GO` between major sections when useful.
 - Keep values deterministic and reviewable; do not hardcode identity values.
+- Use a single declared execution anchor for relative dates (`SYSDATETIME()` captured once, then `DATEADD(...)`) so sample rows keep their intended past/current/future lifecycle semantics when the script is rerun later.
 - Use stable `PRINT` markers for seed sections, expected-error cases, and verification queries.
 - Use short coverage IDs in comments near the seed, expected-error, or verification evidence.
 - Add an SQL comment block after the header explaining sample-data-level assumptions: date ranges, space-status coverage, maintenance concurrency, soft delete, FK-safe ordering, idempotence strategy, and expected-error rationale. Do not duplicate schema-level decisions from `docs/design-decisions.md`.
@@ -82,6 +83,7 @@ Trigger-aware rules:
 - Insert a session before updating that same row with completion fields.
 - Use direct `bookings.status` updates only for lifecycle states not represented by child tables, such as `cancelled` and `no_show`.
 - Avoid unavailable spaces for valid bookings unless the status and trigger behavior make the row safe. Prefer `available` or `in_use` spaces for valid booking workflows.
+- Keep report verification queries semantically narrow. For example, "upcoming bookings" should filter to future, non-deleted, actionable statuses such as `pending` or `approved`; do not let `cancelled`, `rejected`, `completed`, `checked_in`, or `no_show` rows satisfy that report unless the report is explicitly about history.
 
 ## Expected-Error Isolation
 
@@ -132,6 +134,7 @@ Treat caught errors as failures unless they match the intended target. NULL erro
 - For every trigger branch that raises an error, include a matching expected-error proof. For every trigger branch that performs an update, include a before/after verification query or PASS/FAIL block proving the update occurred.
 - For trigger guards that intentionally suppress an update, include a negative side-effect proof: show the precondition, execute the guarded operation, and verify the protected state did not change.
 - For every enum/status distribution claimed as complete, add a verification query whose result set lists all required values. Missing values in the final execution log must be treated as uncovered, even if the seed section comments claim coverage.
+- For audit proof, include a before/after or PASS/FAIL check on at least one stable parent table and at least one lifecycle child table such as `booking_approvals` or `booking_sessions`; a raw final timestamp listing is not enough to prove an update-driven audit trigger.
 
 ## Common Mistakes To Avoid
 

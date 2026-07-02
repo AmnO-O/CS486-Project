@@ -45,6 +45,7 @@ Before running `sqlcmd`, audit that:
 - Every locked table from Task 05 DDL is seeded or intentionally covered as reference data.
 - Insert order is FK-safe and valid rows satisfy CHECK constraints and triggers.
 - Required enum sets, roles, statuses, purposes, space types, maintenance statuses, soft-delete evidence, audit evidence, and reporting examples are covered.
+- Lifecycle-relative dates are derived from a single execution-time anchor, or are explicitly labeled as fixed historical examples. Future/current/past/upcoming claims must remain true against `GETDATE()`/`SYSDATETIME()` at execution time.
 - `booking_approvals.booking_id` and `booking_sessions.booking_id` remain one-to-zero-or-one in valid seed data.
 - Expected-error cases have markers, comments, `TRY/CATCH`, captured error messages, and fixture cleanup.
 - The number of `-- Expected error:` comments equals the number of `EXPECTED_ERROR_CASE` markers, unless a case intentionally has multiple failing statements and each failing statement has its own comment.
@@ -55,8 +56,9 @@ Before running `sqlcmd`, audit that:
 - Critical lookup IDs cannot be NULL before child inserts or expected-error statements.
 - No two valid active bookings overlap for the same space.
 - Verification queries prove workflow/reporting evidence, not just raw row counts. For trigger or lifecycle coverage, verification must show the operation-created state, not only pre-seeded final-state rows.
+- Reporting verification predicates match their labels. "Upcoming" reports must exclude deleted rows and non-actionable terminal/negative statuses; history, no-show, and maintenance reports must use explicit status/date predicates rather than relying only on broad time filters.
 - Cleanup statements use the documented ownership predicate. Reject any permanent-table `DELETE` without a restrictive `WHERE`, joined delete, or `WHERE EXISTS` tied to Task 06-owned natural keys.
-- Update-driven audit evidence includes at least one parent table and at least one lifecycle child table when those tables exist in the DDL.
+- Update-driven audit evidence includes at least one parent table and at least one lifecycle child table when those tables exist in the DDL. The execution log must return an actual lifecycle child row or PASS marker; an empty result set is uncovered.
 - The trajectory plan explicitly names the coverage audit step.
 
 Revise before execution if any audit item is uncovered.
@@ -67,11 +69,14 @@ Static audit must fail immediately for any of these general patterns:
 - Expected-error cases that print `PASS` for a caught error without proving the caught error belongs to the intended rule category.
 - Trigger-enforced business rules represented only by seeded final-state data.
 - Lifecycle status coverage where a terminal status appears in final counts but no workflow operation created it.
+- Lifecycle-relative rows that use stale fixed dates so "future", "current", or "upcoming" labels are false at execution time.
+- Report verification queries whose labels are narrower than their predicates, such as "upcoming bookings" that admit cancelled, rejected, completed, checked-in, no-show, or soft-deleted rows.
 - A child table with a unique FK that has valid seed rows but no duplicate-child expected-error proof.
 - A role-gated trigger in the DDL without both valid-role and invalid-role evidence.
 - A DDL trigger error branch whose message or target is absent from expected-error markers and final execution PASS/FAIL output.
 - A trigger side-effect guard whose protected state is not verified before and after the guarded operation.
 - A required enum/status value listed by DDL or claimed by the SQL header but absent from final verification output.
+- An update-driven audit proof that omits a lifecycle child table row/PASS result from the final log.
 - A trajectory that claims `coverage_uncovered_count: 0` while the final execution log omits any mandatory DDL-derived proof.
 - A trajectory that omits final coverage counts or reports a nonzero uncovered count.
 
@@ -131,6 +136,7 @@ The trajectory must include:
 - one `verify` step for reviewing that final log;
 - one `verify` step for final coverage audit with total, covered, uncovered counts, and evidence types;
 - under Written, only the single final successful execution log plus the trajectory itself;
+- the frontmatter and section structure from `.opencode/skills/evaluations/templates/trajectory-template.md`, including `revision_of` and the required Task 06 coverage fields;
 - self-detected errors and fixes, including valid-seed errors, idempotence/rerun failures, coverage gaps, exact fixes, and final proving log;
 - `coverage_uncovered_count`, which must be `0` for completion;
 - "No open questions raised" or "No ambiguities found" when applicable.

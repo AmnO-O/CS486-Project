@@ -1,0 +1,193 @@
+SECTION 0: Cleanup previous Task 06-owned rows
+SECTION 1: Departments
+SECTION 2: Users - all roles and account statuses
+SECTION 3: Spaces - all types and statuses
+SECTION 4: Facilities and space_facilities
+SECTION 5: Maintenance valid rows and restoration workflow
+VERIFY: V00A - maintenance restoration guard keeps space under maintenance while another active ticket remains
+space_code                                         status_after_first_resolution                     
+-------------------------------------------------- --------------------------------------------------
+T06-CL-102                                         under_maintenance                                 
+VERIFY: V00B - maintenance restoration side effect restores availability after final active ticket
+space_code                                         status_after_final_resolution                     
+-------------------------------------------------- --------------------------------------------------
+T06-CL-102                                         available                                         
+SECTION 6: Booking lifecycle valid workflows
+SECTION 7: Audit update proofs
+PASS: AUDIT_PARENT - trg_spaces_updated_at advanced updated_at.
+PASS: AUDIT_CHILD - trg_booking_approvals_updated_at advanced updated_at.
+SECTION 8: Expected-error cases
+EXPECTED_ERROR_CASE: E01 - BR1 overlapping active booking interval
+PASS: E01 - Overlapping booking exists for this space and time range.
+EXPECTED_ERROR_CASE: E02A - BR2 approve under_maintenance space
+PASS: E02A - Cannot approve booking: space is not available.
+EXPECTED_ERROR_CASE: E02B - BR2 approve temporarily_closed space
+PASS: E02B - Cannot approve booking: space is not available.
+EXPECTED_ERROR_CASE: E02C - BR2 approve retired space
+PASS: E02C - Cannot approve booking: space is not available.
+EXPECTED_ERROR_CASE: E03 - BR3 capacity limit
+PASS: E03 - Expected participants exceed space capacity.
+EXPECTED_ERROR_CASE: E04 - BR4 unresolved maintenance overlap
+PASS: E04 - Overlapping unresolved maintenance exists for this space.
+EXPECTED_ERROR_CASE: E05A - BR6 approver_id NOT NULL
+PASS: E05A - Cannot insert the value NULL into column 'approver_id', table 'CS486_G05.dbo.booking_approvals'; column does not allow nulls. INSERT fails.
+EXPECTED_ERROR_CASE: E05B - BR6 decision_time NOT NULL
+PASS: E05B - Cannot insert the value NULL into column 'decision_time', table 'CS486_G05.dbo.booking_approvals'; column does not allow nulls. INSERT fails.
+EXPECTED_ERROR_CASE: E06 - BR7 rejection reason required
+PASS: E06 - Rejection reason must be provided when decision is rejected.
+EXPECTED_ERROR_CASE: E07 - BR8 check-in requires approved booking
+PASS: E07 - Cannot check in: booking is not in approved status.
+EXPECTED_ERROR_CASE: E08 - BR9 initial condition required
+PASS: E08 - initial_condition must be provided at check-in.
+EXPECTED_ERROR_CASE: E09 - BR9 final condition required
+PASS: E09 - final_condition must be provided when completing a booking session.
+EXPECTED_ERROR_CASE: E10 - BR15 invalid approver role
+PASS: E10 - Approver must be facility staff or facility manager.
+EXPECTED_ERROR_CASE: E11 - BR16 invalid check-in role
+PASS: E11 - Check-in staff must be facility staff or facility manager.
+EXPECTED_ERROR_CASE: E12 - BR17 invalid maintenance assignee role
+PASS: E12 - Assigned maintenance staff must be facility staff.
+EXPECTED_ERROR_CASE: E13 - BR18 invalid cancellation from completed
+PASS: E13 - Cancellation is only allowed from pending or approved status.
+EXPECTED_ERROR_CASE: E14 - invalid user role enum
+PASS: E14 - The INSERT statement conflicted with the CHECK constraint "CK_users_role". The conflict occurred in database "CS486_G05", table "dbo.users", column 'role'.
+EXPECTED_ERROR_CASE: E15 - invalid booking time range
+PASS: E15 - The INSERT statement conflicted with the CHECK constraint "CK_bookings_requested_end_time". The conflict occurred in database "CS486_G05", table "dbo.bookings".
+EXPECTED_ERROR_CASE: E16 - duplicate user email
+PASS: E16 - Violation of UNIQUE KEY constraint 'UQ_users_email'. Cannot insert duplicate key in object 'dbo.users'. The duplicate key value is (t06.student1@university.edu).
+EXPECTED_ERROR_CASE: E17 - invalid junction quantity
+PASS: E17 - The INSERT statement conflicted with the CHECK constraint "CK_space_facilities_quantity". The conflict occurred in database "CS486_G05", table "dbo.space_facilities", column 'quantity'.
+EXPECTED_ERROR_CASE: E18 - duplicate booking approval child
+PASS: E18 - Violation of UNIQUE KEY constraint 'UQ_booking_approvals_booking_id'. Cannot insert duplicate key in object 'dbo.booking_approvals'. The duplicate key value is (457).
+EXPECTED_ERROR_CASE: E19 - duplicate booking session child
+PASS: E19 - Violation of UNIQUE KEY constraint 'UQ_booking_sessions_booking_id'. Cannot insert duplicate key in object 'dbo.booking_sessions'. The duplicate key value is (461).
+EXPECTED_ERROR_CASE: E20 - filtered unique active booking exact collision
+PASS: E20 - Cannot insert duplicate key row in object 'dbo.bookings' with unique index 'uq_bookings_active_overlap'. The duplicate key value is (170, 2026-07-10 16:43:10.9626312).
+EXPECTED_ERROR_CASE: E21 - invalid approval decision enum
+PASS: E21 - The INSERT statement conflicted with the CHECK constraint "CK_booking_approvals_decision". The conflict occurred in database "CS486_G05", table "dbo.booking_approvals", column 'decision'.
+SECTION 9: Verification queries
+VERIFY: V01 - row counts for every table seeded or referenced
+table_name        row_count  
+----------------- -----------
+departments                 5
+users                       8
+spaces                      9
+facilities                  6
+space_facilities           16
+maintenance                 8
+bookings                    9
+booking_approvals           6
+booking_sessions            2
+VERIFY: V02 - user roles and account statuses
+role                                               account_status                                     users_count
+-------------------------------------------------- -------------------------------------------------- -----------
+department_admin                                   inactive                                                     1
+facility_manager                                   active                                                       1
+facility_staff                                     active                                                       2
+lecturer                                           active                                                       1
+student                                            active                                                       1
+student                                            suspended                                                    1
+teaching_assistant                                 active                                                       1
+VERIFY: V03 - space types and current statuses
+space_type                                         current_status                                     spaces_count
+-------------------------------------------------- -------------------------------------------------- ------------
+auditorium                                         available                                                     1
+auditorium                                         temporarily_closed                                            1
+classroom                                          available                                                     2
+computer_lab                                       available                                                     1
+meeting_room                                       in_use                                                        1
+meeting_room                                       retired                                                       1
+project_lab                                        under_maintenance                                             1
+student_workspace                                  available                                                     1
+VERIFY: V04 - facility assignments by space
+space_code                                         facility_name                                                                                                                                                                                                                                                   quantity   
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -----------
+T06-AUD-001                                        T06 Air Conditioner                                                                                                                                                                                                                                                       4
+T06-AUD-001                                        T06 Livestreaming Equipment                                                                                                                                                                                                                                               1
+T06-AUD-001                                        T06 Microphone                                                                                                                                                                                                                                                            6
+T06-AUD-001                                        T06 Projector                                                                                                                                                                                                                                                             2
+T06-CL-101                                         T06 Air Conditioner                                                                                                                                                                                                                                                       1
+T06-CL-101                                         T06 Projector                                                                                                                                                                                                                                                             1
+T06-CL-101                                         T06 Whiteboard                                                                                                                                                                                                                                                            2
+T06-LAB-201                                        T06 Air Conditioner                                                                                                                                                                                                                                                       2
+T06-LAB-201                                        T06 Computer                                                                                                                                                                                                                                                             45
+T06-LAB-201                                        T06 Projector                                                                                                                                                                                                                                                             1
+T06-MR-401                                         T06 Projector                                                                                                                                                                                                                                                             1
+T06-MR-401                                         T06 Whiteboard                                                                                                                                                                                                                                                            1
+T06-PL-301                                         T06 Computer                                                                                                                                                                                                                                                             12
+T06-PL-301                                         T06 Whiteboard                                                                                                                                                                                                                                                            1
+T06-SW-501                                         T06 Air Conditioner                                                                                                                                                                                                                                                       2
+T06-SW-501                                         T06 Whiteboard                                                                                                                                                                                                                                                            3
+VERIFY: V05 - maintenance statuses, soft delete, and assigned staff role
+status                                             is_deleted assigned_role                                      maintenance_count
+-------------------------------------------------- ---------- -------------------------------------------------- -----------------
+in_progress                                                 0 facility_staff                                                     1
+open                                                        0 facility_staff                                                     1
+resolved                                                    0 facility_staff                                                     5
+resolved                                                    1 facility_staff                                                     1
+VERIFY: V06 - booking statuses and purposes
+status                                             purpose                                            booking_count
+-------------------------------------------------- -------------------------------------------------- -------------
+approved                                           examination                                                    1
+cancelled                                          meeting                                                        1
+cancelled                                          student_activity                                               1
+cancelled                                          workshop                                                       1
+checked_in                                         student_activity                                               1
+completed                                          administrative_event                                           1
+no_show                                            meeting                                                        1
+pending                                            lecture                                                        1
+rejected                                           seminar                                                        1
+VERIFY: V07 - approval decisions and valid approver roles
+decision                                           approver_role                                      approvals_count
+-------------------------------------------------- -------------------------------------------------- ---------------
+approved                                           facility_manager                                                 2
+approved                                           facility_staff                                                   3
+rejected                                           facility_staff                                                   1
+VERIFY: V08 - sessions and completion fields
+status                                             sessions_count completed_sessions_with_final_condition
+-------------------------------------------------- -------------- ---------------------------------------
+checked_in                                                      1                                       0
+completed                                                       1                                       1
+VERIFY: V09 - soft-deleted history remains queryable
+table_name  soft_deleted_count
+----------- ------------------
+bookings                     1
+maintenance                  1
+VERIFY: V10 - audit timestamps exist
+table_name        rows_with_audit
+----------------- ---------------
+spaces                          9
+booking_approvals               6
+VERIFY: V11 - booking history report
+space_code                                         requester_email                                                                                                                                                                                                                                                 purpose                                            status                                             requested_start_time                   requested_end_time                    
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------------------- -------------------------------------- --------------------------------------
+T06-SW-501                                         t06.ta1@university.edu                                                                                                                                                                                                                                          meeting                                            no_show                                                       2026-06-30 16:43:10.9626312            2026-06-30 17:43:10.9626312
+T06-LAB-201                                        t06.admin1@university.edu                                                                                                                                                                                                                                       administrative_event                               completed                                                     2026-06-26 16:43:10.9626312            2026-06-26 18:43:10.9626312
+T06-CL-101                                         t06.student2@university.edu                                                                                                                                                                                                                                     student_activity                                   cancelled                                                     2026-06-12 16:43:10.9626312            2026-06-12 17:43:10.9626312
+VERIFY: V12 - upcoming actionable bookings report
+space_code                                         requester_email                                                                                                                                                                                                                                                 purpose                                            status                                             requested_start_time                  
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------------------- --------------------------------------
+T06-CL-101                                         t06.lecturer1@university.edu                                                                                                                                                                                                                                    lecture                                            pending                                                       2026-07-09 16:43:10.9626312
+T06-AUD-001                                        t06.lecturer1@university.edu                                                                                                                                                                                                                                    examination                                        approved                                                      2026-07-10 16:43:10.9626312
+VERIFY: V13 - spaces under maintenance report
+space_code                                         space_name                                                                                                                                                                                                                                                      problem_description                                                                                                                                                                                                                                              status                                            
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------
+T06-PL-301                                         Project Lab 301                                                                                                                                                                                                                                                 Cleaning Issues after student activity.                                                                                                                                                                                                                          in_progress                                       
+T06-PL-301                                         Project Lab 301                                                                                                                                                                                                                                                 Broken Projector prevents project demonstrations.                                                                                                                                                                                                                open                                              
+VERIFY: V14 - no-show bookings report
+space_code                                         requester_email                                                                                                                                                                                                                                                 requested_start_time                   requested_end_time                     status                                            
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------- -------------------------------------- --------------------------------------------------
+T06-SW-501                                         t06.ta1@university.edu                                                                                                                                                                                                                                                     2026-06-30 16:43:10.9626312            2026-06-30 17:43:10.9626312 no_show                                           
+VERIFY: V15 - FK joins for request, approval, session, maintenance
+booking_id  space_code                                         requester_email                                                                                                                                                                                                                                                 decision                                           approver_email                                                                                                                                                                                                                                                  actual_start_time                      checked_in_by_email                                                                                                                                                                                                                                            
+----------- -------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        456 T06-CL-101                                         t06.lecturer1@university.edu                                                                                                                                                                                                                                    NULL                                               NULL                                                                                                                                                                                                                                                                                              NULL NULL                                                                                                                                                                                                                                                           
+        457 T06-AUD-001                                        t06.lecturer1@university.edu                                                                                                                                                                                                                                    approved                                           t06.manager1@university.edu                                                                                                                                                                                                                                                                       NULL NULL                                                                                                                                                                                                                                                           
+        458 T06-MR-401                                         t06.ta1@university.edu                                                                                                                                                                                                                                          rejected                                           t06.staff1@university.edu                                                                                                                                                                                                                                                                         NULL NULL                                                                                                                                                                                                                                                           
+        459 T06-SW-501                                         t06.student1@university.edu                                                                                                                                                                                                                                     NULL                                               NULL                                                                                                                                                                                                                                                                                              NULL NULL                                                                                                                                                                                                                                                           
+        460 T06-MR-401                                         t06.admin1@university.edu                                                                                                                                                                                                                                       approved                                           t06.staff1@university.edu                                                                                                                                                                                                                                                                         NULL NULL                                                                                                                                                                                                                                                           
+        461 T06-MR-401                                         t06.student1@university.edu                                                                                                                                                                                                                                     approved                                           t06.manager1@university.edu                                                                                                                                                                                                                                                2026-07-02 16:18:10.9626312 t06.staff1@university.edu                                                                                                                                                                                                                                      
+        462 T06-LAB-201                                        t06.admin1@university.edu                                                                                                                                                                                                                                       approved                                           t06.staff1@university.edu                                                                                                                                                                                                                                                  2026-06-26 16:43:10.9626312 t06.staff2@university.edu                                                                                                                                                                                                                                      
+        463 T06-SW-501                                         t06.ta1@university.edu                                                                                                                                                                                                                                          approved                                           t06.staff1@university.edu                                                                                                                                                                                                                                                                         NULL NULL                                                                                                                                                                                                                                                           
+        464 T06-CL-101                                         t06.student2@university.edu                                                                                                                                                                                                                                     NULL                                               NULL                                                                                                                                                                                                                                                                                              NULL NULL                                                                                                                                                                                                                                                           
+VERIFY: V16 - Task 06 sample data generation completed
