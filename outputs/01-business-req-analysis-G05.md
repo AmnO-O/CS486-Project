@@ -257,6 +257,8 @@ A space with status `under_maintenance` cannot have approved bookings during the
 
 ### Unresolved Ambiguities
 
+> **Note:** These ambiguities were identified during the business requirement analysis phase and are resolved in subsequent design decisions (`docs/design-decisions.md`).
+
 | # | Question | Impact |
 |---|---|---|
 | Q1 | **Rejection reason storage** — Should the rejection reason be a separate attribute or part of the decision note? | Affects column design in the booking table. |
