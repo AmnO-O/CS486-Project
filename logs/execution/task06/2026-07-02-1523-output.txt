@@ -1,0 +1,199 @@
+SECTION 0: Cleanup previous Task 06-owned rows
+SECTION 1: Departments
+SECTION 2: Users - all roles and account statuses
+SECTION 3: Spaces - all types and statuses
+SECTION 4: Facilities and space_facilities
+SECTION 5: Maintenance - statuses, soft delete, and BR19 side effects
+VERIFY: V-MAINT-GUARD-BEFORE - concurrent active maintenance keeps space under_maintenance
+space_code                                         current_status                                     active_ticket_count
+-------------------------------------------------- -------------------------------------------------- -------------------
+T06-MTG-012                                        under_maintenance                                                    2
+VERIFY: V-MAINT-GUARD-AFTER-ONE - guard prevents status restoration while another active ticket remains
+space_code                                         current_status                                     remaining_active_ticket_count
+-------------------------------------------------- -------------------------------------------------- -----------------------------
+T06-MTG-012                                        under_maintenance                                                              1
+VERIFY: V-MAINT-RESTORE - last resolved maintenance restores space to available
+space_code                                         current_status                                    
+-------------------------------------------------- --------------------------------------------------
+T06-MTG-012                                        available                                         
+SECTION 6: Bookings - valid lifecycle workflows
+SECTION 7: Expected-error cases
+EXPECTED_ERROR_CASE: E01 - trg_bookings_prevent_overlap
+PASS: E01 - Overlapping booking exists for this space and time range.
+EXPECTED_ERROR_CASE: E02 - trg_booking_approvals_check_space under_maintenance
+PASS: E02 - Cannot approve booking: space is not available.
+EXPECTED_ERROR_CASE: E03 - trg_booking_approvals_check_space temporarily_closed
+PASS: E03 - Cannot approve booking: space is not available.
+EXPECTED_ERROR_CASE: E04 - trg_booking_approvals_check_space retired
+PASS: E04 - Cannot approve booking: space is not available.
+EXPECTED_ERROR_CASE: E05 - trg_bookings_check_capacity
+PASS: E05 - Expected participants exceed space capacity.
+EXPECTED_ERROR_CASE: E06 - trg_bookings_check_maintenance
+PASS: E06 - Overlapping unresolved maintenance exists for this space.
+EXPECTED_ERROR_CASE: E07 - booking_approvals decision_time NOT NULL
+PASS: E07 - Cannot insert the value NULL into column 'decision_time', table 'CS486_G05.dbo.booking_approvals'; column does not allow nulls. INSERT fails.
+EXPECTED_ERROR_CASE: E08 - trg_booking_approvals_rejection
+PASS: E08 - Rejection reason must be provided when decision is rejected.
+EXPECTED_ERROR_CASE: E09 - trg_booking_sessions_checkin non-approved
+PASS: E09 - Cannot check in: booking is not in approved status.
+EXPECTED_ERROR_CASE: E10 - trg_booking_sessions_checkin initial_condition
+PASS: E10 - initial_condition must be provided at check-in.
+EXPECTED_ERROR_CASE: E11 - trg_booking_sessions_completion final_condition
+PASS: E11 - final_condition must be provided when completing a booking session.
+EXPECTED_ERROR_CASE: E12 - trg_booking_approvals_check_role
+PASS: E12 - Approver must be facility staff or facility manager.
+EXPECTED_ERROR_CASE: E13 - trg_booking_sessions_check_role
+PASS: E13 - Check-in staff must be facility staff or facility manager.
+EXPECTED_ERROR_CASE: E14 - trg_maintenance_check_assignee_role
+PASS: E14 - Assigned maintenance staff must be facility staff.
+EXPECTED_ERROR_CASE: E15 - trg_bookings_cancellation blocked predecessor
+PASS: E15 - Cancellation is only allowed from pending or approved status.
+EXPECTED_ERROR_CASE: E16 - UQ_users_email
+PASS: E16 - Violation of UNIQUE KEY constraint 'UQ_users_email'. Cannot insert duplicate key in object 'dbo.users'. The duplicate key value is (t06.student1@university.edu).
+EXPECTED_ERROR_CASE: E17 - CK_bookings_status
+PASS: E17 - The INSERT statement conflicted with the CHECK constraint "CK_bookings_status". The conflict occurred in database "CS486_G05", table "dbo.bookings", column 'status'.
+EXPECTED_ERROR_CASE: E18 - CK_bookings_requested_end_time
+PASS: E18 - The INSERT statement conflicted with the CHECK constraint "CK_bookings_requested_end_time". The conflict occurred in database "CS486_G05", table "dbo.bookings".
+EXPECTED_ERROR_CASE: E19 - CK_space_facilities_quantity
+PASS: E19 - The INSERT statement conflicted with the CHECK constraint "CK_space_facilities_quantity". The conflict occurred in database "CS486_G05", table "dbo.space_facilities", column 'quantity'.
+EXPECTED_ERROR_CASE: E20 - UQ_booking_approvals_booking_id
+PASS: E20 - Violation of UNIQUE KEY constraint 'UQ_booking_approvals_booking_id'. Cannot insert duplicate key in object 'dbo.booking_approvals'. The duplicate key value is (300).
+EXPECTED_ERROR_CASE: E21 - UQ_booking_sessions_booking_id
+PASS: E21 - Violation of UNIQUE KEY constraint 'UQ_booking_sessions_booking_id'. Cannot insert duplicate key in object 'dbo.booking_sessions'. The duplicate key value is (307).
+SECTION 8: Audit update trigger proofs
+VERIFY: V-AUDIT-PARENT - spaces updated_at changed by update trigger
+space_code                                         audit_parent_result before_updated_at                      after_updated_at                      
+-------------------------------------------------- ------------------- -------------------------------------- --------------------------------------
+T06-CLS-201                                        covered                        2026-07-02 15:22:46.6700000            2026-07-02 15:22:46.7266667
+VERIFY: V-AUDIT-LIFECYCLE - booking_sessions updated_at changed by update trigger
+booking_id  audit_lifecycle_result before_updated_at                      after_updated_at                      
+----------- ---------------------- -------------------------------------- --------------------------------------
+        307 covered                           2026-07-02 15:22:46.6866667            2026-07-02 15:22:46.7266667
+SECTION 9: Verification queries
+VERIFY: V-ROW-COUNTS - Task 06-owned row counts
+object_name       row_count  
+----------------- -----------
+users                       9
+spaces                      9
+facilities                  6
+space_facilities           18
+maintenance                 7
+bookings                   10
+booking_approvals           8
+booking_sessions            2
+VERIFY: V-USER-ROLES - all user roles
+role                                               count_per_role
+-------------------------------------------------- --------------
+department_admin                                                1
+facility_manager                                                1
+facility_staff                                                  2
+lecturer                                                        2
+student                                                         2
+teaching_assistant                                              1
+VERIFY: V-ACCOUNT-STATUS - all account statuses
+account_status                                     count_per_status
+-------------------------------------------------- ----------------
+active                                                            7
+inactive                                                          1
+suspended                                                         1
+VERIFY: V-SPACE-TYPES - all space types
+space_type                                         count_per_type
+-------------------------------------------------- --------------
+auditorium                                                      2
+classroom                                                       2
+computer_lab                                                    2
+meeting_room                                                    1
+project_lab                                                     1
+student_workspace                                               1
+VERIFY: V-SPACE-STATUS - all space statuses
+current_status                                     count_per_status
+-------------------------------------------------- ----------------
+available                                                         5
+in_use                                                            1
+retired                                                           1
+temporarily_closed                                                1
+under_maintenance                                                 1
+VERIFY: V-BOOKING-STATUS - all booking statuses
+status                                             count_per_status
+-------------------------------------------------- ----------------
+approved                                                          2
+cancelled                                                         2
+checked_in                                                        1
+completed                                                         1
+no_show                                                           2
+pending                                                           1
+rejected                                                          1
+VERIFY: V-BOOKING-PURPOSE - all booking purposes
+purpose                                            count_per_purpose
+-------------------------------------------------- -----------------
+administrative_event                                               1
+examination                                                        1
+lecture                                                            1
+meeting                                                            2
+seminar                                                            1
+student_activity                                                   2
+workshop                                                           2
+VERIFY: V-APPROVAL-DECISION - approved and rejected decisions
+decision                                           count_per_decision
+-------------------------------------------------- ------------------
+approved                                                            7
+rejected                                                            1
+VERIFY: V-MAINT-STATUS - all maintenance statuses
+status                                             count_per_status
+-------------------------------------------------- ----------------
+in_progress                                                       1
+open                                                              1
+resolved                                                          5
+VERIFY: V-SOFT-DELETE - historical soft-deleted booking and maintenance remain queryable
+history_type soft_deleted_count
+------------ ------------------
+booking                       1
+maintenance                   1
+VERIFY: V-FK-JOINS - booking, approval, session, and maintenance joins
+booking_id  space_code                                         requester_email                                                                                                                                                                                                                                                 status                                             decision                                           actual_start_time                      actual_end_time                       
+----------- -------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------------------- -------------------------------------- --------------------------------------
+        299 T06-CLS-201                                        t06.student1@university.edu                                                                                                                                                                                                                                     pending                                            NULL                                                                                 NULL                                   NULL
+        300 T06-AUD-101                                        t06.lecturer1@university.edu                                                                                                                                                                                                                                    approved                                           approved                                                                             NULL                                   NULL
+        301 T06-CLS-201                                        t06.ta1@university.edu                                                                                                                                                                                                                                          rejected                                           rejected                                                                             NULL                                   NULL
+        302 T06-PROJ-110                                       t06.student1@university.edu                                                                                                                                                                                                                                     cancelled                                          NULL                                                                                 NULL                                   NULL
+        303 T06-COMP-301                                       t06.lecturer1@university.edu                                                                                                                                                                                                                                    completed                                          approved                                                      2026-06-10 08:05:00.0000000            2026-06-10 09:55:00.0000000
+        304 T06-SW-020                                         t06.student2@university.edu                                                                                                                                                                                                                                     no_show                                            approved                                                                             NULL                                   NULL
+        305 T06-AUD-101                                        t06.lecturer1@university.edu                                                                                                                                                                                                                                    cancelled                                          approved                                                                             NULL                                   NULL
+        306 T06-SW-020                                         t06.student1@university.edu                                                                                                                                                                                                                                     approved                                           approved                                                                             NULL                                   NULL
+        307 T06-COMP-202                                       t06.lecturer1@university.edu                                                                                                                                                                                                                                    checked_in                                         approved                                                      2026-07-02 09:02:00.0000000                                   NULL
+        308 T06-AUD-101                                        t06.student1@university.edu                                                                                                                                                                                                                                     no_show                                            approved                                                                             NULL                                   NULL
+VERIFY: V-REPORT-UPCOMING - upcoming approved bookings
+space_code                                         requested_start_time                   requested_end_time                     purpose                                            expected_participants
+-------------------------------------------------- -------------------------------------- -------------------------------------- -------------------------------------------------- ---------------------
+T06-AUD-101                                                   2026-07-20 08:00:00.0000000            2026-07-20 10:00:00.0000000 lecture                                                              120
+VERIFY: V-REPORT-HISTORY - booking history
+requester_email                                                                                                                                                                                                                                                 space_code                                         requested_start_time                   requested_end_time                     status                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- -------------------------------------- -------------------------------------- --------------------------------------------------
+t06.student1@university.edu                                                                                                                                                                                                                                     T06-AUD-101                                                   2026-06-05 09:00:00.0000000            2026-06-05 11:00:00.0000000 no_show                                           
+t06.lecturer1@university.edu                                                                                                                                                                                                                                    T06-COMP-301                                                  2026-06-10 08:00:00.0000000            2026-06-10 10:00:00.0000000 completed                                         
+t06.student2@university.edu                                                                                                                                                                                                                                     T06-SW-020                                                    2026-06-12 14:00:00.0000000            2026-06-12 16:00:00.0000000 no_show                                           
+VERIFY: V-REPORT-MAINTENANCE - spaces under maintenance
+space_code                                         space_name                                                                                                                                                                                                                                                      current_status                                     problem_description                                                                                                                                                                                                                                              status                                            
+-------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------
+T06-MTG-012                                        Faculty Meeting Room 12                                                                                                                                                                                                                                         under_maintenance                                  T06 Broken projector and loose HDMI cable.                                                                                                                                                                                                                       resolved                                          
+T06-MTG-012                                        Faculty Meeting Room 12                                                                                                                                                                                                                                         under_maintenance                                  T06 Air conditioning failure in meeting room.                                                                                                                                                                                                                    resolved                                          
+T06-MTG-012                                        Faculty Meeting Room 12                                                                                                                                                                                                                                         under_maintenance                                  T06 Network inspection after room maintenance.                                                                                                                                                                                                                   in_progress                                       
+VERIFY: V-REPORT-NOSHOW - no-show bookings
+space_code                                         requested_start_time                   requested_end_time                     requester_email                                                                                                                                                                                                                                                
+-------------------------------------------------- -------------------------------------- -------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+T06-AUD-101                                                   2026-06-05 09:00:00.0000000            2026-06-05 11:00:00.0000000 t06.student1@university.edu                                                                                                                                                                                                                                    
+T06-SW-020                                                    2026-06-12 14:00:00.0000000            2026-06-12 16:00:00.0000000 t06.student2@university.edu                                                                                                                                                                                                                                    
+VERIFY: V-AUDIT-NONNULL - created_at and updated_at populated
+object_name       null_audit_count
+----------------- ----------------
+users                            0
+spaces                           0
+bookings                         0
+booking_approvals                0
+booking_sessions                 0
+maintenance                      0
+VERIFY: V-NO-ACTIVE-OVERLAP - valid active bookings do not overlap
+active_overlap_pair_count
+-------------------------
+                        0
+=== TASK 06 SAMPLE DATA GENERATION COMPLETE ===

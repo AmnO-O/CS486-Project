@@ -1,67 +1,94 @@
-SET NOCOUNT ON;
 SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
 GO
 
 -- ============================================================
--- CS486 Group G05 — Campus Space Management System
+-- CS486 Group G05 - Campus Space Management System
 -- Task 06: Sample Data Preparation
--- Dependencies: Must run after outputs/05-db-definition-G05.sql
--- Target: SQL Server 2019+
+-- Dependency: run after outputs/05-db-definition-G05.sql
+-- Target: SQL Server 2019+ (T-SQL)
+-- ============================================================
+-- Assumptions and sample-data strategy:
+-- - Dates are fixed and deterministic around June-July 2026 so lifecycle
+--   examples remain reviewable.
+-- - Task-owned rows use stable natural keys: space_code LIKE 'T06-%',
+--   user email LIKE 't06.%', and facility names prefixed with 'T06 '.
+-- - Cleanup-and-reseed deletes only Task 06-owned child rows through owned
+--   parents, then owned parent rows in reverse FK order.
+-- - Approval/session workflows follow the Task 05 split schema:
+--   bookings -> booking_approvals -> booking_sessions.
+-- - Expected-error cases are isolated in transactions and match the intended
+--   trigger message or constraint name.
+-- - Maintenance completion proves both the concurrent-ticket guard and the
+--   final-ticket restoration side effect.
 -- ============================================================
 
--- ============================================================
--- Assumptions and Design Decisions
--- ============================================================
--- 1. Date-range rationale:
---    - Past dates (2026-06-01 ~ 2026-06-15): completed, no-show,
---      rejected, soft-deleted records.
---    - Current date (2026-06-22): checked-in session (in-progress
---      today).
---    - Future dates (2026-07-01 ~ 2026-07-20): pending, approved,
---      cancelled bookings; future maintenance records.
--- 2. Space-status coverage: all five statuses represented across
---    nine spaces. Spaces 5 (under_maintenance), 7 (temporarily_closed),
---    8 (retired) cannot accept valid bookings.
--- 3. Maintenance concurrency: spaces 5 and 9 have open maintenance;
---    space 6 has in_progress maintenance (starting 2026-07-20);
---    space 3 has resolved maintenance.
--- 4. Soft-delete: booking 10 and maintenance 5 use is_deleted = 1.
--- 5. FK-safe ordering: data inserted in dependency order
---    (departments → users → spaces → facilities → space_facilities →
---    maintenances → bookings).
--- 6. Idempotence strategy: Cleanup-and-reseed. All T06-owned rows
---    are identified by space_code prefix 'T06-' or email prefix
---    't06.' and are deleted in reverse FK order before reseeding.
--- 7. Expected-error tests: each isolated with BEGIN TRY/CATCH,
---    prerequisite lookups validated before the failing statement.
--- ============================================================
-
--- ============================================================
--- SECTION 0: Idempotent Cleanup (reverse FK order)
--- ============================================================
-PRINT 'SECTION 0: Cleanup previous T06 sample data';
+PRINT 'SECTION 0: Cleanup previous Task 06-owned rows';
 GO
 
-DELETE FROM [dbo].[bookings]
-WHERE [space_id] IN (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] LIKE 'T06-%');
+DELETE bs
+FROM [dbo].[booking_sessions] bs
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[bookings] b
+    INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+    WHERE b.[booking_id] = bs.[booking_id]
+      AND s.[space_code] LIKE N'T06-%'
+);
 
-DELETE FROM [dbo].[maintenances]
-WHERE [space_id] IN (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] LIKE 'T06-%');
+DELETE ba
+FROM [dbo].[booking_approvals] ba
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[bookings] b
+    INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+    WHERE b.[booking_id] = ba.[booking_id]
+      AND s.[space_code] LIKE N'T06-%'
+);
 
-DELETE FROM [dbo].[space_facilities]
-WHERE [space_id] IN (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] LIKE 'T06-%');
+DELETE b
+FROM [dbo].[bookings] b
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[spaces] s
+    WHERE s.[space_id] = b.[space_id]
+      AND s.[space_code] LIKE N'T06-%'
+);
+
+DELETE m
+FROM [dbo].[maintenance] m
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[spaces] s
+    WHERE s.[space_id] = m.[space_id]
+      AND s.[space_code] LIKE N'T06-%'
+);
+
+DELETE sf
+FROM [dbo].[space_facilities] sf
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[spaces] s
+    WHERE s.[space_id] = sf.[space_id]
+      AND s.[space_code] LIKE N'T06-%'
+)
+OR EXISTS (
+    SELECT 1
+    FROM [dbo].[facilities] f
+    WHERE f.[facility_id] = sf.[facility_id]
+      AND f.[name] LIKE N'T06 %'
+);
 
 DELETE FROM [dbo].[spaces]
-WHERE [space_code] LIKE 'T06-%';
+WHERE [space_code] LIKE N'T06-%';
 
 DELETE FROM [dbo].[users]
-WHERE [email] LIKE 't06.%';
+WHERE [email] LIKE N't06.%';
 
+DELETE FROM [dbo].[facilities]
+WHERE [name] LIKE N'T06 %';
 GO
 
--- ============================================================
--- SECTION 1: Departments
--- ============================================================
 PRINT 'SECTION 1: Departments';
 GO
 
@@ -73,1005 +100,910 @@ IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'Department of 
     INSERT INTO [dbo].[departments] ([name]) VALUES (N'Department of Physics');
 IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'Faculty of Engineering')
     INSERT INTO [dbo].[departments] ([name]) VALUES (N'Faculty of Engineering');
-IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'Department of Business Administration')
-    INSERT INTO [dbo].[departments] ([name]) VALUES (N'Department of Business Administration');
-
+IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'School Administration')
+    INSERT INTO [dbo].[departments] ([name]) VALUES (N'School Administration');
 GO
 
--- Lookup variables
-DECLARE @cs_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School of Computer Science');
-DECLARE @math_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Mathematics');
-DECLARE @physics_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Physics');
-DECLARE @eng_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Faculty of Engineering');
-DECLARE @biz_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Business Administration');
-
-IF @cs_dept_id IS NULL OR @math_dept_id IS NULL OR @physics_dept_id IS NULL OR @eng_dept_id IS NULL OR @biz_dept_id IS NULL
-    THROW 51000, 'Setup failed: department lookup returned NULL.', 1;
-
+PRINT 'SECTION 2: Users - all roles and account statuses';
 GO
 
--- ============================================================
--- SECTION 2: Users (all roles, mixed account statuses)
--- ============================================================
-PRINT 'SECTION 2: Users';
+DECLARE @dept_cs INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School of Computer Science');
+DECLARE @dept_math INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Mathematics');
+DECLARE @dept_physics INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Physics');
+DECLARE @dept_eng INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Faculty of Engineering');
+DECLARE @dept_admin INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School Administration');
+
+IF @dept_cs IS NULL OR @dept_math IS NULL OR @dept_physics IS NULL OR @dept_eng IS NULL OR @dept_admin IS NULL
+    THROW 51006, 'Task 06 setup failed: department lookup returned NULL.', 1;
+
+INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status]) VALUES
+(N't06.student1@university.edu', N'Alice Nguyen', N'090-100-0001', 'student', @dept_cs, 'active'),
+(N't06.student2@university.edu', N'Bao Tran', NULL, 'student', @dept_physics, 'inactive'),
+(N't06.lecturer1@university.edu', N'Dr. Linh Pham', N'090-100-0002', 'lecturer', @dept_cs, 'active'),
+(N't06.ta1@university.edu', N'Minh Vo', NULL, 'teaching_assistant', @dept_cs, 'active'),
+(N't06.facilitystaff1@university.edu', N'Quang Le', N'090-100-0003', 'facility_staff', @dept_admin, 'active'),
+(N't06.facilitystaff2@university.edu', N'Ha Dang', N'090-100-0004', 'facility_staff', @dept_admin, 'suspended'),
+(N't06.departmentadmin1@university.edu', N'Lan Hoang', N'090-100-0005', 'department_admin', @dept_math, 'active'),
+(N't06.facilitymanager1@university.edu', N'Khoa Bui', N'090-100-0006', 'facility_manager', @dept_admin, 'active'),
+(N't06.engineeringlecturer@university.edu', N'Anh Do', N'090-100-0007', 'lecturer', @dept_eng, 'active');
 GO
 
-DECLARE @cs_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School of Computer Science');
-DECLARE @math_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Mathematics');
-DECLARE @physics_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Physics');
-DECLARE @eng_dept_id INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Faculty of Engineering');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.student1@university.edu', N'Alice Johnson', N'123-456-7890', 'student', @cs_dept_id, 'active');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.lecturer1@university.edu', N'Prof. Robert Chen', N'123-456-7891', 'lecturer', @cs_dept_id, 'active');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.ta1@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.ta1@university.edu', N'Maria Santos', NULL, 'teaching_assistant', @cs_dept_id, 'active');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.facilitystaff1@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.facilitystaff1@university.edu', N'David Kim', N'123-456-7892', 'facility_staff', @cs_dept_id, 'active');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.deptadmin1@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.deptadmin1@university.edu', N'Sarah Williams', N'123-456-7893', 'department_admin', @math_dept_id, 'active');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.facilitymgr1@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.facilitymgr1@university.edu', N'James Taylor', N'123-456-7894', 'facility_manager', @cs_dept_id, 'active');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.student2@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.student2@university.edu', N'Emily Davis', NULL, 'student', @physics_dept_id, 'inactive');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[users] WHERE [email] = 't06.student3@university.edu')
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.student3@university.edu', N'Michael Brown', N'123-456-7895', 'student', @eng_dept_id, 'suspended');
-
+PRINT 'SECTION 3: Spaces - all types and statuses';
 GO
 
--- Lookup variables
-DECLARE @student1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu');
-DECLARE @lecturer1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu');
-DECLARE @ta1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.ta1@university.edu');
-DECLARE @staff1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitystaff1@university.edu');
-DECLARE @admin1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.deptadmin1@university.edu');
-DECLARE @mgr1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitymgr1@university.edu');
-DECLARE @student2_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student2@university.edu');
-DECLARE @student3_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student3@university.edu');
-
-IF @student1_id IS NULL OR @lecturer1_id IS NULL OR @ta1_id IS NULL OR @staff1_id IS NULL OR @admin1_id IS NULL OR @mgr1_id IS NULL OR @student2_id IS NULL OR @student3_id IS NULL
-    THROW 51001, 'Setup failed: user lookup returned NULL.', 1;
-
+INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy]) VALUES
+(N'T06-AUD-101', N'Main Teaching Auditorium', 'auditorium', N'Alpha', N'1', N'101', 220, 'available', N'Large lectures and examinations only.'),
+(N'T06-CLS-201', N'Interactive Classroom 201', 'classroom', N'Alpha', N'2', N'201', 45, 'available', N'Tutorials and seminars; reset furniture after use.'),
+(N'T06-COMP-301', N'Computer Laboratory 301', 'computer_lab', N'Beta', N'3', N'301', 32, 'available', N'No food or drinks; lab account required.'),
+(N'T06-PROJ-110', N'Project Laboratory 110', 'project_lab', N'Beta', N'1', N'110', 24, 'available', N'Project groups must check tools in and out.'),
+(N'T06-MTG-012', N'Faculty Meeting Room 12', 'meeting_room', N'Gamma', N'1', N'012', 12, 'under_maintenance', N'Offline until maintenance is resolved.'),
+(N'T06-SW-020', N'Student Workspace 20', 'student_workspace', N'Gamma', N'2', N'020', 18, 'available', N'Student project and club activity priority.'),
+(N'T06-CLS-302', N'Closed Classroom 302', 'classroom', N'Alpha', N'3', N'302', 50, 'temporarily_closed', N'Closed for renovation.'),
+(N'T06-AUD-OLD', N'Old Auditorium', 'auditorium', N'Delta', N'1', N'001', 150, 'retired', N'Decommissioned space.'),
+(N'T06-COMP-202', N'In-Use Computer Laboratory 202', 'computer_lab', N'Beta', N'2', N'202', 28, 'in_use', N'Currently occupied by a checked-in session.');
 GO
 
--- ============================================================
--- SECTION 3: Spaces (all types, all statuses)
--- ============================================================
-PRINT 'SECTION 3: Spaces';
+PRINT 'SECTION 4: Facilities and space_facilities';
 GO
 
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-AUD-101', N'Main Auditorium', 'auditorium', N'Building A', N'1', N'101', 200, 'available', N'Priority given to lectures and examinations. No food or drinks.');
+INSERT INTO [dbo].[facilities] ([name]) VALUES
+(N'T06 Projector'),
+(N'T06 Whiteboard'),
+(N'T06 Microphone'),
+(N'T06 Computer'),
+(N'T06 Livestreaming Equipment'),
+(N'T06 Air Conditioner');
 
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-201')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-CL-201', N'Classroom 201', 'classroom', N'Building A', N'2', N'201', 40, 'available', N'Standard classroom. Whiteboard available.');
+DECLARE @aud INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-AUD-101');
+DECLARE @cls INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CLS-201');
+DECLARE @comp INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-COMP-301');
+DECLARE @proj INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-PROJ-110');
+DECLARE @mtg INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-MTG-012');
+DECLARE @sw INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020');
+DECLARE @inuse_space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-COMP-202');
 
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-202')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-CL-202', N'Classroom 202', 'classroom', N'Building B', N'2', N'202', 35, 'temporarily_closed', N'Under renovation. Not available for booking.');
+DECLARE @f_projector INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Projector');
+DECLARE @f_whiteboard INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Whiteboard');
+DECLARE @f_mic INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Microphone');
+DECLARE @f_computer INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Computer');
+DECLARE @f_stream INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Livestreaming Equipment');
+DECLARE @f_ac INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Air Conditioner');
 
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-301')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-CL-301', N'Classroom 301', 'classroom', N'Building A', N'3', N'301', 50, 'retired', N'Decommissioned. Not available for booking.');
+IF @aud IS NULL OR @cls IS NULL OR @comp IS NULL OR @proj IS NULL OR @mtg IS NULL OR @sw IS NULL OR @inuse_space IS NULL
+   OR @f_projector IS NULL OR @f_whiteboard IS NULL OR @f_mic IS NULL OR @f_computer IS NULL OR @f_stream IS NULL OR @f_ac IS NULL
+    THROW 51006, 'Task 06 setup failed: space/facility lookup returned NULL.', 1;
 
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-101')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-CL-101', N'Classroom 101', 'classroom', N'Building B', N'1', N'101', 25, 'available', N'Small classroom. Suitable for tutorials and seminars.');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-001')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-LAB-001', N'Computer Lab A', 'computer_lab', N'Building B', N'1', N'001', 30, 'available', N'Contains 20 workstations. ID required for access.');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-002')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-LAB-002', N'Project Lab B', 'project_lab', N'Building B', N'2', N'002', 20, 'in_use', N'Project-based lab. Contains workstations and workbenches.');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-MTG-001')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-MTG-001', N'Meeting Room 1', 'meeting_room', N'Building A', N'1', N'001', 10, 'under_maintenance', N'Small meeting room. Currently under maintenance.');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001')
-    INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy])
-    VALUES ('T06-SW-001', N'Student Workspace', 'student_workspace', N'Building C', N'1', N'001', 15, 'available', N'Open student workspace. First-come-first-served policy for unbooked slots.');
-
+INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES
+(@aud, @f_projector, 2), (@aud, @f_mic, 4), (@aud, @f_stream, 1), (@aud, @f_ac, 6),
+(@cls, @f_projector, 1), (@cls, @f_whiteboard, 2), (@cls, @f_ac, 1),
+(@comp, @f_computer, 32), (@comp, @f_projector, 1), (@comp, @f_ac, 2),
+(@proj, @f_computer, 12), (@proj, @f_whiteboard, 1),
+(@mtg, @f_projector, 1), (@mtg, @f_ac, 1),
+(@sw, @f_whiteboard, 2), (@sw, @f_ac, 1),
+(@inuse_space, @f_computer, 28), (@inuse_space, @f_projector, 1);
 GO
 
--- Lookup variables
-DECLARE @space1_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101');
-DECLARE @space2_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-201');
-DECLARE @space3_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-202');
-DECLARE @space4_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-301');
-DECLARE @space5_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-101');
-DECLARE @space6_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-001');
-DECLARE @space7_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-002');
-DECLARE @space8_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-MTG-001');
-DECLARE @space9_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001');
-
-IF @space1_id IS NULL OR @space2_id IS NULL OR @space5_id IS NULL OR @space6_id IS NULL OR @space7_id IS NULL OR @space9_id IS NULL
-    THROW 51002, 'Setup failed: space lookup returned NULL.', 1;
-
+PRINT 'SECTION 5: Maintenance - statuses, soft delete, and BR19 side effects';
 GO
 
--- ============================================================
--- SECTION 4: Facilities
--- ============================================================
-PRINT 'SECTION 4: Facilities';
-GO
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[facilities] WHERE [name] = N'Projector')
-    INSERT INTO [dbo].[facilities] ([name]) VALUES (N'Projector');
-IF NOT EXISTS (SELECT 1 FROM [dbo].[facilities] WHERE [name] = N'Whiteboard')
-    INSERT INTO [dbo].[facilities] ([name]) VALUES (N'Whiteboard');
-IF NOT EXISTS (SELECT 1 FROM [dbo].[facilities] WHERE [name] = N'Microphone')
-    INSERT INTO [dbo].[facilities] ([name]) VALUES (N'Microphone');
-IF NOT EXISTS (SELECT 1 FROM [dbo].[facilities] WHERE [name] = N'Computer')
-    INSERT INTO [dbo].[facilities] ([name]) VALUES (N'Computer');
-IF NOT EXISTS (SELECT 1 FROM [dbo].[facilities] WHERE [name] = N'Livestreaming Equipment')
-    INSERT INTO [dbo].[facilities] ([name]) VALUES (N'Livestreaming Equipment');
-IF NOT EXISTS (SELECT 1 FROM [dbo].[facilities] WHERE [name] = N'Air Conditioner')
-    INSERT INTO [dbo].[facilities] ([name]) VALUES (N'Air Conditioner');
-
-GO
-
--- Lookup variables
-DECLARE @fac_projector INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Projector');
-DECLARE @fac_whiteboard INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Whiteboard');
-DECLARE @fac_microphone INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Microphone');
-DECLARE @fac_computer INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Computer');
-DECLARE @fac_livestream INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Livestreaming Equipment');
-DECLARE @fac_ac INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Air Conditioner');
-
-IF @fac_projector IS NULL OR @fac_whiteboard IS NULL OR @fac_microphone IS NULL OR @fac_computer IS NULL OR @fac_livestream IS NULL OR @fac_ac IS NULL
-    THROW 51003, 'Setup failed: facility lookup returned NULL.', 1;
-
-GO
-
--- ============================================================
--- SECTION 5: Space Facilities
--- ============================================================
-PRINT 'SECTION 5: Space Facilities';
-GO
-
-DECLARE @fac_projector INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Projector');
-DECLARE @fac_whiteboard INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Whiteboard');
-DECLARE @fac_microphone INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Microphone');
-DECLARE @fac_computer INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Computer');
-DECLARE @fac_livestream INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Livestreaming Equipment');
-DECLARE @fac_ac INT = (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'Air Conditioner');
-
-IF @fac_projector IS NULL OR @fac_whiteboard IS NULL OR @fac_microphone IS NULL OR @fac_computer IS NULL OR @fac_livestream IS NULL OR @fac_ac IS NULL
-    THROW 51003, 'Setup failed: facility lookup returned NULL.', 1;
-
-DECLARE @space1_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101');
-DECLARE @space2_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-201');
-DECLARE @space3_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-202');
-DECLARE @space4_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-301');
-DECLARE @space5_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-101');
-DECLARE @space6_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-001');
-DECLARE @space7_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-002');
-DECLARE @space8_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-MTG-001');
-DECLARE @space9_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001');
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space1_id AND [facility_id] = @fac_projector)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space1_id, @fac_projector, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space1_id AND [facility_id] = @fac_microphone)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space1_id, @fac_microphone, 2);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space1_id AND [facility_id] = @fac_ac)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space1_id, @fac_ac, 2);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space1_id AND [facility_id] = @fac_livestream)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space1_id, @fac_livestream, 1);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space2_id AND [facility_id] = @fac_projector)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space2_id, @fac_projector, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space2_id AND [facility_id] = @fac_whiteboard)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space2_id, @fac_whiteboard, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space2_id AND [facility_id] = @fac_ac)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space2_id, @fac_ac, 1);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space5_id AND [facility_id] = @fac_projector)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space5_id, @fac_projector, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space5_id AND [facility_id] = @fac_whiteboard)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space5_id, @fac_whiteboard, 1);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space6_id AND [facility_id] = @fac_computer)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space6_id, @fac_computer, 20);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space6_id AND [facility_id] = @fac_projector)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space6_id, @fac_projector, 1);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space7_id AND [facility_id] = @fac_computer)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space7_id, @fac_computer, 10);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space7_id AND [facility_id] = @fac_whiteboard)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space7_id, @fac_whiteboard, 1);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space8_id AND [facility_id] = @fac_projector)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space8_id, @fac_projector, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space8_id AND [facility_id] = @fac_whiteboard)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space8_id, @fac_whiteboard, 1);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space9_id AND [facility_id] = @fac_whiteboard)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space9_id, @fac_whiteboard, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space9_id AND [facility_id] = @fac_computer)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space9_id, @fac_computer, 5);
-
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space3_id AND [facility_id] = @fac_projector)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space3_id, @fac_projector, 1);
-IF NOT EXISTS (SELECT 1 FROM [dbo].[space_facilities] WHERE [space_id] = @space3_id AND [facility_id] = @fac_whiteboard)
-    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity]) VALUES (@space3_id, @fac_whiteboard, 1);
-
-GO
-
--- ============================================================
--- SECTION 6: Maintenances
--- ============================================================
-PRINT 'SECTION 6: Maintenances';
-GO
-
-DECLARE @staff1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitystaff1@university.edu');
-DECLARE @mgr1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitymgr1@university.edu');
-DECLARE @lecturer1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu');
-
-DECLARE @space8_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-MTG-001');
-DECLARE @space5_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-101');
-DECLARE @space6_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-001');
-DECLARE @space9_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001');
-DECLARE @space2_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-201');
-
--- Maintenance 1: Open maintenance on space 8 (meeting_room, under_maintenance)
--- Broken projector and damaged furniture
-IF NOT EXISTS (SELECT 1 FROM [dbo].[maintenances] WHERE [space_id] = @space8_id AND [problem_description] = N'Broken projector and damaged furniture' AND [status] = 'open')
-    INSERT INTO [dbo].[maintenances] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [status])
-    VALUES (@space8_id, @lecturer1_id, @staff1_id, N'Broken projector and damaged furniture', '2026-06-20 10:00:00', 'open');
-
--- Maintenance 2: Open maintenance on space 5 (classroom, available)
--- Air conditioning failure
-IF NOT EXISTS (SELECT 1 FROM [dbo].[maintenances] WHERE [space_id] = @space5_id AND [problem_description] = N'Air conditioning failure' AND [status] = 'open')
-    INSERT INTO [dbo].[maintenances] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [status])
-    VALUES (@space5_id, @lecturer1_id, @staff1_id, N'Air conditioning failure', '2026-07-01 08:00:00', 'open');
-
--- Maintenance 3: Resolved maintenance on space 6 (computer_lab)
--- Network connectivity issues
-IF NOT EXISTS (SELECT 1 FROM [dbo].[maintenances] WHERE [space_id] = @space6_id AND [problem_description] = N'Network connectivity issues' AND [status] = 'resolved')
-BEGIN
-    INSERT INTO [dbo].[maintenances] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [status])
-    VALUES (@space6_id, @lecturer1_id, @staff1_id, N'Network connectivity issues', '2026-06-05 09:00:00', 'open');
-
-    UPDATE [dbo].[maintenances]
-    SET [status] = 'resolved',
-        [completion_time] = '2026-06-06 16:00:00',
-        [result_note] = N'Router replaced and connectivity restored. All workstations tested.'
-    WHERE [space_id] = @space6_id AND [problem_description] = N'Network connectivity issues';
-END
-
--- Maintenance 4: In-progress maintenance on space 9 (student_workspace)
--- Damaged furniture (future start, so bookings before it are safe)
-IF NOT EXISTS (SELECT 1 FROM [dbo].[maintenances] WHERE [space_id] = @space9_id AND [problem_description] = N'Damaged furniture' AND [status] = 'in_progress')
-    INSERT INTO [dbo].[maintenances] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [status])
-    VALUES (@space9_id, @lecturer1_id, @staff1_id, N'Damaged furniture', '2026-07-20 08:00:00', 'in_progress');
-
--- Maintenance 5: Soft-deleted resolved maintenance on space 2 (classroom)
--- Cleaning issues
-IF NOT EXISTS (SELECT 1 FROM [dbo].[maintenances] WHERE [space_id] = @space2_id AND [problem_description] = N'Cleaning issues' AND [is_deleted] = 1)
-BEGIN
-    INSERT INTO [dbo].[maintenances] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [status])
-    VALUES (@space2_id, @lecturer1_id, @staff1_id, N'Cleaning issues', '2026-06-01 08:00:00', 'open');
-
-    UPDATE [dbo].[maintenances]
-    SET [status] = 'resolved',
-        [completion_time] = '2026-06-02 10:00:00',
-        [result_note] = N'Space cleaned and sanitized.',
-        [is_deleted] = 1
-    WHERE [space_id] = @space2_id AND [problem_description] = N'Cleaning issues';
-END
-
-GO
-
--- ============================================================
--- SECTION 7: Valid Bookings (normal workflow scenarios)
--- ============================================================
-PRINT 'SECTION 7: Valid Bookings';
-GO
-
-DECLARE @student1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu');
-DECLARE @lecturer1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu');
-DECLARE @ta1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.ta1@university.edu');
-DECLARE @staff1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitystaff1@university.edu');
-DECLARE @admin1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.deptadmin1@university.edu');
-DECLARE @mgr1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitymgr1@university.edu');
-
-DECLARE @space1_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101');
-DECLARE @space2_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-201');
-DECLARE @space6_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-001');
-DECLARE @space7_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-002');
-DECLARE @space9_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001');
-
--- Booking 1: Future approved booking — lecture (upcoming bookings report)
--- Space 1 (auditorium), 2026-07-01 08:00-10:00
-PRINT '  Booking 1: Future approved lecture';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space1_id AND [requested_start_time] = '2026-07-01 08:00:00' AND [requester_id] = @lecturer1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space1_id, @lecturer1_id, '2026-07-01 08:00:00', '2026-07-01 10:00:00', 'lecture', 150, 'pending');
-
-    DECLARE @b1_id INT = SCOPE_IDENTITY();
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-06-20 14:00:00',
-        [decision_note] = N'Approved for CS486 lecture series.'
-    WHERE [booking_id] = @b1_id;
-END
-
--- Booking 2: Future approved booking — examination (same space, different time slot)
--- Space 1 (auditorium), 2026-07-01 10:00-12:00 (no overlap with booking 1)
-PRINT '  Booking 2: Future approved examination';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space1_id AND [requested_start_time] = '2026-07-01 10:00:00' AND [requester_id] = @lecturer1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space1_id, @lecturer1_id, '2026-07-01 10:00:00', '2026-07-01 12:00:00', 'examination', 180, 'pending');
-
-    DECLARE @b2_id INT = SCOPE_IDENTITY();
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-06-20 14:30:00',
-        [decision_note] = N'Approved for final examination.'
-    WHERE [booking_id] = @b2_id;
-END
-
--- Booking 3: Past completed booking — examination (full lifecycle)
--- Space 2 (classroom), 2026-06-10 09:00-11:00
-PRINT '  Booking 3: Past completed examination';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space2_id AND [requested_start_time] = '2026-06-10 09:00:00' AND [requester_id] = @student1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space2_id, @student1_id, '2026-06-10 09:00:00', '2026-06-10 11:00:00', 'examination', 35, 'pending');
-
-    DECLARE @b3_id INT = SCOPE_IDENTITY();
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @staff1_id,
-        [decision_time] = '2026-06-08 10:00:00',
-        [decision_note] = N'Approved for midterm examination.'
-    WHERE [booking_id] = @b3_id;
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'checked_in',
-        [actual_start_time] = '2026-06-10 09:05:00',
-        [checked_in_by] = @staff1_id,
-        [initial_condition] = N'Room clean, desks arranged, whiteboard clean.'
-    WHERE [booking_id] = @b3_id;
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'completed',
-        [actual_end_time] = '2026-06-10 11:10:00',
-        [final_condition] = N'Desks rearranged, minor chalk dust, whiteboard needs cleaning.',
-        [usage_notes] = N'Midterm examination completed. 35 students attended.'
-    WHERE [booking_id] = @b3_id;
-END
-
--- Booking 4: Past no-show booking (for no-show reports)
--- Space 2 (classroom), 2026-06-12 14:00-16:00
-PRINT '  Booking 4: Past no-show';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space2_id AND [requested_start_time] = '2026-06-12 14:00:00' AND [requester_id] = @student1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space2_id, @student1_id, '2026-06-12 14:00:00', '2026-06-12 16:00:00', 'meeting', 10, 'pending');
-
-    DECLARE @b4_id INT = SCOPE_IDENTITY();
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @staff1_id,
-        [decision_time] = '2026-06-11 09:00:00',
-        [decision_note] = N'Approved for student club meeting.'
-    WHERE [booking_id] = @b4_id;
-
-    -- Transition to no_show (no trigger validation for no_show)
-    UPDATE [dbo].[bookings]
-    SET [status] = 'no_show'
-    WHERE [booking_id] = @b4_id;
-END
-
--- Booking 5: Future pending booking — workshop
--- Space 6 (computer_lab), 2026-07-05 09:00-12:00
-PRINT '  Booking 5: Future pending workshop';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space6_id AND [requested_start_time] = '2026-07-05 09:00:00' AND [requester_id] = @ta1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space6_id, @ta1_id, '2026-07-05 09:00:00', '2026-07-05 12:00:00', 'workshop', 25, 'pending');
-END
-
--- Booking 6: Checked-in booking (ongoing today)
--- Space 7 (project_lab), 2026-06-22 09:00-12:00
-PRINT '  Booking 6: Checked-in student activity';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space7_id AND [requested_start_time] = '2026-06-22 09:00:00' AND [requester_id] = @student1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space7_id, @student1_id, '2026-06-22 09:00:00', '2026-06-22 12:00:00', 'student_activity', 15, 'pending');
-
-    DECLARE @b6_id INT = SCOPE_IDENTITY();
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @staff1_id,
-        [decision_time] = '2026-06-20 10:00:00',
-        [decision_note] = N'Approved for student project work.'
-    WHERE [booking_id] = @b6_id;
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'checked_in',
-        [actual_start_time] = '2026-06-22 09:00:00',
-        [checked_in_by] = @staff1_id,
-        [initial_condition] = N'All workstations functional, lab clean.'
-    WHERE [booking_id] = @b6_id;
-END
-
--- Booking 7: Future approved booking — meeting
--- Space 7 (project_lab), 2026-07-10 14:00-15:00 (no overlap with booking 6 which is on 06-22)
-PRINT '  Booking 7: Future approved meeting';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space7_id AND [requested_start_time] = '2026-07-10 14:00:00' AND [requester_id] = @admin1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space7_id, @admin1_id, '2026-07-10 14:00:00', '2026-07-10 15:00:00', 'meeting', 10, 'pending');
-
-    DECLARE @b7_id INT = SCOPE_IDENTITY();
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-07-01 08:00:00',
-        [decision_note] = N'Approved for department meeting.'
-    WHERE [booking_id] = @b7_id;
-END
-
--- Booking 8: Past rejected booking with full decision metadata
--- Space 6 (computer_lab), 2026-06-08 10:00-12:00
-PRINT '  Booking 8: Past rejected seminar';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space6_id AND [requested_start_time] = '2026-06-08 10:00:00' AND [requester_id] = @lecturer1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space6_id, @lecturer1_id, '2026-06-08 10:00:00', '2026-06-08 12:00:00', 'seminar', 28, 'pending');
-
-    DECLARE @b8_id INT = SCOPE_IDENTITY();
-    UPDATE [dbo].[bookings]
-    SET [status] = 'rejected',
-        [approver_id] = @staff1_id,
-        [decision_time] = '2026-06-07 16:00:00',
-        [decision_note] = N'Computer lab is reserved for system maintenance that week.',
-        [rejection_reason] = N'Lab reserved for system updates on the requested date.'
-    WHERE [booking_id] = @b8_id;
-END
-
--- Booking 9: Future approved booking — administrative_event
--- Space 2 (classroom), 2026-07-03 08:00-10:00
-PRINT '  Booking 9: Future approved administrative event';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space2_id AND [requested_start_time] = '2026-07-03 08:00:00' AND [requester_id] = @admin1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space2_id, @admin1_id, '2026-07-03 08:00:00', '2026-07-03 10:00:00', 'administrative_event', 20, 'pending');
-
-    DECLARE @b9_id INT = SCOPE_IDENTITY();
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-06-25 09:00:00',
-        [decision_note] = N'Approved for faculty orientation session.'
-    WHERE [booking_id] = @b9_id;
-END
-
--- Booking 10: Soft-deleted booking (historical preservation proof)
--- Space 1 (auditorium), 2026-06-05 08:00-10:00
-PRINT '  Booking 10: Soft-deleted booking';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space1_id AND [requested_start_time] = '2026-06-05 08:00:00' AND [requester_id] = @lecturer1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space1_id, @lecturer1_id, '2026-06-05 08:00:00', '2026-06-05 10:00:00', 'lecture', 100, 'pending');
-
-    DECLARE @b10_id INT = SCOPE_IDENTITY();
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-06-03 10:00:00',
-        [decision_note] = N'Approved for guest lecture.'
-    WHERE [booking_id] = @b10_id;
-
-    -- Soft-delete the booking
-    UPDATE [dbo].[bookings]
-    SET [is_deleted] = 1
-    WHERE [booking_id] = @b10_id;
-END
-
--- Booking 11: Cancelled booking
--- Space 9 (student_workspace), 2026-07-12 10:00-12:00 (before maintenance on space 9 starts 2026-07-20)
-PRINT '  Booking 11: Cancelled booking';
-IF NOT EXISTS (SELECT 1 FROM [dbo].[bookings] WHERE [space_id] = @space9_id AND [requested_start_time] = '2026-07-12 10:00:00' AND [requester_id] = @student1_id)
-BEGIN
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space9_id, @student1_id, '2026-07-12 10:00:00', '2026-07-12 12:00:00', 'student_activity', 10, 'cancelled');
-END
-
-GO
-
--- ============================================================
--- SECTION 8: Expected-Error Test Cases
--- ============================================================
-PRINT 'SECTION 8: Expected-Error Test Cases';
-GO
-
--- ============================================================
--- ECASE 1: BR1 — Overlap prevention
--- Attempt to insert a booking on space 1 that overlaps approved
--- booking 1 (2026-07-01 08:00-10:00). Start time is unique so the
--- filtered unique index does not block it; the overlap trigger must.
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 1: BR1 overlap prevention';
-GO
-
-DECLARE @space1_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space1_id, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu'),
-            '2026-07-01 09:30:00', '2026-07-01 11:30:00', 'seminar', 50, 'approved');
-    PRINT '  UNEXPECTED: BR1 overlap test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR1 overlap): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 2: BR2 — Unavailable space (under_maintenance)
--- Attempt to create a booking on space 8 (meeting_room, under_maintenance)
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 2: BR2 under_maintenance space';
-GO
-
-DECLARE @space8_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-MTG-001');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space8_id, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu'),
-            '2026-07-15 10:00:00', '2026-07-15 12:00:00', 'meeting', 5, 'pending');
-    PRINT '  UNEXPECTED: BR2 under_maintenance test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR2 under_maintenance): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 3: BR2 — Unavailable space (retired)
--- Attempt to create a booking on space 4 (classroom, retired)
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 3: BR2 retired space';
-GO
-
-DECLARE @space4_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-301');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space4_id, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu'),
-            '2026-07-20 08:00:00', '2026-07-20 10:00:00', 'lecture', 30, 'pending');
-    PRINT '  UNEXPECTED: BR2 retired test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR2 retired): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 4: BR2 — Unavailable space (temporarily_closed)
--- Attempt to create a booking on space 3 (classroom, temporarily_closed)
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 4: BR2 temporarily_closed space';
-GO
-
-DECLARE @space3_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-202');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space3_id, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu'),
-            '2026-08-01 09:00:00', '2026-08-01 11:00:00', 'workshop', 20, 'pending');
-    PRINT '  UNEXPECTED: BR2 temporarily_closed test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR2 temporarily_closed): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 5: BR3 — Capacity prevention
--- Attempt to create a booking on space 2 (classroom, capacity 40)
--- with expected_participants = 50
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 5: BR3 capacity violation';
-GO
-
-DECLARE @space2_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-201');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space2_id, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu'),
-            '2026-08-10 08:00:00', '2026-08-10 10:00:00', 'lecture', 50, 'pending');
-    PRINT '  UNEXPECTED: BR3 capacity test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR3 capacity): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 6: BR4 — Unresolved maintenance blocks booking
--- Space 5 (classroom, available) has open maintenance starting
--- 2026-07-01. Attempt to book 2026-07-02 09:00-11:00 (overlaps).
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 6: BR4 maintenance overlap';
-GO
-
-DECLARE @space5_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-CL-101');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space5_id, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu'),
-            '2026-07-02 09:00:00', '2026-07-02 11:00:00', 'lecture', 20, 'pending');
-    PRINT '  UNEXPECTED: BR4 maintenance overlap test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR4 maintenance overlap): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 7: BR6 — Approval metadata missing
--- Insert a pending booking, then update to approved without
--- setting required approver_id, decision_time, decision_note
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 7: BR6 approval metadata missing';
-GO
-
-DECLARE @space6_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-001');
-DECLARE @student1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space6_id, @student1_id, '2026-08-15 10:00:00', '2026-08-15 12:00:00', 'workshop', 20, 'pending');
-
-    DECLARE @ec7_id INT = SCOPE_IDENTITY();
-
-    -- Try to approve without approver_id, decision_time, decision_note
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved'
-    WHERE [booking_id] = @ec7_id;
-
-    PRINT '  UNEXPECTED: BR6 approval metadata test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR6 approval metadata): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 8: BR7 — Rejection reason missing
--- Insert a pending booking, then update to rejected without
--- rejection_reason
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 8: BR7 rejection reason missing';
-GO
-
-DECLARE @space7_id INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-LAB-002');
-DECLARE @student1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@space7_id, @student1_id, '2026-08-20 14:00:00', '2026-08-20 16:00:00', 'student_activity', 10, 'pending');
-
-    DECLARE @ec8_id INT = SCOPE_IDENTITY();
-
-    -- Try to reject without rejection_reason
-    UPDATE [dbo].[bookings]
-    SET [status] = 'rejected',
-        [approver_id] = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitystaff1@university.edu'),
-        [decision_time] = GETDATE(),
-        [decision_note] = N'Cannot accommodate request.'
-    WHERE [booking_id] = @ec8_id;
-
-    PRINT '  UNEXPECTED: BR7 rejection reason test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR7 rejection reason): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 9: BR8/BR9 — Check-in missing fields
--- Approve a booking first, then update to checked_in without
--- actual_start_time
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 9: BR8/BR9 check-in missing fields';
-GO
-
-DECLARE @ec9_space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101');
-DECLARE @lecturer1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu');
-DECLARE @mgr1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitymgr1@university.edu');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@ec9_space, @lecturer1_id, '2026-08-25 09:00:00', '2026-08-25 11:00:00', 'seminar', 10, 'pending');
-
-    DECLARE @ec9_id INT = SCOPE_IDENTITY();
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-08-20 10:00:00',
-        [decision_note] = N'Approved for research seminar.'
-    WHERE [booking_id] = @ec9_id;
-
-    -- Try to check in without actual_start_time
-    UPDATE [dbo].[bookings]
-    SET [status] = 'checked_in',
-        [checked_in_by] = @mgr1_id,
-        [initial_condition] = N'Workspace tidy.'
-    WHERE [booking_id] = @ec9_id;
-
-    PRINT '  UNEXPECTED: BR8/BR9 check-in test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR8/BR9 check-in): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 10: BR8/BR9 — Completion missing fields
--- Approve, check in, then complete without actual_end_time
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 10: BR8/BR9 completion missing fields';
-GO
-
-DECLARE @ec10_space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-AUD-101');
-DECLARE @lecturer1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu');
-DECLARE @mgr1_id INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.facilitymgr1@university.edu');
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES (@ec10_space, @lecturer1_id, '2026-08-30 09:00:00', '2026-08-30 11:00:00', 'seminar', 10, 'pending');
-
-    DECLARE @ec10_id INT = SCOPE_IDENTITY();
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'approved',
-        [approver_id] = @mgr1_id,
-        [decision_time] = '2026-08-25 10:00:00',
-        [decision_note] = N'Approved.'
-    WHERE [booking_id] = @ec10_id;
-
-    UPDATE [dbo].[bookings]
-    SET [status] = 'checked_in',
-        [actual_start_time] = '2026-08-30 09:00:00',
-        [checked_in_by] = @mgr1_id,
-        [initial_condition] = N'Clean and ready.'
-    WHERE [booking_id] = @ec10_id;
-
-    -- Try to complete without actual_end_time
-    UPDATE [dbo].[bookings]
-    SET [status] = 'completed',
-        [final_condition] = N'Good condition.',
-        [usage_notes] = N'Seminar completed.'
-    WHERE [booking_id] = @ec10_id;
-
-    PRINT '  UNEXPECTED: BR8/BR9 completion test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (BR8/BR9 completion): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 11: Duplicate email (BR10 unique identification)
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 11: Duplicate email';
-GO
-
-BEGIN TRY
-    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
-    VALUES ('t06.student1@university.edu', N'Duplicate User', NULL, 'student',
-            (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School of Computer Science'), 'active');
-    PRINT '  UNEXPECTED: Duplicate email test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (duplicate email): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 12: Invalid enum value for booking status
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 12: Invalid booking status';
-GO
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES ((SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001'),
-            (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu'),
-            '2026-09-01 10:00:00', '2026-09-01 12:00:00', 'meeting', 5, 'invalid_status');
-    PRINT '  UNEXPECTED: Invalid enum test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (invalid enum): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- ECASE 13: Invalid time range (end <= start)
--- ============================================================
-PRINT 'EXPECTED_ERROR_CASE 13: Invalid time range';
-GO
-
-BEGIN TRY
-    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
-    VALUES ((SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = 'T06-SW-001'),
-            (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.student1@university.edu'),
-            '2026-09-01 14:00:00', '2026-09-01 13:00:00', 'meeting', 5, 'pending');
-    PRINT '  UNEXPECTED: Invalid time range test did not raise an error.';
-END TRY
-BEGIN CATCH
-    PRINT '  Expected error (invalid time range): ' + ERROR_MESSAGE();
-END CATCH
-GO
-
--- ============================================================
--- SECTION 9: Verification Queries
--- ============================================================
-PRINT 'SECTION 9: Verification Queries';
-GO
-
-PRINT '--- Row counts ---';
-SELECT 'departments' AS [table], COUNT(*) AS [row_count] FROM [dbo].[departments]
-UNION ALL
-SELECT 'users', COUNT(*) FROM [dbo].[users]
-UNION ALL
-SELECT 'spaces', COUNT(*) FROM [dbo].[spaces]
-UNION ALL
-SELECT 'facilities', COUNT(*) FROM [dbo].[facilities]
-UNION ALL
-SELECT 'space_facilities', COUNT(*) FROM [dbo].[space_facilities]
-UNION ALL
-SELECT 'maintenances', COUNT(*) FROM [dbo].[maintenances]
-UNION ALL
-SELECT 'bookings', COUNT(*) FROM [dbo].[bookings]
-ORDER BY [table];
-
-GO
-
-PRINT '--- All booking statuses ---';
-SELECT DISTINCT [status] FROM [dbo].[bookings] ORDER BY [status];
-
-GO
-
-PRINT '--- All booking purposes ---';
-SELECT DISTINCT [purpose] FROM [dbo].[bookings] ORDER BY [purpose];
-
-GO
-
-PRINT '--- All space types ---';
-SELECT DISTINCT [space_type] FROM [dbo].[spaces] ORDER BY [space_type];
-
-GO
-
-PRINT '--- All space statuses ---';
-SELECT DISTINCT [current_status] FROM [dbo].[spaces] ORDER BY [current_status];
-
-GO
-
-PRINT '--- All maintenance statuses ---';
-SELECT DISTINCT [status] FROM [dbo].[maintenances] ORDER BY [status];
-
-GO
-
-PRINT '--- All user roles ---';
-SELECT DISTINCT [role] FROM [dbo].[users] WHERE [email] LIKE 't06.%' ORDER BY [role];
-
-GO
-
-PRINT '--- All account statuses ---';
-SELECT DISTINCT [account_status] FROM [dbo].[users] WHERE [email] LIKE 't06.%' ORDER BY [account_status];
-
-GO
-
-PRINT '--- Audit: created_at and updated_at are populated (no NULLs) ---';
-SELECT 'departments' AS [table], COUNT(*) AS [total], SUM(CASE WHEN [created_at] IS NULL THEN 1 ELSE 0 END) AS [null_created], SUM(CASE WHEN [updated_at] IS NULL THEN 1 ELSE 0 END) AS [null_updated] FROM [dbo].[departments]
-UNION ALL
-SELECT 'users', COUNT(*), SUM(CASE WHEN [created_at] IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN [updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[users]
-UNION ALL
-SELECT 'spaces', COUNT(*), SUM(CASE WHEN [created_at] IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN [updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[spaces]
-UNION ALL
-SELECT 'facilities', COUNT(*), SUM(CASE WHEN [created_at] IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN [updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[facilities]
-UNION ALL
-SELECT 'bookings', COUNT(*), SUM(CASE WHEN [created_at] IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN [updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[bookings]
-UNION ALL
-SELECT 'maintenances', COUNT(*), SUM(CASE WHEN [created_at] IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN [updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[maintenances];
-
-GO
-
-PRINT '--- Soft-deleted bookings (is_deleted = 1) ---';
-SELECT [booking_id], [space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [status], [is_deleted]
-FROM [dbo].[bookings]
-WHERE [is_deleted] = 1;
-
-GO
-
-PRINT '--- Soft-deleted maintenances (is_deleted = 1) ---';
-SELECT [maintenance_id], [space_id], [problem_description], [status], [is_deleted]
-FROM [dbo].[maintenances]
-WHERE [is_deleted] = 1;
-
-GO
-
-PRINT '--- Upcoming future approved bookings ---';
-SELECT b.[booking_id], s.[space_code], s.[space_name], b.[requested_start_time], b.[requested_end_time], b.[purpose], b.[expected_participants]
-FROM [dbo].[bookings] b
-INNER JOIN [dbo].[spaces] s ON b.[space_id] = s.[space_id]
-WHERE b.[status] = 'approved' AND b.[requested_start_time] > GETDATE() AND b.[is_deleted] = 0
-ORDER BY b.[requested_start_time];
-
-GO
-
-PRINT '--- Spaces currently under maintenance ---';
-SELECT s.[space_code], s.[space_name], s.[building], s.[room_number], m.[maintenance_id], m.[problem_description], m.[status], m.[start_time]
+DECLARE @staff1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu');
+DECLARE @student1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu');
+DECLARE @lecturer1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.lecturer1@university.edu');
+DECLARE @mtg INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-MTG-012');
+DECLARE @cls INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CLS-201');
+DECLARE @proj INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-PROJ-110');
+DECLARE @comp INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-COMP-301');
+DECLARE @sw INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020');
+
+INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [completion_time], [status], [result_note], [is_deleted]) VALUES
+(@mtg, @lecturer1, @staff1, N'T06 Broken projector and loose HDMI cable.', '2026-06-25T09:00:00', NULL, 'open', NULL, 0),
+(@mtg, @student1, @staff1, N'T06 Air conditioning failure in meeting room.', '2026-06-25T10:00:00', NULL, 'in_progress', NULL, 0),
+(@cls, @lecturer1, @staff1, N'T06 Damaged furniture in front row.', '2026-06-10T09:00:00', '2026-06-11T16:00:00', 'resolved', N'Desks replaced and room inspected.', 0),
+(@proj, @student1, @staff1, N'T06 Cleaning issue after weekend workshop.', '2026-06-12T08:30:00', '2026-06-12T12:00:00', 'resolved', N'Floor and benches cleaned.', 0),
+(@comp, @lecturer1, @staff1, N'T06 Network problems on workstations 12-18.', '2026-06-18T13:00:00', NULL, 'open', NULL, 1),
+(@sw, @student1, @staff1, N'T06 Temporary whiteboard marker shortage.', '2026-06-01T10:00:00', '2026-06-01T10:30:00', 'resolved', N'Markers restocked.', 0);
+
+PRINT 'VERIFY: V-MAINT-GUARD-BEFORE - concurrent active maintenance keeps space under_maintenance';
+SELECT s.[space_code], s.[current_status], COUNT(m.[maintenance_id]) AS [active_ticket_count]
 FROM [dbo].[spaces] s
-INNER JOIN [dbo].[maintenances] m ON s.[space_id] = m.[space_id]
-WHERE s.[current_status] = 'under_maintenance' AND m.[is_deleted] = 0;
+INNER JOIN [dbo].[maintenance] m ON m.[space_id] = s.[space_id]
+WHERE s.[space_code] = N'T06-MTG-012'
+  AND m.[status] IN ('open','in_progress')
+  AND m.[is_deleted] = 0
+GROUP BY s.[space_code], s.[current_status];
 
+UPDATE TOP (1) [dbo].[maintenance]
+SET [status] = 'resolved',
+    [completion_time] = '2026-06-26T09:00:00',
+    [result_note] = N'Projector repaired; AC ticket still active.'
+WHERE [space_id] = @mtg
+  AND [status] = 'open'
+  AND [problem_description] LIKE N'T06 Broken projector%';
+
+PRINT 'VERIFY: V-MAINT-GUARD-AFTER-ONE - guard prevents status restoration while another active ticket remains';
+SELECT s.[space_code], s.[current_status], COUNT(m.[maintenance_id]) AS [remaining_active_ticket_count]
+FROM [dbo].[spaces] s
+LEFT JOIN [dbo].[maintenance] m
+  ON m.[space_id] = s.[space_id]
+ AND m.[status] IN ('open','in_progress')
+ AND m.[is_deleted] = 0
+WHERE s.[space_code] = N'T06-MTG-012'
+GROUP BY s.[space_code], s.[current_status];
+
+UPDATE [dbo].[maintenance]
+SET [status] = 'resolved',
+    [completion_time] = '2026-06-26T15:00:00',
+    [result_note] = N'Air conditioner reset; all tickets resolved.'
+WHERE [space_id] = @mtg
+  AND [status] = 'in_progress'
+  AND [problem_description] LIKE N'T06 Air conditioning%';
+
+PRINT 'VERIFY: V-MAINT-RESTORE - last resolved maintenance restores space to available';
+SELECT [space_code], [current_status]
+FROM [dbo].[spaces]
+WHERE [space_code] = N'T06-MTG-012';
+
+UPDATE [dbo].[spaces]
+SET [current_status] = 'under_maintenance'
+WHERE [space_code] = N'T06-MTG-012';
+
+INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [completion_time], [status], [result_note], [is_deleted])
+VALUES (@mtg, @lecturer1, @staff1, N'T06 Network inspection after room maintenance.', '2026-06-27T08:00:00', NULL, 'in_progress', NULL, 0);
 GO
 
-PRINT '--- No-show bookings ---';
-SELECT b.[booking_id], s.[space_code], b.[requested_start_time], b.[requested_end_time], u.[full_name] AS [requester]
-FROM [dbo].[bookings] b
-INNER JOIN [dbo].[spaces] s ON b.[space_id] = s.[space_id]
-INNER JOIN [dbo].[users] u ON b.[requester_id] = u.[user_id]
-WHERE b.[status] = 'no_show' AND b.[is_deleted] = 0;
-
+PRINT 'SECTION 6: Bookings - valid lifecycle workflows';
 GO
 
-PRINT '--- Booking history for T06 lecturer (past bookings) ---';
-SELECT b.[booking_id], s.[space_code], b.[requested_start_time], b.[requested_end_time], b.[purpose], b.[status]
+DECLARE @aud INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-AUD-101');
+DECLARE @cls INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CLS-201');
+DECLARE @comp INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-COMP-301');
+DECLARE @proj INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-PROJ-110');
+DECLARE @sw INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020');
+DECLARE @inuse_space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-COMP-202');
+DECLARE @student1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu');
+DECLARE @student2 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student2@university.edu');
+DECLARE @lecturer1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.lecturer1@university.edu');
+DECLARE @ta1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.ta1@university.edu');
+DECLARE @staff1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu');
+DECLARE @manager1 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitymanager1@university.edu');
+
+IF @aud IS NULL OR @cls IS NULL OR @comp IS NULL OR @proj IS NULL OR @sw IS NULL OR @inuse_space IS NULL
+   OR @student1 IS NULL OR @student2 IS NULL OR @lecturer1 IS NULL OR @ta1 IS NULL OR @staff1 IS NULL OR @manager1 IS NULL
+    THROW 51006, 'Task 06 setup failed: booking lookup returned NULL.', 1;
+
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status], [is_deleted]) VALUES
+(@cls, @student1, '2026-07-15T09:00:00', '2026-07-15T10:30:00', 'meeting', 8, 'pending', 0),
+(@aud, @lecturer1, '2026-07-20T08:00:00', '2026-07-20T10:00:00', 'lecture', 120, 'pending', 0),
+(@cls, @ta1, '2026-07-21T13:00:00', '2026-07-21T15:00:00', 'examination', 35, 'pending', 0),
+(@proj, @student1, '2026-07-22T09:00:00', '2026-07-22T11:00:00', 'workshop', 16, 'pending', 0),
+(@comp, @lecturer1, '2026-06-10T08:00:00', '2026-06-10T10:00:00', 'seminar', 25, 'pending', 0),
+(@sw, @student2, '2026-06-12T14:00:00', '2026-06-12T16:00:00', 'student_activity', 14, 'pending', 0),
+(@aud, @lecturer1, '2026-07-23T13:00:00', '2026-07-23T15:00:00', 'administrative_event', 80, 'pending', 0),
+(@sw, @student1, '2026-07-24T10:00:00', '2026-07-24T12:00:00', 'meeting', 6, 'pending', 1),
+(@inuse_space, @lecturer1, '2026-07-02T09:00:00', '2026-07-02T11:00:00', 'workshop', 20, 'pending', 0),
+(@aud, @student1, '2026-06-05T09:00:00', '2026-06-05T11:00:00', 'student_activity', 40, 'pending', 0);
+
+DECLARE @b_pending INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @cls AND [requested_start_time] = '2026-07-15T09:00:00');
+DECLARE @b_approved INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @aud AND [requested_start_time] = '2026-07-20T08:00:00');
+DECLARE @b_rejected INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @cls AND [requested_start_time] = '2026-07-21T13:00:00');
+DECLARE @b_cancelled INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @proj AND [requested_start_time] = '2026-07-22T09:00:00');
+DECLARE @b_completed INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @comp AND [requested_start_time] = '2026-06-10T08:00:00');
+DECLARE @b_noshow INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @sw AND [requested_start_time] = '2026-06-12T14:00:00');
+DECLARE @b_approved_cancel INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @aud AND [requested_start_time] = '2026-07-23T13:00:00');
+DECLARE @b_deleted INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @sw AND [requested_start_time] = '2026-07-24T10:00:00');
+DECLARE @b_checked_in INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @inuse_space AND [requested_start_time] = '2026-07-02T09:00:00');
+DECLARE @b_direct_noshow INT = (SELECT [booking_id] FROM [dbo].[bookings] WHERE [space_id] = @aud AND [requested_start_time] = '2026-06-05T09:00:00');
+
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [rejection_reason], [decision_note]) VALUES
+(@b_approved, @staff1, '2026-07-10T10:00:00', 'approved', NULL, N'Approved for scheduled lecture.'),
+(@b_rejected, @manager1, '2026-07-10T11:00:00', 'rejected', N'Exam period room allocation conflict.', N'Requester advised to use another date.'),
+(@b_completed, @staff1, '2026-06-08T09:00:00', 'approved', NULL, N'Approved for lab seminar.'),
+(@b_noshow, @manager1, '2026-06-09T09:00:00', 'approved', NULL, N'Approved for student activity.'),
+(@b_approved_cancel, @staff1, '2026-07-11T09:30:00', 'approved', NULL, N'Approved, then cancelled by requester.'),
+(@b_deleted, @staff1, '2026-07-11T10:30:00', 'approved', NULL, N'Approved historical soft-delete example.'),
+(@b_checked_in, @manager1, '2026-07-01T15:00:00', 'approved', NULL, N'Approved for currently checked-in workshop.'),
+(@b_direct_noshow, @staff1, '2026-06-01T08:00:00', 'approved', NULL, N'Approved but requester did not arrive.');
+
+UPDATE [dbo].[bookings]
+SET [status] = 'cancelled'
+WHERE [booking_id] = @b_cancelled;
+
+UPDATE [dbo].[bookings]
+SET [status] = 'cancelled'
+WHERE [booking_id] = @b_approved_cancel;
+
+UPDATE [dbo].[bookings]
+SET [status] = 'no_show'
+WHERE [booking_id] IN (@b_noshow, @b_direct_noshow);
+
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition], [actual_end_time], [final_condition], [usage_notes]) VALUES
+(@b_completed, '2026-06-10T08:05:00', @staff1, N'Lab clean; computers ready.', NULL, NULL, NULL),
+(@b_checked_in, '2026-07-02T09:02:00', @manager1, N'Computers powered on; projector working.', NULL, NULL, NULL);
+
+UPDATE [dbo].[booking_sessions]
+SET [actual_end_time] = '2026-06-10T09:55:00',
+    [final_condition] = N'Lab clean; no incidents.',
+    [usage_notes] = N'Seminar completed successfully.'
+WHERE [booking_id] = @b_completed;
+GO
+
+PRINT 'SECTION 7: Expected-error cases';
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E01 - trg_bookings_prevent_overlap';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Overlapping booking exists for this space and time range%';
+    DECLARE @space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-AUD-101');
+    DECLARE @requester INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.lecturer1@university.edu');
+    -- Expected error: trg_bookings_prevent_overlap / overlapping confirmed booking
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (@space, @requester, '2026-07-20T09:00:00', '2026-07-20T11:00:00', 'seminar', 60, 'approved');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E01 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E01 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E01 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E02 - trg_booking_approvals_check_space under_maintenance';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Cannot approve booking: space is not available%';
+    DECLARE @space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CLS-201');
+    DECLARE @requester INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu');
+    DECLARE @staff INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu');
+    UPDATE [dbo].[spaces] SET [current_status] = 'under_maintenance' WHERE [space_id] = @space;
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (@space, @requester, '2026-08-01T08:00:00', '2026-08-01T09:00:00', 'meeting', 8, 'pending');
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_space / under_maintenance
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, @staff, '2026-07-25T09:00:00', 'approved', N'Test unavailable status.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E02 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E02 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E02 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E03 - trg_booking_approvals_check_space temporarily_closed';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Cannot approve booking: space is not available%';
+    DECLARE @space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CLS-302');
+    DECLARE @requester INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu');
+    DECLARE @staff INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu');
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (@space, @requester, '2026-08-02T08:00:00', '2026-08-02T09:00:00', 'meeting', 8, 'pending');
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_space / temporarily_closed
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, @staff, '2026-07-25T09:00:00', 'approved', N'Test unavailable status.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E03 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E03 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E03 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E04 - trg_booking_approvals_check_space retired';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Cannot approve booking: space is not available%';
+    DECLARE @space INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-AUD-OLD');
+    DECLARE @requester INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu');
+    DECLARE @staff INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu');
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (@space, @requester, '2026-08-03T08:00:00', '2026-08-03T09:00:00', 'meeting', 8, 'pending');
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_space / retired
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, @staff, '2026-07-25T09:00:00', 'approved', N'Test unavailable status.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E04 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E04 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E04 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E05 - trg_bookings_check_capacity';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Expected participants exceed space capacity%';
+    -- Expected error: trg_bookings_check_capacity
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-04T08:00:00', '2026-08-04T09:00:00', 'meeting', 99, 'pending'
+    );
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E05 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E05 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E05 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E06 - trg_bookings_check_maintenance';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Overlapping unresolved maintenance exists for this space%';
+    -- Expected error: trg_bookings_check_maintenance / unresolved maintenance overlap
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-MTG-012'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.lecturer1@university.edu'),
+        '2026-06-27T09:00:00', '2026-06-27T10:00:00', 'meeting', 8, 'pending'
+    );
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E06 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E06 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E06 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E07 - booking_approvals decision_time NOT NULL';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%decision_time%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-05T08:00:00', '2026-08-05T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: booking_approvals decision_time NOT NULL
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), NULL, 'approved', N'Missing decision time test.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E07 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E07 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E07 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E08 - trg_booking_approvals_rejection';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Rejection reason must be provided%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-06T08:00:00', '2026-08-06T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_rejection
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [rejection_reason], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), '2026-07-25T09:00:00', 'rejected', NULL, N'Missing rejection reason test.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E08 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E08 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E08 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E09 - trg_booking_sessions_checkin non-approved';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Cannot check in: booking is not in approved status%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-07T08:00:00', '2026-08-07T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_sessions_checkin / non-approved booking
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@booking, '2026-08-07T08:01:00', (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), N'Clean.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E09 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E09 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E09 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E10 - trg_booking_sessions_checkin initial_condition';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%initial_condition must be provided at check-in%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-08T08:00:00', '2026-08-08T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), '2026-07-25T09:00:00', 'approved', N'Approval for session test.');
+    -- Expected error: trg_booking_sessions_checkin / initial_condition branch
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@booking, '2026-08-08T08:01:00', (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), NULL);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E10 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E10 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E10 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E11 - trg_booking_sessions_completion final_condition';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%final_condition must be provided when completing a booking session%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-09T08:00:00', '2026-08-09T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), '2026-07-25T09:00:00', 'approved', N'Approval for completion test.');
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@booking, '2026-08-09T08:01:00', (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), N'Clean.');
+    -- Expected error: trg_booking_sessions_completion / missing final_condition
+    UPDATE [dbo].[booking_sessions]
+    SET [actual_end_time] = '2026-08-09T08:59:00'
+    WHERE [booking_id] = @booking;
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E11 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E11 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E11 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E12 - trg_booking_approvals_check_role';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Approver must be facility staff or facility manager%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-10T08:00:00', '2026-08-10T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_role
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.lecturer1@university.edu'), '2026-07-25T09:00:00', 'approved', N'Invalid approver role test.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E12 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E12 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E12 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E13 - trg_booking_sessions_check_role';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Check-in staff must be facility staff or facility manager%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-11T08:00:00', '2026-08-11T09:00:00', 'meeting', 8, 'pending'
+    );
+    DECLARE @booking INT = SCOPE_IDENTITY();
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), '2026-07-25T09:00:00', 'approved', N'Approval for invalid check-in role test.');
+    -- Expected error: trg_booking_sessions_check_role
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@booking, '2026-08-11T08:01:00', (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'), N'Clean.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E13 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E13 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E13 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E14 - trg_maintenance_check_assignee_role';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Assigned maintenance staff must be facility staff%';
+    -- Expected error: trg_maintenance_check_assignee_role / facility_manager is invalid assignee
+    INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [problem_description], [start_time], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitymanager1@university.edu'),
+        N'T06 Invalid assignee role test.',
+        '2026-08-12T08:00:00',
+        'open'
+    );
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E14 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E14 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E14 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E15 - trg_bookings_cancellation blocked predecessor';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%Cancellation is only allowed from pending or approved status%';
+    DECLARE @booking INT = (
+        SELECT TOP (1) b.[booking_id]
+        FROM [dbo].[bookings] b
+        INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+        WHERE s.[space_code] = N'T06-COMP-301'
+          AND b.[status] = 'completed'
+        ORDER BY b.[booking_id]
+    );
+    -- Expected error: trg_bookings_cancellation / completed cannot be cancelled
+    UPDATE [dbo].[bookings]
+    SET [status] = 'cancelled'
+    WHERE [booking_id] = @booking;
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E15 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E15 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E15 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E16 - UQ_users_email';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%UQ_users_email%';
+    -- Expected error: UQ_users_email duplicate business key
+    INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
+    VALUES (N't06.student1@university.edu', N'Duplicate User', NULL, 'student', (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School of Computer Science'), 'active');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E16 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E16 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E16 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E17 - CK_bookings_status';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%CK_bookings_status%';
+    -- Expected error: CK_bookings_status invalid enum
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-13T08:00:00', '2026-08-13T09:00:00', 'meeting', 8, 'invalid_status'
+    );
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E17 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E17 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E17 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E18 - CK_bookings_requested_end_time';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%CK_bookings_requested_end_time%';
+    -- Expected error: CK_bookings_requested_end_time invalid time range
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu'),
+        '2026-08-14T09:00:00', '2026-08-14T08:00:00', 'meeting', 8, 'pending'
+    );
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E18 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E18 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E18 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E19 - CK_space_facilities_quantity';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%CK_space_facilities_quantity%';
+    -- Expected error: CK_space_facilities_quantity invalid quantity
+    INSERT INTO [dbo].[space_facilities] ([space_id], [facility_id], [quantity])
+    VALUES (
+        (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-020'),
+        (SELECT [facility_id] FROM [dbo].[facilities] WHERE [name] = N'T06 Projector'),
+        0
+    );
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E19 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E19 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E19 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E20 - UQ_booking_approvals_booking_id';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%UQ_booking_approvals_booking_id%';
+    DECLARE @booking INT = (
+        SELECT TOP (1) b.[booking_id]
+        FROM [dbo].[bookings] b
+        INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+        WHERE s.[space_code] = N'T06-AUD-101'
+          AND b.[status] = 'approved'
+        ORDER BY b.[booking_id]
+    );
+    -- Expected error: UQ_booking_approvals_booking_id duplicate one-to-zero-or-one child
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking, (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), '2026-07-25T09:00:00', 'approved', N'Duplicate child test.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E20 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E20 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E20 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'EXPECTED_ERROR_CASE: E21 - UQ_booking_sessions_booking_id';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern NVARCHAR(4000) = N'%UQ_booking_sessions_booking_id%';
+    DECLARE @booking INT = (
+        SELECT TOP (1) b.[booking_id]
+        FROM [dbo].[bookings] b
+        INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+        WHERE s.[space_code] = N'T06-COMP-202'
+          AND b.[status] = 'checked_in'
+        ORDER BY b.[booking_id]
+    );
+    -- Expected error: UQ_booking_sessions_booking_id duplicate one-to-zero-or-one child
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@booking, '2026-07-02T09:10:00', (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.facilitystaff1@university.edu'), N'Duplicate session test.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E21 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern PRINT 'PASS: E21 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E21 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+GO
+
+PRINT 'SECTION 8: Audit update trigger proofs';
+GO
+
+DECLARE @before_space DATETIME2 = (SELECT [updated_at] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CLS-201');
+UPDATE [dbo].[spaces]
+SET [usage_policy] = N'Tutorials and seminars; reset furniture after use. Updated by Task 06 audit proof.'
+WHERE [space_code] = N'T06-CLS-201';
+PRINT 'VERIFY: V-AUDIT-PARENT - spaces updated_at changed by update trigger';
+SELECT [space_code], CASE WHEN [updated_at] >= @before_space THEN 'covered' ELSE 'not_covered' END AS [audit_parent_result], @before_space AS [before_updated_at], [updated_at] AS [after_updated_at]
+FROM [dbo].[spaces]
+WHERE [space_code] = N'T06-CLS-201';
+
+DECLARE @session_booking INT = (
+    SELECT TOP (1) b.[booking_id]
+    FROM [dbo].[bookings] b
+    INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+    WHERE s.[space_code] = N'T06-COMP-202'
+      AND b.[status] = 'checked_in'
+);
+DECLARE @before_session DATETIME2 = (SELECT [updated_at] FROM [dbo].[booking_sessions] WHERE [booking_id] = @session_booking);
+UPDATE [dbo].[booking_sessions]
+SET [usage_notes] = N'In-progress session note updated for Task 06 audit proof.'
+WHERE [booking_id] = @session_booking;
+PRINT 'VERIFY: V-AUDIT-LIFECYCLE - booking_sessions updated_at changed by update trigger';
+SELECT [booking_id], CASE WHEN [updated_at] >= @before_session THEN 'covered' ELSE 'not_covered' END AS [audit_lifecycle_result], @before_session AS [before_updated_at], [updated_at] AS [after_updated_at]
+FROM [dbo].[booking_sessions]
+WHERE [booking_id] = @session_booking;
+GO
+
+PRINT 'SECTION 9: Verification queries';
+GO
+
+PRINT 'VERIFY: V-ROW-COUNTS - Task 06-owned row counts';
+SELECT 'users' AS [object_name], COUNT(*) AS [row_count] FROM [dbo].[users] WHERE [email] LIKE N't06.%'
+UNION ALL SELECT 'spaces', COUNT(*) FROM [dbo].[spaces] WHERE [space_code] LIKE N'T06-%'
+UNION ALL SELECT 'facilities', COUNT(*) FROM [dbo].[facilities] WHERE [name] LIKE N'T06 %'
+UNION ALL SELECT 'space_facilities', COUNT(*) FROM [dbo].[space_facilities] sf WHERE EXISTS (SELECT 1 FROM [dbo].[spaces] s WHERE s.[space_id] = sf.[space_id] AND s.[space_code] LIKE N'T06-%')
+UNION ALL SELECT 'maintenance', COUNT(*) FROM [dbo].[maintenance] m WHERE EXISTS (SELECT 1 FROM [dbo].[spaces] s WHERE s.[space_id] = m.[space_id] AND s.[space_code] LIKE N'T06-%')
+UNION ALL SELECT 'bookings', COUNT(*) FROM [dbo].[bookings] b WHERE EXISTS (SELECT 1 FROM [dbo].[spaces] s WHERE s.[space_id] = b.[space_id] AND s.[space_code] LIKE N'T06-%')
+UNION ALL SELECT 'booking_approvals', COUNT(*) FROM [dbo].[booking_approvals] ba WHERE EXISTS (SELECT 1 FROM [dbo].[bookings] b INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE b.[booking_id] = ba.[booking_id] AND s.[space_code] LIKE N'T06-%')
+UNION ALL SELECT 'booking_sessions', COUNT(*) FROM [dbo].[booking_sessions] bs WHERE EXISTS (SELECT 1 FROM [dbo].[bookings] b INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE b.[booking_id] = bs.[booking_id] AND s.[space_code] LIKE N'T06-%');
+
+PRINT 'VERIFY: V-USER-ROLES - all user roles';
+SELECT [role], COUNT(*) AS [count_per_role]
+FROM [dbo].[users]
+WHERE [email] LIKE N't06.%'
+GROUP BY [role]
+ORDER BY [role];
+
+PRINT 'VERIFY: V-ACCOUNT-STATUS - all account statuses';
+SELECT [account_status], COUNT(*) AS [count_per_status]
+FROM [dbo].[users]
+WHERE [email] LIKE N't06.%'
+GROUP BY [account_status]
+ORDER BY [account_status];
+
+PRINT 'VERIFY: V-SPACE-TYPES - all space types';
+SELECT [space_type], COUNT(*) AS [count_per_type]
+FROM [dbo].[spaces]
+WHERE [space_code] LIKE N'T06-%'
+GROUP BY [space_type]
+ORDER BY [space_type];
+
+PRINT 'VERIFY: V-SPACE-STATUS - all space statuses';
+SELECT [current_status], COUNT(*) AS [count_per_status]
+FROM [dbo].[spaces]
+WHERE [space_code] LIKE N'T06-%'
+GROUP BY [current_status]
+ORDER BY [current_status];
+
+PRINT 'VERIFY: V-BOOKING-STATUS - all booking statuses';
+SELECT b.[status], COUNT(*) AS [count_per_status]
 FROM [dbo].[bookings] b
-INNER JOIN [dbo].[spaces] s ON b.[space_id] = s.[space_id]
-WHERE b.[requester_id] = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = 't06.lecturer1@university.edu')
-  AND b.[requested_end_time] < GETDATE()
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY b.[status]
+ORDER BY b.[status];
+
+PRINT 'VERIFY: V-BOOKING-PURPOSE - all booking purposes';
+SELECT b.[purpose], COUNT(*) AS [count_per_purpose]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY b.[purpose]
+ORDER BY b.[purpose];
+
+PRINT 'VERIFY: V-APPROVAL-DECISION - approved and rejected decisions';
+SELECT ba.[decision], COUNT(*) AS [count_per_decision]
+FROM [dbo].[booking_approvals] ba
+INNER JOIN [dbo].[bookings] b ON b.[booking_id] = ba.[booking_id]
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY ba.[decision]
+ORDER BY ba.[decision];
+
+PRINT 'VERIFY: V-MAINT-STATUS - all maintenance statuses';
+SELECT m.[status], COUNT(*) AS [count_per_status]
+FROM [dbo].[maintenance] m
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = m.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY m.[status]
+ORDER BY m.[status];
+
+PRINT 'VERIFY: V-SOFT-DELETE - historical soft-deleted booking and maintenance remain queryable';
+SELECT 'booking' AS [history_type], COUNT(*) AS [soft_deleted_count]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%' AND b.[is_deleted] = 1
+UNION ALL
+SELECT 'maintenance', COUNT(*)
+FROM [dbo].[maintenance] m
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = m.[space_id]
+WHERE s.[space_code] LIKE N'T06-%' AND m.[is_deleted] = 1;
+
+PRINT 'VERIFY: V-FK-JOINS - booking, approval, session, and maintenance joins';
+SELECT TOP (20)
+    b.[booking_id], s.[space_code], u.[email] AS [requester_email], b.[status],
+    ba.[decision], bs.[actual_start_time], bs.[actual_end_time]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+LEFT JOIN [dbo].[booking_approvals] ba ON ba.[booking_id] = b.[booking_id]
+LEFT JOIN [dbo].[booking_sessions] bs ON bs.[booking_id] = b.[booking_id]
+WHERE s.[space_code] LIKE N'T06-%'
+ORDER BY b.[booking_id];
+
+PRINT 'VERIFY: V-REPORT-UPCOMING - upcoming approved bookings';
+SELECT s.[space_code], b.[requested_start_time], b.[requested_end_time], b.[purpose], b.[expected_participants]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND b.[status] = 'approved'
+  AND b.[requested_start_time] > '2026-07-02T00:00:00'
   AND b.[is_deleted] = 0
 ORDER BY b.[requested_start_time];
 
-GO
+PRINT 'VERIFY: V-REPORT-HISTORY - booking history';
+SELECT u.[email] AS [requester_email], s.[space_code], b.[requested_start_time], b.[requested_end_time], b.[status]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND b.[requested_end_time] < '2026-07-02T00:00:00'
+  AND b.[is_deleted] = 0
+ORDER BY b.[requested_start_time];
 
-PRINT '--- Maintenance with assigned staff ---';
-SELECT m.[maintenance_id], s.[space_code], m.[problem_description], m.[status], u.[full_name] AS [assigned_staff]
-FROM [dbo].[maintenances] m
-INNER JOIN [dbo].[spaces] s ON m.[space_id] = s.[space_id]
-INNER JOIN [dbo].[users] u ON m.[assigned_staff_id] = u.[user_id]
-WHERE m.[assigned_staff_id] IS NOT NULL AND m.[is_deleted] = 0;
+PRINT 'VERIFY: V-REPORT-MAINTENANCE - spaces under maintenance';
+SELECT s.[space_code], s.[space_name], s.[current_status], m.[problem_description], m.[status]
+FROM [dbo].[spaces] s
+INNER JOIN [dbo].[maintenance] m ON m.[space_id] = s.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND s.[current_status] = 'under_maintenance'
+  AND m.[is_deleted] = 0;
 
-GO
+PRINT 'VERIFY: V-REPORT-NOSHOW - no-show bookings';
+SELECT s.[space_code], b.[requested_start_time], b.[requested_end_time], u.[email] AS [requester_email]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND b.[status] = 'no_show'
+  AND b.[is_deleted] = 0
+ORDER BY b.[requested_start_time];
 
-PRINT '=== SAMPLE DATA GENERATION COMPLETE ===';
+PRINT 'VERIFY: V-AUDIT-NONNULL - created_at and updated_at populated';
+SELECT 'users' AS [object_name], SUM(CASE WHEN [created_at] IS NULL OR [updated_at] IS NULL THEN 1 ELSE 0 END) AS [null_audit_count] FROM [dbo].[users] WHERE [email] LIKE N't06.%'
+UNION ALL SELECT 'spaces', SUM(CASE WHEN [created_at] IS NULL OR [updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[spaces] WHERE [space_code] LIKE N'T06-%'
+UNION ALL SELECT 'bookings', SUM(CASE WHEN b.[created_at] IS NULL OR b.[updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[bookings] b INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'booking_approvals', SUM(CASE WHEN ba.[created_at] IS NULL OR ba.[updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[booking_approvals] ba INNER JOIN [dbo].[bookings] b ON b.[booking_id] = ba.[booking_id] INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'booking_sessions', SUM(CASE WHEN bs.[created_at] IS NULL OR bs.[updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[booking_sessions] bs INNER JOIN [dbo].[bookings] b ON b.[booking_id] = bs.[booking_id] INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'maintenance', SUM(CASE WHEN m.[created_at] IS NULL OR m.[updated_at] IS NULL THEN 1 ELSE 0 END) FROM [dbo].[maintenance] m INNER JOIN [dbo].[spaces] s ON s.[space_id] = m.[space_id] WHERE s.[space_code] LIKE N'T06-%';
+
+PRINT 'VERIFY: V-NO-ACTIVE-OVERLAP - valid active bookings do not overlap';
+SELECT COUNT(*) AS [active_overlap_pair_count]
+FROM [dbo].[bookings] b1
+INNER JOIN [dbo].[bookings] b2
+    ON b1.[space_id] = b2.[space_id]
+   AND b1.[booking_id] < b2.[booking_id]
+   AND b1.[is_deleted] = 0
+   AND b2.[is_deleted] = 0
+   AND b1.[status] IN ('approved','checked_in','completed')
+   AND b2.[status] IN ('approved','checked_in','completed')
+   AND b1.[requested_start_time] < b2.[requested_end_time]
+   AND b1.[requested_end_time] > b2.[requested_start_time]
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b1.[space_id]
+WHERE s.[space_code] LIKE N'T06-%';
+
+PRINT '=== TASK 06 SAMPLE DATA GENERATION COMPLETE ===';
 GO
