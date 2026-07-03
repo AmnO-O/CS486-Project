@@ -75,22 +75,39 @@ The group must also evaluate and improve the agent during the development proces
 
 ---
 
-## 3. Demo Project Structure
-
-The demo Git repository include the following files and folders, your group could adapt it:
+## 3. Project Structure
 
 ```text
 .
-├── .opencode/
-│   ├── commands/
-│   │   └── design-db.md
-│   └── skills/
-│       └── db-design-pipeline/
-│           ├── templates/
-│           └── SKILL.md
+├── .opencode/                          # OpenCode agent configuration
+│   ├── commands/                        # Custom commands (design-db, evaluate, per-task)
+│   ├── skills/
+│       ├── db-design-pipeline/          # 7-task pipeline skills + templates
+│       │   ├── SKILL.md
+│       │   ├── 01-business-req-analysis/SKILL.md
+│       │   ├── 02-erd/SKILL.md
+│       │   ├── 03-logical-design/SKILL.md
+│       │   ├── 04-design-validation/SKILL.md
+│       │   ├── 05-generate-ddl/SKILL.md
+│       │   ├── 06-sample-data/          # SKILL.md + references/
+│       │   └── 07-generate-query/SKILL.md
+│       └── evaluations/                 # Rubrics, metrics, trajectory recording
+│ 
+│   
 ├── req/
-│   └── business-requirement.md
-├── outputs/
+│   └── business-requirement.md          # Input business requirement
+├── outputs/                             # All 7 generated artifacts (G05)
+├── docs/                                # Design documentation
+│   ├── project-overview.md              # Domain, user roles, problem scope
+│   ├── entity-registry.md               # Entities, attributes, relationships (single source of truth)
+│   ├── schema-registry.md               # Normalized tables, FK wiring, indexes
+│   ├── tech-stack.md                    # MSSQL, naming conventions, data types
+│   ├── design-decisions.md              # Rationale & trade-offs for every key decision
+│   └── templates/                       # Templates for entity-registry and schema-registry
+├── memory/                              # Agent memory & progress tracking
+│   ├── MEMORY.md
+│   ├── ActiveContext.md
+│   └── Progress.md
 ├── AGENTS.md
 ├── README.md
 └── .gitignore
@@ -102,13 +119,14 @@ The demo Git repository include the following files and folders, your group coul
 
 | File / Folder | Purpose |
 |---|---|
-| `.opencode/` | Stores OpenCode commands, skills, and related configuration. |
-| `.opencode/commands/design-db.md` | Defines the custom command used to run the database design pipeline. |
-| `.opencode/skills/db-design-pipeline/SKILL.md` | Defines the agent workflow, rules, design steps, and output requirements. |
-| `.opencode/skills/db-design-pipeline/<task>/` | Stores templates used by the agent to generate consistent outputs. |
+| `.opencode/commands/` | Custom commands: `design-db.md` (full pipeline), per-task commands (`01`-`07`), `evaluate-task.md`. |
+| `.opencode/skills/db-design-pipeline/` | 7-task pipeline skills with per-task SKILL.md files and reference docs. |
+| `.opencode/skills/evaluations/` | Rubrics, agent-metrics rubric, trajectory recording for agent evaluation. |
 | `req/business-requirement.md` | Contains the input business requirement. |
-| `outputs/` | Stores all generated project artifacts. |
-| `AGENTS.md` | Contains project-level instructions for the agent. |
+| `outputs/` | Stores all 7 generated project artifacts (G05). |
+| `docs/` | Design documentation: project-overview, entity-registry, schema-registry, tech-stack, design-decisions, templates. |
+| `memory/` | Agent memory: session log, active context, progress tracker. |
+| `AGENTS.md` | Contains project-level instructions and role definition for the agent. |
 | `README.md` | Explains how to install, run, and evaluate the project. |
 | `.gitignore` | Excludes private or unnecessary files from Git. |
 
@@ -135,28 +153,16 @@ If your group uses a different command name, update this README with the correct
 
 ## 6. Required Output Artifacts
 
-The `outputs/` folder must contain the following files:
+The `outputs/` folder contains the following files (example for Group 05):
 
 ```text
-01-business-req-analysis-G<Group number>.md
-02-erd-design-G<Group number>.md
-03-logical-design-G<Group number>.md
-04-design-validation-G<Group number>.md
-05-db-definition-G<Group number>.sql
-06-sample-data-G<Group number>.sql
-07-query-design-G<Group number>.sql
-```
-
-Example for Group 01:
-
-```text
-01-business-req-analysis-G01.md
-02-erd-design-G01.md
-03-logical-design-G01.md
-04-design-validation-G01.md
-05-db-definition-G01.sql
-06-sample-data-G01.sql
-07-query-design-G01.sql
+01-business-req-analysis-G05.md
+02-erd-design-G05.md
+03-logical-design-G05.md
+04-design-validation-G05.md
+05-db-definition-G05.sql
+06-sample-data-G05.sql
+07-query-design-G05.sql
 ```
 
 

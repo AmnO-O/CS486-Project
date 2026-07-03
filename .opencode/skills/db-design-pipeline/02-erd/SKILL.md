@@ -1,9 +1,9 @@
 ---
-name: 02-erd
-description: Parse the Entity Registry and produce a Mermaid.js ERD with Crow's Foot notation for Task 02.
+name: erd-design
+description: Use this skill when the user asks to create or generate an Entity-Relationship Diagram (ERD) from an entity registry or structured entity/relationship definitions, asks to translate entity and relationship definitions into a Mermaid.js ERD. Also triggers when the user mentions terms like "ERD", "cardinality", "participation constraint", or references an entity-registry file.
 ---
 
-# Task 02 — ERD Design (Crow's Foot Notation)
+# ERD Design 
 
 ## Role
 
@@ -11,20 +11,9 @@ You are a professional Data Architect and Database Designer. Your job is to pars
 
 ## Objective
 
-Ingest a markdown-based Entity Registry at `docs/entity-registry.md`, which contains the entity definitions and relationships. That file also provide candidate keys and relationship cardinalities. Your task is to produce a perfectly structured Mermaid.js ERD utilizing standard Crow's Foot notation, adhering strictly to the design rules below. 
-If any ambiguity or missing information read `outputs/01-business-req-analysis-G{{group}}.md` for potential clarifications, but do not assume or invent any details not explicitly provided in the input documents.
+Ingest a markdown-based Entity Registry provided by the caller (path passed via command or user instruction), which contains entity definitions, attribute tables, candidate keys, and relationship cardinalities. Produce a perfectly structured Mermaid.js ERD utilizing standard Crow's Foot notation, adhering strictly to the design rules below.
 
----
-
-## Inputs
-
-- `docs/entity-registry.md` (required)
-- `outputs/01-business-req-analysis-G{{group}}.md` (fallback for ambiguity)
-- `--group` (optional, default: `G05`)
-
-## Outputs
-
-- `outputs/02-erd-design-G{{group}}.md`
+If any ambiguity or missing information is encountered, check the business requirements document (path provided by caller) for clarification — but do not assume or invent any details not explicitly present in the input documents.
 
 ---
 
@@ -32,91 +21,56 @@ If any ambiguity or missing information read `outputs/01-business-req-analysis-G
 
 ### Rule A: Relationship Mapping (Cardinality & Participation)
 
-Use the "Relationships registry" table in the input document to construct the connections. Map the "Cardinality" and "Participation" descriptions to Mermaid notation using this strict key:
-
-**Crow's Foot Symbols:**
-- `||` = Mandatory (total participation) — "at least one"
-- `|o` = Optional (partial participation) — "zero or one"
-
-**Determining Participation from Requirements:**
+Use the "Relationships registry" table in the input document to construct 
+connections. Determine participation from the language used in requirements:
 
 For **Parent → Child (1:N)** relationships:
-- Child is **mandatory (`||`)** if: The child entity *must* have a parent (e.g., every User *must* belong to a Department).
-- Child is **optional (`|o`)** if: The child entity *may* have a parent or the parent is nullable (e.g., a Booking *may have* an Approver if still pending).
-- Parent is **mandatory (`||`)** if: The parent *must* have at least one child (rare; usually only for essential domain relationships).
-- Parent is **optional (`|o`)** if: The parent may have zero children (common; e.g., a Facility may not exist in any Space).
-
-**Business Rule Reference for CS486 Campus Space System:**
-- Users *must* belong to a Department → Departments `||--o{` Users
-- Bookings are optional approvals (some bookings may be auto-approved) → Users `|o--o{` Bookings (approves)
-- Bookings *must* reference a Space and Requester → Spaces `||--o{` Bookings; Users `||--o{` Bookings (requests)
-- Maintenance *must* reference a Space → Spaces `||--o{` Maintenance
-- Maintenance *may* have an assigned staff or reporter → Users `|o--o{` Maintenance (reports/assigned_to)
-
-Example relationship lines:
-```
-R1: Departments -> Users (1:N, Users total) → Departments ||--o{ Users : "belongs_to" 
-(Every User must belong to exactly 1 Department; a Department may have zero or many Users.)
-
-R3: Users -> Bookings (approver, 1:N, Bookings partial) → Users |o--o{ Bookings : "approves" 
-(A Booking may have zero or one Approver if approval is pending or auto-approved.)
-
-R6: Spaces ↔ Facilities (M:N via Space_Facilities) →
-Spaces ||--o{ Space_Facilities : "contains"
-Facilities ||--o{ Space_Facilities : "assigned_to"
-(Every Space may contain zero or many Facilities; every Facility may be assigned to zero or many Spaces.)
-```
+- Child is **mandatory** if: the child entity *must* have a parent 
+  (e.g., every User *must* belong to a Department).
+- Child is **optional** if: the child entity *may* have a parent or 
+  the FK is nullable (e.g., a Booking *may have* an Approver).
+- Parent is **mandatory** if: the parent *must* have at least one child 
+  (rare; only for essential domain relationships).
+- Parent is **optional** if: the parent may have zero children 
+  (common default).
+---
 
 ### Rule B: Entity Definition & No Duplication
 
-* Zero Duplication: Every unique table/entity must be declared exactly once. Do not repeat an entity box on the canvas.
+- **Junction tables are entities**: junction tables must be rendered as independent entities connected to their parent tables via 1:N relationships.
 
-* Junction Tables are Entities: Junction tables (like space_facilities) must be rendered as independent entities connected to their parent tables via 1:N relationships.
+---
 
-### Rule C: Attribute Parsing
+### Rule C: Deciding Whether to Separate a Feature into Its Own Entity
 
-For each entity block under `### <EntityName>`:
+When the business requirement mentions a feature (e.g., incident reporting, audit logging, approval workflow) that could either be modelled as a standalone entity or folded into an existing one, apply this decision rule:
 
-* Read the "Attributes" table.
+- **Create a separate entity** if the feature has its own distinct attributes that do not belong to any existing entity (e.g., `incident_id`, `severity`, `resolution` that differ structurally from `Maintenance`).
+- **Do not create a separate entity** if the feature is described as a note, flag, or comment within an existing entity — use a dedicated field instead (e.g., `result_note`, `usage_notes`).
 
-* Extract the Attribute name and its Type. 
+> If the entity-registry does not explicitly define the entity, do not create it. Document the decision and its rationale in `docs/design-decisions.md` for traceability.
 
-* Add the key designation (PK or FK) in the key field column in Mermaid syntax if applicable.
+---
 
-* Do not omit attributes; every attribute in the Markdown table must be listed inside the Mermaid entity definition block.
+### Rule D: Edge Cases & Ambiguity Handling
 
-### Rule D: Role-Based Relationship Constraints
+- If a relationship's cardinality is ambiguous or unspecified, default to partial participation on both sides and add `%% ambiguous: review needed`.
+- Any entity with no attributes defined — whether absent from the registry 
+  or simply undefined — render as a minimal block with PK only..
+- If two relationships between the same pair of entities exist, render both with distinct labels to avoid Mermaid de-duplication.
 
-Where a relationship involves a specific role or type restriction:
 
-* **Approver (Bookings.approver_id → Users):** The approver must be a User with role = 'Facility Staff' or 'Facility Manager'. This constraint is *logical* (enforced in application or triggers), not at the ERD level, but **document it as a narrative note below the diagram**: "Approvers must have role in ('Facility Staff', 'Facility Manager')."  
+### Rule E: Notation & Formatting
 
-* **Check-In Staff (Bookings.checked_in_by → Users):** The staff member must have a role that permits check-in (Facility Staff or Facility Manager). Document similarly.
-
-* **Assigned Staff (Maintenance.assigned_staff_id → Users):** The assigned staff must be Facility Staff. Document in narrative.
-
-**ERD representation:** The FK relationship is drawn normally; the role constraint is stated as a narrative bullet point after the diagram, not within the Mermaid syntax (Mermaid does not support semantic role constraints).
-
-### Rule E: Incident Reporting Entity
-
-The business requirement mentions "incident reporting" as a feature. Determine whether to model **Incident** as a separate entity:
-
-* **If the requirement explicitly lists separate attributes for incident records** (e.g., incident_id, incident_type, severity, reporter, resolution) that differ from Maintenance, create a separate `Incidents` entity.
-
-* **If incident reporting is treated as a note/comment within Maintenance or Bookings**, do not create a separate entity — use a `result_note` or `usage_notes` field instead.
-
-**For CS486:** The current requirement bundles incident handling into Maintenance ("problem_description", "result_note"). Incidents are not separated from maintenance. **Decision: Do not create a separate Incident entity** unless the entity-registry explicitly defines it. If needed later, document this decision in `docs/design-decisions.md`.
-
-### Rule F: Edge Cases & Ambiguity Handling
-
-* If a relationship's cardinality is ambiguous or not specified, default to partial participation (o) on both sides and add an inline comment `%% ambiguous: review needed`.
-* If an entity has no attributes listed, render it with only its PK as a placeholder.
-* If an FK references an entity not defined in the registry, still declare that entity as a minimal block (PK only) rather than omitting the relationship.
-* If two relationships between the same pair of entities exist, render both with distinct labels to avoid Mermaid de-duplication.
-* Ignore constraints (NOT NULL, DEFAULT, CHECK) — Mermaid ERD does not support them.
-* Omit audit columns (`created_at`, `updated_at`) and soft-delete flags (`is_deleted`) — they are physical-layer concerns, not conceptual attributes.
-* Do NOT include FK markers in entity attribute blocks — relationships are already represented by the connection lines. Only mark `PK`.
-* Attribute type must be a single token (no spaces): use **lowercase conceptual types** — `string`, `int`, `datetime`, `boolean` (not SQL Server capitalized forms like `VARCHAR`, `NVARCHAR`, `DATETIME2`, `BIT`).
+- Ignore constraints (NOT NULL, DEFAULT, CHECK) — Mermaid ERD does not 
+  support them.
+- Omit audit columns (`created_at`, `updated_at`) and soft-delete flags 
+  (`is_deleted`) — physical-layer concerns do not belong in a conceptual ERD.
+- Do NOT mark FK in entity attribute blocks — relationships are already 
+  represented by connection lines. Only mark `PK`.
+- Attribute type must be a single token using lowercase conceptual types: 
+  `string`, `int`, `datetime`, `boolean` — not SQL types like `VARCHAR` 
+  or `DATETIME2`.
 
 ---
 
@@ -128,34 +82,38 @@ The business requirement mentions "incident reporting" as a feature. Determine w
 
 ---
 
-## Output Format & Validation Checklist
+## Output Format
 
-* Provide a brief analysis (under 3 sentences) explaining the core entities and their relationships.
-* Return exactly one `mermaid` code block containing the diagram.
-* **Below the diagram, add a "Relationship Participation Summary" section** with columns: `#`, `Relationship`, `Cardinality`, `Mermaid Notation`, `Participation Explanation` — listing each relationship with its cardinality and participation constraint explanation (e.g., `1:N`, `M:N`, `1:N (partial)`).
-* **Add a "Logical Constraints" section** documenting role-based constraints (e.g., "Approvers must be Users with role in ('Facility Staff', 'Facility Manager')").
-* Output file: `outputs/02-erd-design-G{{group}}.md`
+- Provide a brief analysis (under 4 sentences) explaining the core entities 
+  and their relationships.
+- Return **exactly two** `mermaid` code blocks in this order:
 
-**Pre-submission validation checklist:**
-- [ ] All entities from entity-registry are present in the diagram
-- [ ] All attributes from entity-registry are present for each entity
-- [ ] All relationships from the Relationship Registry are present
-- [ ] Cardinality (1:N, M:N, 1:1) is correct for each relationship — explicitly listed in the `Cardinality` column of the Participation Summary table
-- [ ] Participation constraints (`||` mandatory, `|o` optional) are explicitly stated and justified
-- [ ] Junction tables (like Space_Facilities) are rendered as standalone entities with 1:N relationships to parents
-- [ ] Foreign keys are represented by relationship lines — not marked in entity attribute blocks (only `PK` markers in entity blocks)
-- [ ] Primary keys are marked with `PK`
-- [ ] No duplicate entity definitions
-- [ ] Role-based constraints (e.g., approvers must be Facility Staff) are documented in narrative
-- [ ] Entity count matches business requirement (Departments, Users, Spaces, Facilities, Space_Facilities, Bookings, Maintenance, [Incidents if defined])
-- [ ] Incident reporting is either modeled as a separate entity OR justified as part of Maintenance/Bookings
+  **Diagram 1 — Overview (nodes only):** entities as named nodes with no 
+  attribute blocks, relationships and labels preserved. Purpose: high-level 
+  structural overview at a glance.
 
+  **Diagram 2 — Full Detail:** complete entity blocks with all attributes, 
+  PK markers, and relationship lines per all Rules above.
+
+- Below Diagram 2, add a **"Relationship Participation Summary"** table 
+  with columns: `#`, `Relationship`, `Cardinality`, `Mermaid Notation`, 
+  `Participation Explanation`.
+- Write the output to the path specified by the caller.
 ---
 
-## Example Output 
+## Example Output
 
+**Diagram 1 — Overview:**
 ```mermaid
-erDiagram 
+erDiagram
+    DEPARTMENT
+    USER
+    DEPARTMENT ||--o{ USER : "belongs_to"
+```
+
+**Diagram 2 — Full Detail:**
+```mermaid
+erDiagram
     DEPARTMENT {
         int id PK
         string name
@@ -168,7 +126,8 @@ erDiagram
     DEPARTMENT ||--o{ USER : "belongs_to"
 ```
 
-FK columns appear as regular attributes without FK markers (relationships are represented by the connection lines, not in entity blocks).
+FK columns appear as regular attributes without FK markers — relationships 
+are represented by the connection lines, not in entity blocks.
 
 ---
 

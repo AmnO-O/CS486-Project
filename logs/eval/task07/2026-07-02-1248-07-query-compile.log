@@ -1,0 +1,42 @@
+Task 07 — Query Compile Verification
+=====================================
+Group:  G05
+File:   outputs/07-query-design-G05.sql
+Date:   2026-07-02 12:48
+
+Environment:
+  - SQL Server 2022 detected (v16.0.4255.1)
+  - sqlcmd available at /opt/mssql-tools18/bin/sqlcmd
+  - CS486_G05 database not yet created (DDL not executed in this session)
+  - SA password unknown — login failed, cannot run live compile
+
+Verification performed:
+  1. Query 9 (appended) reviewed manually for T-SQL syntax correctness
+  2. All tables/columns verified against: schema-registry.md (locked), 
+     entity-registry.md (locked), outputs/05-db-definition-G05.sql
+  3. DECLARE block — all parameters declared before use ✓
+  4. JOINs use explicit syntax with table aliases ✓
+  5. is_deleted = 0 filter on bookings ✓
+  6. Interval overlap test uses standard pattern ✓
+  7. GO separator present after query ✓
+  8. Duration calculation uses DATEDIFF(SECOND, ...) / 3600.0 ✓
+     (not CASE-based on status — follows skill guidance)
+  9. Filtering by space_code with uniqueness comment ✓
+  10. COALESCE for NULL cumulative hours (no prior usage) ✓
+  11. 4-field template present (student-name, target-users, 
+      business-question, why-useful) ✓
+  12. status values match tech-stack.md enums ✓
+
+Syntax check result: PASS (manual review)
+
+Note: Compilation could not be executed against CS486_G05 because
+the database must first be created via outputs/05-db-definition-G05.sql 
+and seeded via outputs/06-sample-data-G05.sql. Run the following
+before live verification:
+
+  sqlcmd -S localhost -U sa -P <password> -d CS486_G05 \
+    -i outputs/05-db-definition-G05.sql
+  sqlcmd -S localhost -U sa -P <password> -d CS486_G05 \
+    -i outputs/06-sample-data-G05.sql
+  sqlcmd -S localhost -U sa -P <password> -d CS486_G05 \
+    -i outputs/07-query-design-G05.sql

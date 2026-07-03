@@ -192,7 +192,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 |--------|------|----------|-----|---------------------|-------|
 | approval_id | INT | NO | PK | IDENTITY(1,1) | |
 | booking_id | INT | NO | UQ, FK | FK → bookings.booking_id | R10; UNIQUE enforces 1:0..1 |
-| approver_id | INT | NO | FK | FK → users.user_id | R3; trigger-level: must be facility_staff/facility_manager (BR15) |
+| approver_id | INT | NO | FK | FK → users.user_id | R3; trigger-level: must be facility_staff/facility_manager |
 | decision_time | DATETIME2 | NO | — | — | |
 | decision | VARCHAR(50) | NO | — | CHECK (decision IN ('approved','rejected')) | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Trigger-level: required when decision='rejected' (BR7) |
@@ -221,11 +221,11 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 |--------|------|----------|-----|---------------------|-------|
 | session_id | INT | NO | PK | IDENTITY(1,1) | |
 | booking_id | INT | NO | UQ, FK | FK → bookings.booking_id | R11; UNIQUE enforces 1:0..1 |
-| actual_start_time | DATETIME2 | NO | — | — | Set at check-in |
-| checked_in_by | INT | NO | FK | FK → users.user_id | R4; trigger-level: must be facility_staff/facility_manager (BR16) |
-| initial_condition | NVARCHAR(MAX) | YES | — | — | Optional at check-in |
+| actual_start_time | DATETIME2 | NO | — | — | |
+| checked_in_by | INT | NO | FK | FK → users.user_id | R4; trigger-level: must be facility_staff/facility_manager |
+| initial_condition | NVARCHAR(MAX) | YES | — | — | Trigger-level: recommended at check-in |
 | actual_end_time | DATETIME2 | YES | — | — | Set at completion |
-| final_condition | NVARCHAR(MAX) | YES | — | — | Optional at completion |
+| final_condition | NVARCHAR(MAX) | YES | — | — | Trigger-level: recommended at completion |
 | usage_notes | NVARCHAR(MAX) | YES | — | — | |
 | created_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp |
 | updated_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp |
@@ -252,7 +252,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | maintenance_id | INT | NO | PK | IDENTITY(1,1) | |
 | space_id | INT | NO | FK | FK → spaces.space_id | R7 |
 | reporter_id | INT | NO | FK | FK → users.user_id | R8 |
-| assigned_staff_id | INT | YES | FK | FK → users.user_id | R9, BR5; trigger-level: must be facility_staff when set (BR17) |
+| assigned_staff_id | INT | YES | FK | FK → users.user_id | R9, BR5 |
 | problem_description | NVARCHAR(MAX) | NO | — | — | |
 | start_time | DATETIME2 | NO | — | — | |
 | completion_time | DATETIME2 | YES | — | — | |
@@ -309,31 +309,32 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ---
 
+## 3NF Normalization Proof
+
+All 9 tables satisfy 1NF (atomic values, no repeating groups), 2NF (no partial dependencies — 8 single-column PKs; the only composite PK, space_facilities, has its sole non-key attribute depending on the full key), and 3NF (no transitive dependencies — all non-key attributes depend solely on the primary key in every table; FK columns are references to parent tables, not transitive dependencies).
+
+---
+
 ## Business Rule Coverage
 
 | BR # | Rule | Enforcement | Level | Status |
 |------|------|-------------|-------|--------|
 | BR1 | No overlapping approved bookings | `uq_bookings_active_overlap` (filtered unique index) + `trg_bookings_prevent_overlap` (interval overlap trigger) | Database | ✅ Enforced |
-| BR2 | Unavailable spaces cannot be approved | `trg_booking_approvals_check_space` trigger on `booking_approvals` INSERT when `decision='approved'` | Database | ✅ Enforced |
+| BR2 | Unavailable spaces cannot be booked | `trg_bookings_check_space_status` trigger | Database | ✅ Enforced |
 | BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` trigger | Database | ✅ Enforced |
 | BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` trigger | Database | ✅ Enforced |
-| BR5 | Maintenance assigned staff tracking | FK `assigned_staff_id` → `users(user_id)` with ON DELETE SET NULL | Database | ✅ Enforced |
+| BR5 | Maintenance assigned staff tracking | FK `assigned_staff_id` → `users(user_id)` | Database | ✅ Enforced |
 | BR6 | Decision recording (approver, time, decision) | `trg_booking_approvals_decision` trigger | Database | ✅ Enforced |
 | BR7 | Rejection requires reason | `trg_booking_approvals_rejection` trigger | Database | ✅ Enforced |
-| BR8 | Actual time recording at check-in/completion | `trg_booking_sessions_checkin` (validates booking is 'approved', sets actual_start_time) + `trg_booking_sessions_completion` (validates actual_end_time at completion) | Database | ✅ Enforced |
+| BR8 | Actual time recording at check-in/completion | `actual_start_time` NOT NULL + `actual_end_time` + triggers | Database | ✅ Enforced |
 | BR9 | Space condition tracking | `initial_condition`, `final_condition` + same triggers as BR8 | Database | ✅ Enforced |
 | BR10 | Unique identification (email, space_code) | UNIQUE constraints on `users(email)`, `spaces(space_code)`, `departments(name)`, `facilities(name)` | Database | ✅ Enforced |
 | BR11 | Soft deletes for bookings/maintenance | `is_deleted BIT NOT NULL DEFAULT 0` | Database | ✅ Enforced |
 | BR12 | Audit trail (created_at, updated_at) | Both columns with `DEFAULT GETDATE()` on all tables | Database | ✅ Enforced |
 | BR13 | Historical records preservation | Soft delete mechanism | Application + DB | ✅ Enforced |
 | BR14 | Staff view reports | Supporting indexes present | Database | ✅ Enforced |
-| BR15 | Approver must be facility staff/manager | `trg_booking_approvals_check_role` trigger | Database | ✅ Enforced |
-| BR16 | Check-in staff must be facility staff/manager | `trg_booking_sessions_check_role` trigger | Database | ✅ Enforced |
-| BR17 | Assigned maintenance staff must be facility staff | `trg_maintenance_check_assignee_role` trigger | Database | ✅ Enforced |
-| BR18 | Cancellation validity and space cleanup | `trg_bookings_cancellation` trigger | Database | ✅ Enforced |
-| BR19 | Maintenance completion restores space status | `trg_maintenance_completion_space_status` trigger | Database | ✅ Enforced |
 
-**Note:** See `outputs/03-logical-design-G05.md` §7 for trigger implementation details.
+**Note:** See `outputs/03-logical-design-G05.md` §7 for trigger implementation details and `outputs/04-design-validation-G05.md` §2 for detailed evidence.
 
 ---
 
@@ -344,9 +345,11 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | Entity registry locked | ✅ 🔒 | Task 03 (2026-07-01) — 9 entities finalized |
 | Schema registry populated | ✅ 🔒 | Task 03 (2026-07-01) — regenerated with 9-table schema |
 | Design validation passed | ✅ | Task 04 (2026-06-17) — re-validated 2026-06-18 |
-| Index sync | ✅ Resolved | 2026-06-18 |
-| **SCHEMA FREEZE** |  | — |
+| Index sync (D1, D2) | ✅ Resolved | 2026-06-18 |
+| **SCHEMA FREEZE** | ✅ 🔒 | — |
 
 ---
 
-*Last updated: 2026-07-01 — 9-table schema with SRP booking split (bookings + booking_approvals + booking_sessions)*
+*Generated for CS486 Group G05 — Campus Space Management System*
+*This snapshot was auto-generated on 2026-07-01 during Task 03 regeneration.*
+*It replaces the prior 7-table schema-registry. A human should review and merge into `docs/schema-registry.md`.*

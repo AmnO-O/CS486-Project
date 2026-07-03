@@ -1,8 +1,0 @@
-type     count      
--------- -----------
-Tables             7
-Triggers          15
-FKs               10
-CHECKs            13
-
-(4 rows affected)

@@ -19,23 +19,7 @@ Produce a set of meaningful, executable SQL queries that:
 - use parameterized `DECLARE` blocks instead of hardcoded literals
 
 ---
-
-## Inputs
-Read in this order before generating:
-
-1. `outputs/05-db-definition-G05.sql` — understand the database definition
-2. `outputs/06-sample-data-G05.sql` — understand what data exists to write realistic queries
-3. `req/business-requirement.md` — derive business questions from real use cases
-4. `outputs/01-business-req-analysis-G05.md` — fallback for business context
-
-If Tasks 05 or 06 are not complete → **stop and report**.
-
----
-
 ## Output format
-
-Output file: `outputs/07-query-design-G05.sql`
-
 Every query must follow this exact template:
 
 ```sql
