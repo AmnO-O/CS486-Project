@@ -1,0 +1,297 @@
+# Task 02 — ERD Design Analysis
+
+**Group:** G05
+**Course:** CS486 — Introduction to Database System
+**Domain:** Campus Space Management System
+**Document purpose:** Analyse the conceptual ERD, explain design rationale per entity, and demonstrate why this design is the correct choice for the client.
+
+---
+
+## 1. Introduction
+
+The Entity-Relationship Diagram (ERD) for the Campus Space Management System defines **9 entities** that together model the full booking lifecycle, from space registration and equipment inventory to usage requests, approval workflows, session check-in/out, and maintenance handling. The design centers on three pillars — **Users**, **Spaces**, and **Bookings** — supported by organizational units (**Departments**), equipment profiles (**Facilities**), and maintenance tracking (**Maintenance**). A defining architectural decision is the **Single Responsibility Principle (SRP) split** of the monolithic `Bookings` table into three focused tables (`Bookings`, `Booking_Approvals`, `Booking_Sessions`), ensuring each table owns exactly one phase of the booking lifecycle. The schema satisfies **Third Normal Form (3NF)**, eliminating data redundancy while preserving query performance.
+
+---
+
+## 2. Architectural Overview
+
+The ERD is organized into three functional layers:
+
+| Layer | Entities | Purpose |
+|---|---|---|
+| **Organizational layer** | Departments, Users | Who can interact with the system and what department they belong to |
+| **Resource layer** | Spaces, Facilities, Space_Facilities | What physical assets exist and what equipment they contain |
+| **Activity layer** | Bookings, Booking_Approvals, Booking_Sessions, Maintenance | What events happen on the resources — requests, approvals, usage sessions, and repairs |
+
+The booking lifecycle is modeled as a **three-phase pipeline**:
+
+1. **Request** (Bookings) — A user submits a time/space/purpose request with status `pending`.
+2. **Decision** (Booking_Approvals) — Authorized staff approve or reject; if rejected, a `rejection_reason` is captured.
+3. **Execution** (Booking_Sessions) — On arrival, staff check in (record actual start time + initial condition); on departure, staff check out (record actual end time + final condition + usage notes).
+
+This split is the single most impactful design decision and is examined in detail in the entity sections below.
+
+---
+
+## 3. Entity-by-Entity Analysis
+
+### 3.1 Departments
+
+**Role:** Organizational unit anchor. Every user belongs to exactly one department (e.g., "Computer Science", "Physics", "Administration").
+
+**Contribution to the common purpose:** 
+  - Departments enable role-based oversight and reporting. 
+  - A Department Administrator can view bookings and usage statistics filtered by their own department. 
+
+**Why designed this way:**
+- Modeled as a **separate table** (not a free-text field on Users) because departments are reference data with a stable list and a UNIQUE business key (`name`). A separate table enforces referential integrity — a User cannot belong to a non-existent department.
+- Uses a **surrogate PK** (`department_id INT IDENTITY`) for efficient FK references from Users, plus a **UNIQUE constraint** on `name` for the business key — the hybrid approach recommended in design decisions.
+- Attributes are minimal (only `department_id` and `name`) because no business requirement demands additional department metadata (e.g., office location, budget code). This keeps the entity lean.
+
+---
+
+### 3.2 Users
+
+**Role:** Actor base. Every human interaction with the system is represented by a User record — requesting a booking, approving/rejecting, checking in, reporting maintenance, or being assigned as maintenance staff.
+
+**Contribution to the common purpose:** 
+- The entity centralizes identity (`email`, `full_name`), authorization (`role`), lifecycle (`account_status`), and organizational affiliation (`department_id → Departments`).
+- All roles from the business requirements are supported, and the entity is designed to accommodate future role expansion without schema changes. 
+
+**Why designed this way:**
+- **Surrogate PK** (`user_id`) for efficient FK wiring across 7 relationships (R2–R4, R8–R9, plus implicit references). An Email **UNIQUE constraint** serves as the natural business key and login identifier.
+- The `role` column uses **VARCHAR with CHECK constraint** (not a separate lookup table) because the six roles are defined in the business requirements and are unlikely to change. This avoids unnecessary joins. The same pattern applies to `account_status` (`active`, `inactive`, `suspended`).
+
+- The design does **not** store passwords or authentication secrets — this is a database design, not an application. Authentication is handled externally.
+
+---
+
+### 3.3 Spaces
+
+**Role:** Resource core. Spaces are the bookable physical assets that the entire system revolves around — auditoriums, classrooms, computer labs, project labs, meeting rooms, and student workspaces.
+
+**Contribution to the common purpose:** 
+- Spaces are referenced by Bookings (what is being booked), Space_Facilities (what equipment is inside), and Maintenance (what space needs repair). 
+- The entity tracks location (`building`, `floor`, `room_number`), capacity (for participant limits), current availability (`current_status`), and usage rules (`usage_policy`).
+
+**Why designed this way:**
+- `building` and `floor` are **free-text NVARCHAR fields**, not separate reference tables. This is a deliberate trade-off (Decision Q5 in design-decisions.md): no business requirement demands cross-building reporting or building CRUD that would justify extra normalization. The cost is potential minor inconsistency ("Bldg A" vs "Building A"), which is acceptable for the current scope.
+- `current_status` uses **VARCHAR with CHECK constraint**: `'available'`, `'in_use'`, `'under_maintenance'`, `'temporarily_closed'`, `'retired'`. The status drives Business Rule 2 (spaces that are not `'available'` cannot be booked) and is auto-updated by triggers on maintenance completion and booking check-in/out.
+
+---
+
+### 3.4 Facilities
+
+**Role:** Equipment catalog. Defines what types of equipment exist in the system — projector, whiteboard, microphone, computer, livestreaming equipment, air conditioner, etc.
+
+**Contribution to the common purpose:** Facilities enable the question "What equipment is available in this space?" without repeating equipment names across spaces. 
+
+**Why designed this way:**
+- The entity is deliberately **lean** (only `facility_id` and `name`). No `category` column was added because the business requirement lists only equipment names, not categories. If categorization becomes necessary later, a `category` column or separate `facility_categories` table can be added without breaking existing relationships.
+- Facilities are **not** tied directly to Spaces — that M:N relationship is resolved by `Space_Facilities`, maintaining 3NF.
+
+---
+
+### 3.5 Space_Facilities
+
+**Role:** Junction (associative) entity resolving the many-to-many relationship between Spaces and Facilities.
+
+**Contribution to the common purpose:** A space can have multiple facility types (e.g., Room 201 has a projector AND an AC), and a facility type can exist in multiple spaces (e.g., projectors are in Room 201, Room 302, and Lab 5). Without this junction, we would have to either (a) repeat facility names in a delimited string (violating 1NF) or (b) add multiple nullable columns like `facility_1`, `facility_2` (unnormalized repeating groups).
+
+**Why designed this way:**
+- This is the canonical 3NF pattern for M:N relationships and is one of the strongest indicators of normalized design quality in this schema.
+
+---
+
+### 3.6 Bookings
+
+**Role:** Booking request/ticket. This is the **first phase** of the three-phase booking pipeline — it captures the user's intent to use a space at a given time for a given purpose.
+
+**Contribution to the common purpose:** 
+- Bookings is the central entity that connects who (requester) wants what (space) when (start/end time) and why (purpose). 
+- It drives the scheduling logic, overlap prevention, and the status lifecycle. After the SRP split, Bookings contains **only request-phase attributes**, leaving approval and session data to their respective tables.
+
+**Why designed this way:**
+- Attributes are strictly **request-phase only**. Compare with the old monolithic design that had **10 extra nullable columns** (approver_id, decision_time, etc.) — those are now in Booking_Approvals and Booking_Sessions.
+- `is_deleted BIT DEFAULT 0` implements **soft delete** — records are never physically removed, preserving audit history
+- `expected_participants` has a **`CHECK (expected_participants > 0)`** and is compared against `spaces.capacity` via Business Rule 3.
+
+---
+
+### 3.7 Booking_Approvals
+
+**Role:** Decision record. Captures the approval or rejection decision made by authorized staff on a booking request — the **second phase** of the booking pipeline.
+
+**Contribution to the common purpose:** Before the SRP split, approval data was stored in the Bookings table with nullable columns. Now, Booking_Approvals provides a clean, dedicated record of who decided, when, what the decision was, and (if rejected) why. This enables audit queries ("Show all rejections by staff X last month") and enforces Business Rule 6 (decision recording) and Rule 7 (rejection reason).
+
+**Why designed this way:**
+- **1:0..1 relationship** with Bookings — a booking may have zero or one approval row. This is enforced by a **UNIQUE constraint** on `booking_id`, which also serves as the FK. This guarantees that no booking can have multiple approval records.
+- `decision` uses **CHECK constraint** with only two values: `'approved'` and `'rejected'` — no `'pending'` value because the row is only created when a decision is actually made.
+- `rejection_reason` is a **dedicated column** (not merged into `decision_note`) because Business Rule 7 requires explicit storage and potential enforcement of rejection reasons. It is nullable at column level but enforced via trigger when `decision = 'rejected'` — this separation makes querying ("find all rejections due to capacity violation") clean and efficient.
+- Role enforcement: `approver_id` is validated via trigger `trg_booking_approvals_check_role` to ensure only `facility_staff` or `facility_manager` can approve/reject (Business Rule 15).
+
+---
+
+### 3.8 Booking_Sessions
+
+**Role:** Execution record. Tracks the check-in and check-out of an approved booking — the **third phase** of the booking pipeline.
+
+**Contribution to the common purpose:** Booking_Sessions bridges the gap between what was *requested* (Bookings) and what actually *happened*. It records the real start time (which may differ from requested), the real end time, the space condition at both check-in and check-out, and who performed the check-in. This data is critical for:
+- Detecting no-shows (approved booking, no session created)
+- Capturing space damage (initial vs final condition comparison)
+- Enforcing accountability (`checked_in_by` identifies the staff member)
+- Calculating actual vs. requested duration for analytics
+
+**Why designed this way:**
+- **1:0..1 relationship** with Bookings — enforced by UNIQUE constraint on `booking_id`. A session row exists only if the booking was actually checked in.
+- `actual_start_time` and `checked_in_by` are **NOT NULL** because they are recorded at the moment of check-in. `actual_end_time` is **nullable** because it is recorded later at check-out.
+- `initial_condition` and `final_condition` are **NVARCHAR(MAX)**, nullable — free-text notes about space state. They are not mandatory because a quick check-in/out may not require notes, but they are available for capturing damage or issues.
+- `checked_in_by` must reference a user with role `facility_staff` or `facility_manager`, enforced by trigger `trg_booking_sessions_check_role` (Business Rule 16).
+- A check-in is only allowed when `bookings.status = 'approved'`, enforced by trigger `trg_booking_sessions_checkin` — this prevents bypassing the approval workflow.
+
+---
+
+### 3.9 Maintenance
+
+**Role:** Problem and repair tracker. Captures issues reported against a space, tracks assignment to facility staff, and records resolution.
+
+**Contribution to the common purpose:** Maintenance ensures that space availability reflects the real physical state. When a space has an open or in-progress maintenance ticket, its `current_status` is set to `'under_maintenance'`, which blocks new approved bookings (Business Rule 2). The entity merges what might otherwise be a separate "Incidents" table because no distinct incident-specific attributes (severity, incident_type, etc.) are defined in the requirements.
+
+**Why designed this way:**
+- **Surrogate PK** (`maintenance_id`). No natural business key.
+- `reporter_id` is NOT NULL (total participation in R8 — every maintenance record must have a reporter).
+- `assigned_staff_id` is **nullable** because a ticket may be reported before any staff is assigned. When set, a trigger (`trg_maintenances_check_assignee_role`) ensures the assigned user has `role = 'facility_staff'` (Business Rule 17). The FK uses **ON DELETE SET NULL** — if a staff member is deleted from Users, their assigned tickets are not lost but simply unassigned.
+- `status` uses CHECK constraint: `'open'`, `'in_progress'`, `'resolved'`.
+- On completion (status → `'resolved'`), trigger `trg_maintenances_completion_space_status` atomically sets `spaces.current_status = 'available'` **only if** no other active maintenance tickets exist for the same space. This prevents premature space re-activation when multiple concurrent tickets exist.
+- `is_deleted BIT DEFAULT 0` implements soft delete for historical preservation.
+- The entity merges incident reporting (from business requirements) because incidents and maintenance share the same attributes — `problem_description`, `status`, `assigned_staff`, `result_note`. No separate `Incidents` table is warranted (Decision in design-decisions.md).
+
+---
+
+## 4. Comparison: Monolithic vs. SRP-Split Booking Design
+
+The most significant improvement in the current ERD is the **split of the monolithic Bookings table** into three focused tables. Below is a direct comparison:
+
+| Aspect | Old Monolithic `Bookings` | New SRP-Split Design |
+|---|---|---|
+| **Number of tables** | 1 | 3 (Bookings, Booking_Approvals, Booking_Sessions) |
+| **Total columns** | 17 | 8 + 8 + 9 = 25 (spread across 3 tables) |
+| **Nullable columns when `status = 'pending'`** | 10 (approver_id, decision_time, decision_note, rejection_reason, actual_start_time, checked_in_by, initial_condition, actual_end_time, final_condition, usage_notes) | 0 (approval and session tables simply have no row yet) |
+| **Can audit approval history?** | No — only the final decision is stored | Yes — each approval is a separate row, capturing who decided and when |
+| **Can audit session history?** | No — only the final session is stored | Yes — each session is a separate row |
+| **Query complexity for "active bookings"** | Simple (single table) | Simple (single table — Bookings) |
+| **Query complexity for "approval decisions"** | Requires filtering where `approver_id IS NOT NULL` | Direct: `SELECT * FROM Booking_Approvals` |
+| **Schema clarity** | Poor — a single row mixes request data, decision data, and session data | High — each table has a clear, single responsibility |
+| **3NF compliance** | Partial — transitive dependency risk (approval data depends on decision, not on booking_id directly) | Full — each table's non-key attributes depend solely on its own PK |
+
+**Client benefit summary:** The SRP split eliminates NULL sprawl, makes the booking lifecycle explicit and auditable, and improves schema clarity without sacrificing query performance (the 1:0..1 relationships require only simple JOINs).
+
+---
+
+## 5. Relationship Summary
+
+| ID | Relationship | Cardinality | Participation | Why |
+|---|---|---|---|---|
+| R1 | Departments → Users | 1:N | Users total | Each user must belong to a department; a department may have zero or many users |
+| R2 | Users → Bookings (requester) | 1:N | Bookings total | Each booking must have exactly one requester; a user may request many bookings |
+| R3 | Users → Booking_Approvals (approver) | 1:N | Booking_Approvals total | Each approval must have exactly one approver; a user may approve/reject many bookings |
+| R4 | Users → Booking_Sessions (checks_in) | 1:N | Booking_Sessions total | Each session must have exactly one staff who checked in; a staff may check in many sessions |
+| R5 | Spaces → Bookings | 1:N | Bookings total | Each booking is for exactly one space; a space may be booked many times |
+| R6 | Spaces ↔ Facilities | M:N | Both partial | A space may have multiple facility types; a facility type may be in multiple spaces; resolved via Space_Facilities junction |
+| R7 | Spaces → Maintenance | 1:N | Maintenance total | Each maintenance record is for exactly one space; a space may have many maintenance records |
+| R8 | Users → Maintenance (reporter) | 1:N | Maintenance total | Each maintenance record has exactly one reporter; a user may report many issues |
+| R9 | Users → Maintenance (assigned staff) | 1:N | Maintenance partial | A maintenance record may have zero or one assigned staff; a staff may be assigned many tickets |
+| R10 | Bookings → Booking_Approvals | 1:0..1 | Booking_Approvals total | A booking may have zero or one approval decision; every approval belongs to exactly one booking |
+| R11 | Bookings → Booking_Sessions | 1:0..1 | Booking_Sessions total | A booking may have zero or one check-in session; every session belongs to exactly one booking |
+
+---
+
+## 6. Third Normal Form (3NF) Compliance
+
+### 6.1 1NF — Atomic columns, no repeating groups
+
+- **Every column in every table holds a single atomic value** — no delimited lists, no JSON/XML strings carrying multiple data points.
+- **No repeating groups of columns.** The M:N relationship between Spaces and Facilities is resolved via the `Space_Facilities` junction table instead of columns like `facility_1`, `facility_2`, ... or a delimited string.
+- **Every table has a primary key** — all PKs are declared and non-null.
+
+### 6.2 2NF — No partial dependencies
+
+2NF applies only to tables with composite primary keys. The only composite PK in the schema is `Space_Facilities(space_id, facility_id)`:
+- `quantity` depends on the **full composite key** (both which space AND which facility). There is no partial dependency — quantity is not a property of a space alone or a facility alone.
+- All other tables have **single-column surrogate PKs**, making partial dependencies impossible by definition.
+
+### 6.3 3NF — No transitive dependencies
+
+Each non-key column depends **directly on the primary key**, not on another non-key column:
+
+| Table | PK | Non-key columns | Depend directly on PK? |
+|---|---|---|---|
+| Departments | department_id | `name` | Yes — name is a property of the department |
+| Users | user_id | `email`, `full_name`, `phone_number`, `role`, `department_id`, `account_status` | Yes — all are properties of the user. `department_id` is an FK (dependency on another entity's PK), not a transitive dependency |
+| Spaces | space_id | `space_code`, `space_name`, `space_type`, `building`, `floor`, `room_number`, `capacity`, `current_status`, `usage_policy` | Yes — all are direct properties of the space |
+| Facilities | facility_id | `name` | Yes |
+| Space_Facilities | (space_id, facility_id) | `quantity` | Yes — depends on the full pair |
+| Bookings | booking_id | `space_id`, `requester_id`, `requested_start_time`, `requested_end_time`, `purpose`, `expected_participants`, `status`, `is_deleted` | Yes — all are direct properties of a booking request |
+| Booking_Approvals | approval_id | `booking_id`, `approver_id`, `decision_time`, `decision`, `rejection_reason`, `decision_note` | Yes — all are direct properties of the approval decision |
+| Booking_Sessions | session_id | `booking_id`, `actual_start_time`, `checked_in_by`, `initial_condition`, `actual_end_time`, `final_condition`, `usage_notes` | Yes — all are direct properties of the check-in session |
+| Maintenance | maintenance_id | `space_id`, `reporter_id`, `assigned_staff_id`, `problem_description`, `start_time`, `completion_time`, `status`, `result_note`, `is_deleted` | Yes — all are direct properties of the maintenance ticket |
+
+**No transitive dependencies detected.** Specifically:
+- Status values (`'pending'`, `'approved'`, etc.) are stored as CHECK-constrained VARCHAR literals, not as codes in a separate table that would introduce a transitive dependency.
+- `department_id` in Users is an FK, not a transitive dependency — it references the PK of Departments. The department name is not stored in Users.
+- `space_id` in Bookings is an FK, not a transitive dependency — all space properties are accessed via the FK join.
+
+**Conclusion:** The schema is fully in 3NF.
+
+### 6.4 Design decisions that preserve 3NF
+
+| Decision | How it preserves normalization |
+|---|---|
+| **Junction table Space_Facilities** for M:N | Eliminates repeating groups (violation of 1NF) |
+| **SRP split of Bookings** | Eliminates nullable columns that would suggest a hidden entity (violation of 3NF — approval data does not depend on booking_id alone) |
+| **VARCHAR with CHECK for statuses** (instead of lookup tables) | Literal values avoid transitive dependency through a codes table; still atomic, so 1NF is satisfied |
+| **Free-text building/floor** (instead of separate tables) | Still 3NF — building and floor are direct properties of a space, not transitively dependent on any other non-key column |
+
+---
+
+## 7. Logical Constraints and Enforcement
+
+The ERD defines several constraints that go beyond what Mermaid ERD notation can express. These are enforced at the database level via triggers, indexes, and CHECK constraints:
+
+| Constraint | Entity | Mechanism | Business Rule |
+|---|---|---|---|
+| Booking overlap prevention | Bookings | Filtered unique index (exact start-time collisions) + `trg_bookings_prevent_overlap` (interval overlaps) | BR1 |
+| Space availability at approval time | Booking_Approvals | `trg_booking_approvals_check_space` — rejects approval when space is `under_maintenance`/`temporarily_closed`/`retired` | BR2 |
+| Expected participants ≤ capacity | Bookings | CHECK constraint or application-level check | BR3 |
+| Decision recording | Booking_Approvals | NOT NULL on `approver_id`, `decision_time`, `decision` | BR6 |
+| Rejection reason required | Booking_Approvals | `trg_bookings_rejection_reason` — enforces `rejection_reason IS NOT NULL` when `decision = 'rejected'` | BR7 |
+| Approver must be facility_staff/manager | Booking_Approvals | `trg_booking_approvals_check_role` | BR15 |
+| Check-in staff must be facility_staff/manager | Booking_Sessions | `trg_booking_sessions_check_role` | BR16 |
+| Assigned maintenance staff must be facility_staff | Maintenance | `trg_maintenances_check_assignee_role` | BR17 |
+| Check-in requires approved status | Booking_Sessions | `trg_booking_sessions_checkin` — rejects check-in for non-approved bookings | BR8 |
+| Completion updates booking + space status | Booking_Sessions | `trg_booking_sessions_completion` — sets `bookings.status = 'completed'`, `spaces.current_status = 'available'` | BR8, BR9 |
+| Maintenance completion frees space | Maintenance | `trg_maintenances_completion_space_status` — sets `spaces.current_status = 'available'` only if no other active tickets exist | Q3 |
+| Decision sync (approval → booking status) | Booking_Approvals | `trg_booking_approvals_decision` — auto-updates `bookings.status` to `'approved'`/`'rejected'` | BR6 |
+| Soft delete | Bookings, Maintenance | `is_deleted BIT DEFAULT 0` — records are logically deleted, preserving history | BR11 |
+| Updated_at auto-stamp | All 9 tables | AFTER UPDATE trigger on each table updates `updated_at = GETDATE()` | BR12 |
+
+---
+
+## 8. Conclusion
+
+The ERD design for the Campus Space Management System delivers on every business goal stated in the requirements:
+
+| Business Goal | How the ERD achieves it |
+|---|---|
+| **Fair scheduling** | The SRP-split Booking pipeline (request → approval → session) ensures every booking goes through a transparent, auditable workflow |
+| **No overlapping bookings** | Dual-layer protection — filtered unique index for exact collisions + trigger for interval overlaps (BR1) |
+| **Unavailable spaces cannot be booked** | Space status check is enforced at approval time by trigger (BR2), and maintenance completion auto-updates space status (Q3) |
+| **Usage history preserved** | Soft delete (`is_deleted`) on Bookings and Maintenance ensures historical records are never lost (BR11) |
+| **Audit-ready** | Booking_Approvals and Booking_Sessions provide explicit, separate records of who decided what and when |
+| **3NF normalized** | No data redundancy, no update anomalies, no insertion anomalies |
+
+The key architectural decisions — SRP split of bookings, M:N resolution via Space_Facilities, database-level enforcement via triggers, and the hybrid surrogate+business key strategy — come together to form a design that is **correct, maintainable, and aligned with the School's needs**.
+
+---
+
+*Generated for CS486 Group G05 — Campus Space Management System*
