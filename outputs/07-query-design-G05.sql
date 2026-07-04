@@ -534,7 +534,325 @@ ORDER BY total_requests DESC;
 GO
 
 -- ============================================================
--- Query 11: Lab Availability with Equipment and Conflict Checks
+-- Query 11: Available Classrooms/Computer Labs with Projector and Whiteboard
+-- ============================================================
+-- student-name: Cao Quang Hung
+-- target-users: student
+-- business-question:
+--   Which Classrooms or Computer laboratories in a specific
+--   building are currently Available for the next X hours and
+--   contain both a Projector and a Whiteboard?
+--
+-- Why useful:
+--   Enables students to quickly find suitable study or project
+--   spaces that are equipped with both presentation and
+--   collaboration tools (Projector + Whiteboard), in a specific
+--   building, and confirmed free for a desired booking window —
+--   without manually cross-referencing facility inventories or
+--   calendar conflicts.
+-- ============================================================
+
+DECLARE @building               NVARCHAR(100) = N'Beta Building';
+DECLARE @lookahead_hours        INT           = 3;
+DECLARE @space_type_classroom   VARCHAR(50)   = 'classroom';
+DECLARE @space_type_computer_lab VARCHAR(50)  = 'computer_lab';
+DECLARE @space_status_available VARCHAR(50)   = 'available';
+DECLARE @facility_projector     NVARCHAR(255) = N'T06 Projector';
+DECLARE @facility_whiteboard    NVARCHAR(255) = N'T06 Whiteboard';
+DECLARE @now                    DATETIME2     = GETDATE();
+DECLARE @window_end             DATETIME2     = DATEADD(HOUR, @lookahead_hours, @now);
+
+SELECT
+    s.space_code,
+    s.space_name,
+    s.space_type,
+    s.building,
+    s.floor,
+    s.room_number,
+    s.capacity,
+    s.current_status
+FROM spaces s
+WHERE s.building = @building
+  AND s.space_type IN (@space_type_classroom, @space_type_computer_lab)
+  AND s.current_status = @space_status_available
+  AND EXISTS (
+      SELECT 1
+      FROM space_facilities sf
+      INNER JOIN facilities f ON f.facility_id = sf.facility_id
+      WHERE sf.space_id = s.space_id
+        AND f.name = @facility_projector
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM space_facilities sf
+      INNER JOIN facilities f ON f.facility_id = sf.facility_id
+      WHERE sf.space_id = s.space_id
+        AND f.name = @facility_whiteboard
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM bookings b
+      WHERE b.space_id = s.space_id
+        AND b.is_deleted = 0
+        AND b.status IN ('approved', 'checked_in', 'completed')
+        AND b.requested_start_time < @window_end
+        AND b.requested_end_time > @now
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM maintenance m
+      WHERE m.space_id = s.space_id
+        AND m.is_deleted = 0
+        AND m.status IN ('open', 'in_progress')
+        AND m.start_time < @window_end
+        AND (m.completion_time IS NULL OR m.completion_time > @now)
+  )
+ORDER BY s.space_type, s.capacity DESC, s.space_code;
+GO
+
+
+-- ============================================================
+-- Query 12: Seminar and Student Activity Events on a Given Date
+-- ============================================================
+-- student-name: Cao Quang Hung
+-- target-users: student
+-- business-question:
+--   Which "Seminar" or "Student Activity" events are happening on
+--   a given date in spaces with capacity of 20 or more people,
+--   and who is organizing them?
+--
+-- Why useful:
+--   Enables students to discover seminars and student activities
+--   scheduled on a particular date, along with organizer contact
+--   information, so they can plan attendance, avoid scheduling
+--   conflicts, and reach out to organizers for more details.
+-- ============================================================
+
+DECLARE @target_date DATE = CAST(GETDATE() AS DATE);
+DECLARE @day_start DATETIME2 = CAST(@target_date AS DATETIME2);
+DECLARE @day_end DATETIME2 = DATEADD(DAY, 1, @day_start);
+DECLARE @min_capacity INT = 20;
+DECLARE @purpose_seminar VARCHAR(50) = 'seminar';
+DECLARE @purpose_student_activity VARCHAR(50) = 'student_activity';
+DECLARE @booking_status_approved VARCHAR(50) = 'approved';
+DECLARE @booking_status_checked_in VARCHAR(50) = 'checked_in';
+DECLARE @booking_status_completed VARCHAR(50) = 'completed';
+DECLARE @booking_status_pending VARCHAR(50) = 'pending';
+
+SELECT
+    b.booking_id,
+    b.purpose,
+    s.space_code,
+    s.space_name,
+    s.space_type,
+    s.building,
+    s.floor,
+    s.room_number,
+    s.capacity,
+    b.requested_start_time,
+    b.requested_end_time,
+    b.expected_participants,
+    b.status AS booking_status,
+    organizer.full_name   AS organizer_name,
+    organizer.email       AS organizer_email,
+    organizer.phone_number AS organizer_phone,
+    d.name                AS organizer_department
+FROM bookings b
+INNER JOIN spaces s
+    ON s.space_id = b.space_id
+INNER JOIN users organizer
+    ON organizer.user_id = b.requester_id
+INNER JOIN departments d
+    ON d.department_id = organizer.department_id
+WHERE b.purpose IN (@purpose_seminar, @purpose_student_activity)
+  AND b.is_deleted = 0
+  AND s.capacity >= @min_capacity
+  AND b.requested_start_time < @day_end
+  AND b.requested_end_time > @day_start
+  AND b.status IN (
+      @booking_status_approved,
+      @booking_status_checked_in,
+      @booking_status_completed,
+      @booking_status_pending
+  )
+ORDER BY b.requested_start_time ASC, s.building, s.room_number;
+GO
+
+-- ============================================================
+-- Query 13: Top 3 Alternative Spaces When Usual Space Is Unavailable
+-- ============================================================
+-- student-name: Cao Quang Hung
+-- target-users: student
+-- business-question:
+--   If my usual requested space is "Under Maintenance" or
+--   "Temporarily Closed", what are the top 3 alternative spaces
+--   on the same floor with an equal or greater capacity?
+--
+-- Why useful:
+--   Enables students to quickly find backup options on the same
+--   floor when their go-to space is unavailable, without having
+--   to manually browse through all rooms. This minimises
+--   disruption and saves time during booking.
+-- ============================================================
+
+DECLARE @usual_space_code NVARCHAR(50) = N'T06-CL-101';
+DECLARE @unavailable_status_1 VARCHAR(50) = 'under_maintenance';
+DECLARE @unavailable_status_2 VARCHAR(50) = 'temporarily_closed';
+DECLARE @available_status VARCHAR(50) = 'available';
+DECLARE @top_n INT = 3;
+
+WITH usual_space AS (
+    SELECT
+        s.space_id,
+        s.space_code,
+        s.space_name,
+        s.space_type,
+        s.building,
+        s.floor,
+        s.room_number,
+        s.capacity,
+        s.current_status
+    FROM spaces s
+    WHERE s.space_code = @usual_space_code
+),
+candidates AS (
+    SELECT
+        s.space_id,
+        s.space_code,
+        s.space_name,
+        s.space_type,
+        s.building,
+        s.floor,
+        s.room_number,
+        s.capacity,
+        s.current_status
+    FROM spaces s
+    INNER JOIN usual_space u
+        ON u.building = s.building
+        AND u.floor = s.floor
+        AND s.space_id <> u.space_id
+    WHERE s.capacity >= u.capacity
+      AND s.current_status = @available_status
+      AND u.current_status IN (@unavailable_status_1, @unavailable_status_2)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM maintenance m
+          WHERE m.space_id = s.space_id
+            AND m.is_deleted = 0
+            AND m.status IN ('open', 'in_progress')
+      )
+)
+SELECT TOP (@top_n)
+    c.space_code,
+    c.space_name,
+    c.space_type,
+    c.building,
+    c.floor,
+    c.room_number,
+    c.capacity,
+    c.current_status
+FROM candidates c
+ORDER BY c.capacity ASC, c.space_code;
+GO
+
+-- ============================================================
+-- Query 14: Most Available Days for Project and Computer Labs
+-- ============================================================
+-- student-name: Cao Quang Hung
+-- target-users: student
+-- business-question:
+--   Based on booking history from the past year, which days of
+--   the week have the most available project and computer
+--   laboratories?
+--
+-- Why useful:
+--   Enables students to identify low-demand weekdays for booking
+--   labs, helping them secure their preferred space with less
+--   competition and greater scheduling flexibility.
+-- ============================================================
+
+DECLARE @history_start DATETIME2 = DATEADD(YEAR, -1, GETDATE());
+DECLARE @history_end DATETIME2 = GETDATE();
+DECLARE @space_type_project_lab VARCHAR(50) = 'project_lab';
+DECLARE @space_type_computer_lab VARCHAR(50) = 'computer_lab';
+
+SELECT
+    DATENAME(WEEKDAY, b.requested_start_time) AS day_of_week,
+    DATEPART(WEEKDAY, b.requested_start_time) AS day_number,
+    COUNT(b.booking_id)                        AS total_bookings,
+    COUNT(DISTINCT b.space_id)                 AS unique_labs_used
+FROM bookings b
+INNER JOIN spaces s
+    ON s.space_id = b.space_id
+WHERE b.is_deleted = 0
+  AND b.requested_start_time >= @history_start
+  AND b.requested_start_time < @history_end
+  AND s.space_type IN (@space_type_project_lab, @space_type_computer_lab)
+GROUP BY DATENAME(WEEKDAY, b.requested_start_time),
+         DATEPART(WEEKDAY, b.requested_start_time)
+ORDER BY total_bookings ASC, day_number ASC;
+GO
+
+-- ============================================================
+-- Query 15: Upcoming Approved Bookings by Department Colleagues
+-- ============================================================
+-- student-name: Cao Quang Hung
+-- target-users: student
+-- business-question:
+--   What are the upcoming approved bookings made by users in my
+--   department for the next two weeks?
+--
+-- Why useful:
+--   Enables a student to see what rooms their department
+--   colleagues have reserved in the near future, helping them
+--   coordinate scheduling, avoid double-booking colleagues, and
+--   identify spaces that may open up if a colleague cancels.
+-- ============================================================
+
+DECLARE @my_email NVARCHAR(255) = N't06.student1@university.edu';
+DECLARE @lookahead_days INT = 14;
+DECLARE @now DATETIME2 = GETDATE();
+DECLARE @window_end DATETIME2 = DATEADD(DAY, @lookahead_days, @now);
+DECLARE @status_approved VARCHAR(50) = 'approved';
+
+WITH my_department AS (
+    SELECT u.department_id
+    FROM users u
+    WHERE u.email = @my_email
+)
+SELECT
+    b.booking_id,
+    b.purpose,
+    b.requested_start_time,
+    b.requested_end_time,
+    b.expected_participants,
+    s.space_code,
+    s.space_name,
+    s.space_type,
+    s.building,
+    s.floor,
+    s.room_number,
+    requester.full_name   AS requester_name,
+    requester.email       AS requester_email,
+    d.name                AS department_name
+FROM bookings b
+INNER JOIN spaces s
+    ON s.space_id = b.space_id
+INNER JOIN users requester
+    ON requester.user_id = b.requester_id
+INNER JOIN departments d
+    ON d.department_id = requester.department_id
+INNER JOIN my_department md
+    ON md.department_id = requester.department_id
+WHERE b.status = @status_approved
+  AND b.is_deleted = 0
+  AND b.requested_start_time >= @now
+  AND b.requested_start_time < @window_end
+ORDER BY b.requested_start_time ASC, s.building, s.room_number;
+GO
+
+-- ============================================================
+-- Query 16: Lab Availability with Equipment and Conflict Checks
 -- ============================================================
 -- student-name: Tran Dinh Quoc Thang
 -- target-users: lecturer, teaching_assistant
@@ -655,7 +973,7 @@ ORDER BY li.capacity ASC, li.workstation_count DESC, li.space_code;
 GO
 
 -- ============================================================
--- Query 12: Lecturer Personal Booking Timeline
+-- Query 17: Lecturer Personal Booking Timeline
 -- ============================================================
 -- student-name: Tran Dinh Quoc Thang
 -- target-users: lecturer
@@ -741,7 +1059,7 @@ ORDER BY b.requested_start_time DESC, b.booking_id DESC;
 GO
 
 -- ============================================================
--- Query 13: Completed TA Lab Session History
+-- Query 18: Completed TA Lab Session History
 -- ============================================================
 -- student-name: Tran Dinh Quoc Thang
 -- target-users: teaching_assistant
@@ -836,7 +1154,7 @@ ORDER BY bs.actual_start_time DESC, b.booking_id DESC;
 GO
 
 -- ============================================================
--- Query 14: Approval Lead-Time Analysis
+-- Query 19: Approval Lead-Time Analysis
 -- ============================================================
 -- student-name: Tran Dinh Quoc Thang
 -- target-users: lecturer
@@ -887,7 +1205,7 @@ ORDER BY avg_decision_lead_minutes DESC, decided_booking_count DESC, b.purpose, 
 GO
 
 -- ============================================================
--- Query 15: Upcoming Lab Readiness Alert
+-- Query 20: Upcoming Lab Readiness Alert
 -- ============================================================
 -- student-name: Tran Dinh Quoc Thang
 -- target-users: teaching_assistant
