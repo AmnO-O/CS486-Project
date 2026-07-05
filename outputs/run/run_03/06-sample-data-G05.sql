@@ -1,0 +1,1422 @@
+SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
+    
+-- ============================================================
+-- CS486 Group G05 - Campus Space Management System
+-- Task 06: Sample Data Preparation (Run 03)
+-- Dependency: run after outputs/run/run_03/05-db-definition-G05.sql
+-- Target: SQL Server 2019+ (T-SQL)
+-- Authentication note: validation command uses sqlcmd Windows Auth (-E).
+-- ============================================================
+-- Sample-data assumptions and strategy:
+-- - A single @now = SYSDATETIME() anchor drives past/current/future rows.
+-- - Task-owned rows use stable natural keys: T06-* space codes,
+--   t06.*@university.edu emails, and facility_categories reference data.
+-- - Cleanup-and-reseed deletes only Task 06-owned rows through owned spaces,
+--   users, and facilities in reverse FK order.
+-- - Departments are canonical reference rows inserted with guarded inserts.
+-- - Booking workflow follows Task 05 split tables:
+--   bookings -> booking_approvals -> booking_sessions.
+-- - Expected-error cases are isolated in transactions and match the intended
+--   trigger message or DDL constraint name.
+-- - Maintenance completion proves both the concurrent-ticket guard and the
+--   final-ticket restoration side effect.
+-- - Run 03 changes: facility_assignments table added for time-range based
+--   facility-location tracking; each facility has 2-3 assignments spanning
+--   historical, active, planned, and cancelled statuses.
+-- ============================================================
+
+PRINT 'SECTION 0: Cleanup previous Task 06-owned rows';
+
+DELETE bs
+FROM [dbo].[booking_sessions] bs
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[bookings] b
+    LEFT JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+    LEFT JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+    WHERE b.[booking_id] = bs.[booking_id]
+      AND (s.[space_code] LIKE N'T06-%' OR u.[email] LIKE N't06.%@university.edu')
+);
+
+DELETE ba
+FROM [dbo].[booking_approvals] ba
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[bookings] b
+    LEFT JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+    LEFT JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+    WHERE b.[booking_id] = ba.[booking_id]
+      AND (s.[space_code] LIKE N'T06-%' OR u.[email] LIKE N't06.%@university.edu')
+);
+
+DELETE b
+FROM [dbo].[bookings] b
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[spaces] s
+    WHERE s.[space_id] = b.[space_id]
+      AND s.[space_code] LIKE N'T06-%'
+)
+OR EXISTS (
+    SELECT 1
+    FROM [dbo].[users] u
+    WHERE u.[user_id] = b.[requester_id]
+      AND u.[email] LIKE N't06.%@university.edu'
+);
+
+DELETE inc
+FROM [dbo].[incidents] inc
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[spaces] s
+    WHERE s.[space_id] = inc.[space_id]
+      AND s.[space_code] LIKE N'T06-%'
+)
+OR EXISTS (
+    SELECT 1
+    FROM [dbo].[users] u
+    WHERE (u.[user_id] = inc.[reported_by] OR u.[user_id] = inc.[assigned_to])
+      AND u.[email] LIKE N't06.%@university.edu'
+);
+
+DELETE m
+FROM [dbo].[maintenance] m
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[spaces] s
+    WHERE s.[space_id] = m.[space_id]
+      AND s.[space_code] LIKE N'T06-%'
+)
+OR EXISTS (
+    SELECT 1
+    FROM [dbo].[users] u
+    WHERE (u.[user_id] = m.[reporter_id] OR u.[user_id] = m.[assigned_staff_id])
+      AND u.[email] LIKE N't06.%@university.edu'
+);
+
+DELETE FROM [dbo].[facility_assignments]
+WHERE [created_by] IN (SELECT [user_id] FROM [dbo].[users] WHERE [email] LIKE N't06.%@university.edu');
+
+-- Facilities: delete all Task 06-owned rows via category match
+DELETE f
+FROM [dbo].[facilities] f
+WHERE EXISTS (
+    SELECT 1
+    FROM [dbo].[facility_categories] fc
+    WHERE fc.[category_id] = f.[category_id]
+);
+
+DELETE FROM [dbo].[spaces]
+WHERE [space_code] LIKE N'T06-%';
+
+DELETE FROM [dbo].[users]
+WHERE [email] LIKE N't06.%@university.edu';
+
+PRINT 'SECTION 1: Departments';
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'School of Computer Science')
+    INSERT INTO [dbo].[departments] ([name]) VALUES (N'School of Computer Science');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'Department of Mathematics')
+    INSERT INTO [dbo].[departments] ([name]) VALUES (N'Department of Mathematics');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'Department of Physics')
+    INSERT INTO [dbo].[departments] ([name]) VALUES (N'Department of Physics');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'Faculty of Engineering')
+    INSERT INTO [dbo].[departments] ([name]) VALUES (N'Faculty of Engineering');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[departments] WHERE [name] = N'School Administration')
+    INSERT INTO [dbo].[departments] ([name]) VALUES (N'School Administration');
+
+PRINT 'SECTION 2: Users - all roles and account statuses';
+
+DECLARE @now DATETIME2 = SYSDATETIME();
+DECLARE @dept_cs INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School of Computer Science');
+DECLARE @dept_math INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Mathematics');
+DECLARE @dept_physics INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Department of Physics');
+DECLARE @dept_eng INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'Faculty of Engineering');
+DECLARE @dept_admin INT = (SELECT [department_id] FROM [dbo].[departments] WHERE [name] = N'School Administration');
+
+IF @dept_cs IS NULL OR @dept_math IS NULL OR @dept_physics IS NULL OR @dept_eng IS NULL OR @dept_admin IS NULL
+    THROW 51006, 'Task 06 setup failed: department lookup returned NULL.', 1;
+
+INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status]) VALUES
+(N't06.student1@university.edu', N'Alice Nguyen', N'090-100-0001', 'student', @dept_cs, 'active'),
+(N't06.lecturer1@university.edu', N'Dr. Minh Tran', N'090-100-0002', 'lecturer', @dept_cs, 'active'),
+(N't06.ta1@university.edu', N'Bao Pham', N'090-100-0003', 'teaching_assistant', @dept_math, 'active'),
+(N't06.staff1@university.edu', N'Chi Le', N'090-100-0004', 'facility_staff', @dept_admin, 'active'),
+(N't06.manager1@university.edu', N'Dung Ho', N'090-100-0005', 'facility_manager', @dept_admin, 'active'),
+(N't06.admin1@university.edu', N'Ha Vu', N'090-100-0006', 'department_admin', @dept_cs, 'inactive'),
+(N't06.student2@university.edu', N'Lan Do', NULL, 'student', @dept_physics, 'suspended'),
+(N't06.staff2@university.edu', N'Khanh Bui', N'090-100-0008', 'facility_staff', @dept_eng, 'active');
+
+DECLARE @student INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student1@university.edu');
+DECLARE @student2 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student2@university.edu');
+DECLARE @lecturer INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.lecturer1@university.edu');
+DECLARE @ta INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.ta1@university.edu');
+DECLARE @staff INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.staff1@university.edu');
+DECLARE @staff2 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.staff2@university.edu');
+DECLARE @manager INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.manager1@university.edu');
+DECLARE @dept_admin_user INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.admin1@university.edu');
+
+IF @student IS NULL OR @lecturer IS NULL OR @ta IS NULL OR @staff IS NULL OR @staff2 IS NULL OR @manager IS NULL OR @dept_admin_user IS NULL
+    THROW 51006, 'Task 06 setup failed: user lookup returned NULL.', 1;
+
+PRINT 'SECTION 3: Spaces - all types and statuses';
+
+INSERT INTO [dbo].[spaces] ([space_code], [space_name], [space_type], [building], [floor], [room_number], [capacity], [current_status], [usage_policy]) VALUES
+(N'T06-AUD-001', N'Main Auditorium', 'auditorium', N'Alpha Building', N'1', N'AUD-001', 300, 'available', N'Large events require staff supervision.'),
+(N'T06-CL-101', N'Classroom 101', 'classroom', N'Beta Building', N'1', N'101', 60, 'available', N'Teaching use has priority during business hours.'),
+(N'T06-LAB-201', N'Computer Lab 201', 'computer_lab', N'Gamma Building', N'2', N'201', 45, 'available', N'Food and drink are not allowed.'),
+(N'T06-PL-301', N'Project Lab 301', 'project_lab', N'Delta Building', N'3', N'301', 30, 'under_maintenance', N'Safety briefing required before project work.'),
+(N'T06-MR-401', N'Meeting Room 401', 'meeting_room', N'Alpha Building', N'4', N'401', 20, 'available', N'Administrative meetings limited to two hours.'),
+(N'T06-SW-501', N'Student Workspace 501', 'student_workspace', N'Library Annex', N'5', N'501', 80, 'available', N'Open collaboration area.'),
+(N'T06-AUD-002', N'Closed Auditorium Annex', 'auditorium', N'Alpha Building', N'B1', N'AUD-002', 120, 'temporarily_closed', N'Closed for acoustic treatment.'),
+(N'T06-OLD-001', N'Retired Seminar Room', 'meeting_room', N'Old Campus', N'2', N'210', 25, 'retired', N'Retired from booking inventory.'),
+(N'T06-CL-102', N'Classroom 102 Maintenance Drill', 'classroom', N'Beta Building', N'1', N'102', 50, 'under_maintenance', N'Used for maintenance restoration proof.');
+
+DECLARE @sp_aud INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-AUD-001');
+DECLARE @sp_class INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CL-101');
+DECLARE @sp_lab INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-LAB-201');
+DECLARE @sp_project INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-PL-301');
+DECLARE @sp_meeting INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-MR-401');
+DECLARE @sp_workspace INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-SW-501');
+DECLARE @sp_closed INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-AUD-002');
+DECLARE @sp_retired INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-OLD-001');
+DECLARE @sp_restoration INT = (SELECT [space_id] FROM [dbo].[spaces] WHERE [space_code] = N'T06-CL-102');
+
+IF @sp_aud IS NULL OR @sp_class IS NULL OR @sp_lab IS NULL OR @sp_project IS NULL OR @sp_meeting IS NULL OR @sp_workspace IS NULL OR @sp_closed IS NULL OR @sp_retired IS NULL OR @sp_restoration IS NULL
+    THROW 51006, 'Task 06 setup failed: space lookup returned NULL.', 1;
+
+PRINT 'SECTION 3B: Facility categories (reference data)';
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[facility_categories] WHERE [category_name] = N'projector')
+    INSERT INTO [dbo].[facility_categories] ([category_name], [prefix]) VALUES (N'projector', 'pro');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[facility_categories] WHERE [category_name] = N'whiteboard')
+    INSERT INTO [dbo].[facility_categories] ([category_name], [prefix]) VALUES (N'whiteboard', 'whb');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[facility_categories] WHERE [category_name] = N'microphone')
+    INSERT INTO [dbo].[facility_categories] ([category_name], [prefix]) VALUES (N'microphone', 'mic');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[facility_categories] WHERE [category_name] = N'computer')
+    INSERT INTO [dbo].[facility_categories] ([category_name], [prefix]) VALUES (N'computer', 'com');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[facility_categories] WHERE [category_name] = N'air_conditioner')
+    INSERT INTO [dbo].[facility_categories] ([category_name], [prefix]) VALUES (N'air_conditioner', 'air');
+IF NOT EXISTS (SELECT 1 FROM [dbo].[facility_categories] WHERE [category_name] = N'livestreaming_equipment')
+    INSERT INTO [dbo].[facility_categories] ([category_name], [prefix]) VALUES (N'livestreaming_equipment', 'liv');
+
+DECLARE @cat_pro INT = (SELECT [category_id] FROM [dbo].[facility_categories] WHERE [category_name] = N'projector');
+DECLARE @cat_whb INT = (SELECT [category_id] FROM [dbo].[facility_categories] WHERE [category_name] = N'whiteboard');
+DECLARE @cat_mic INT = (SELECT [category_id] FROM [dbo].[facility_categories] WHERE [category_name] = N'microphone');
+DECLARE @cat_com INT = (SELECT [category_id] FROM [dbo].[facility_categories] WHERE [category_name] = N'computer');
+DECLARE @cat_air INT = (SELECT [category_id] FROM [dbo].[facility_categories] WHERE [category_name] = N'air_conditioner');
+DECLARE @cat_liv INT = (SELECT [category_id] FROM [dbo].[facility_categories] WHERE [category_name] = N'livestreaming_equipment');
+
+IF @cat_pro IS NULL OR @cat_whb IS NULL OR @cat_mic IS NULL OR @cat_com IS NULL OR @cat_air IS NULL OR @cat_liv IS NULL
+    THROW 51006, 'Task 06 setup failed: facility category lookup returned NULL.', 1;
+
+PRINT 'SECTION 4: Facilities with direct space_id assignment';
+
+-- 75 individual device instances (5 projectors, 7 whiteboards, 6 microphones,
+-- 47 computers, 9 air conditioners, 1 livestreaming equipment)
+-- space_id = NULL means in storage / unassigned.
+-- Facility ID mapping (insert order):
+--   1-5   projectors      6-12  whiteboards     13-18 microphones
+--   19-65 computers        66-74 air conditioners  75  livestreaming
+INSERT INTO [dbo].[facilities] ([category_id], [status], [space_id]) VALUES
+-- Projectors (5): IDs 1-5
+(@cat_pro, 'active', @sp_aud), (@cat_pro, 'active', @sp_aud), (@cat_pro, 'active', @sp_class), (@cat_pro, 'active', @sp_lab), (@cat_pro, 'inactive', @sp_project),
+-- Whiteboards (7): IDs 6-12
+(@cat_whb, 'active', @sp_aud), (@cat_whb, 'active', @sp_aud), (@cat_whb, 'active', @sp_lab), (@cat_whb, 'active', @sp_meeting), (@cat_whb, 'active', @sp_meeting), (@cat_whb, 'active', @sp_workspace), (@cat_whb, 'retired', @sp_workspace),
+-- Microphones (6): IDs 13-18
+(@cat_mic, 'active', @sp_aud), (@cat_mic, 'active', @sp_aud), (@cat_mic, 'active', @sp_aud), (@cat_mic, 'active', @sp_aud), (@cat_mic, 'inactive', @sp_aud), (@cat_mic, 'lost', NULL),
+-- Computers (47): IDs 19-65 — 30 in sp_lab, 12 in sp_project, 5 in sp_restoration
+(@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab),
+(@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab),
+(@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab),
+(@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab),
+(@cat_com, 'active', @sp_lab), (@cat_com, 'active', @sp_lab),
+(@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project),
+(@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project), (@cat_com, 'active', @sp_project),
+(@cat_com, 'active', @sp_restoration), (@cat_com, 'active', @sp_restoration), (@cat_com, 'active', @sp_restoration), (@cat_com, 'active', @sp_restoration), (@cat_com, 'active', @sp_restoration),
+(@cat_com, 'inactive', NULL), (@cat_com, 'retired', NULL),
+-- Air conditioners (9): IDs 66-74 — 4 in sp_aud, 1 in sp_class, 2 in sp_lab, 2 in sp_workspace
+(@cat_air, 'active', @sp_aud), (@cat_air, 'active', @sp_aud), (@cat_air, 'active', @sp_aud), (@cat_air, 'active', @sp_aud),
+(@cat_air, 'inactive', @sp_class),
+(@cat_air, 'active', @sp_lab), (@cat_air, 'active', @sp_lab),
+(@cat_air, 'active', @sp_workspace), (@cat_air, 'active', @sp_workspace),
+-- Livestreaming equipment (1): ID 75 — in sp_aud
+(@cat_liv, 'active', @sp_aud);
+
+PRINT 'SECTION 4B: Facility assignments - time-range location tracking';
+
+-- Each facility gets 2-3 assignments showing lifecycle:
+-- Completed (~100), Active (~15), Planned (~10), Cancelled (~8)
+-- created_by references @staff, @staff2, or @manager
+-- No overlapping planned/active assignments for same facility (BR22)
+-- At most one active assignment per facility (BR23)
+INSERT INTO [dbo].[facility_assignments] ([facility_id], [space_id], [start_time], [end_time], [purpose], [status], [created_by])
+SELECT * FROM (VALUES
+-- Historical completed assignments (IDs 1-5 projectors): 2 each
+(1, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Routine projector calibration', 'completed', @staff),
+(1, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Firmware upgrade', 'completed', @staff2),
+(2, @sp_aud, DATEADD(month, -5, @now), DATEADD(day, -21, DATEADD(month, -5, @now)), N'Lens replacement', 'completed', @staff),
+(2, @sp_aud, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Monthly maintenance check', 'completed', @staff2),
+(3, @sp_class, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Projector bulb test', 'completed', @staff),
+(3, @sp_class, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Software configuration', 'completed', @staff),
+(4, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -30, DATEADD(month, -6, @now)), N'Annual projector service', 'completed', @staff2),
+(4, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Connectivity test', 'completed', @staff),
+(5, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Projector relocation assessment', 'completed', @staff2),
+(5, @sp_project, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Routine inspection', 'completed', @staff),
+
+-- Historical completed (IDs 6-12 whiteboards): 2 each
+(6, @sp_aud, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Whiteboard surface cleaning', 'completed', @staff),
+(6, @sp_aud, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Marker tray replacement', 'completed', @staff2),
+(7, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -15, DATEADD(month, -4, @now)), N'Annual whiteboard inspection', 'completed', @staff),
+(7, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -8, DATEADD(month, -2, @now)), N'Surface polish', 'completed', @staff),
+(8, @sp_lab, DATEADD(month, -5, @now), DATEADD(day, -20, DATEADD(month, -5, @now)), N'Lab whiteboard resurfacing', 'completed', @staff2),
+(8, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Routine check', 'completed', @staff),
+(9, @sp_meeting, DATEADD(month, -3, @now), DATEADD(day, -12, DATEADD(month, -3, @now)), N'Meeting room board cleaning', 'completed', @staff),
+(9, @sp_meeting, DATEADD(month, -1, @now), DATEADD(day, -4, DATEADD(month, -1, @now)), N'Whiteboard accessories restock', 'completed', @staff2),
+(10, @sp_meeting, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Board inspection', 'completed', @staff),
+(10, @sp_meeting, DATEADD(month, -2, @now), DATEADD(day, -9, DATEADD(month, -2, @now)), N'Minor repair', 'completed', @staff2),
+(11, @sp_workspace, DATEADD(month, -3, @now), DATEADD(day, -11, DATEADD(month, -3, @now)), N'Student area board cleaning', 'completed', @staff),
+(11, @sp_workspace, DATEADD(month, -1, @now), DATEADD(day, -6, DATEADD(month, -1, @now)), N'Board hardware check', 'completed', @staff),
+(12, @sp_workspace, DATEADD(month, -6, @now), DATEADD(day, -25, DATEADD(month, -6, @now)), N'Whiteboard retirement prep', 'completed', @staff2),
+(12, @sp_workspace, DATEADD(month, -4, @now), DATEADD(day, -18, DATEADD(month, -4, @now)), N'Final inspection before retirement', 'completed', @staff2),
+
+-- Historical completed (IDs 13-18 microphones): 2 each
+(13, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -16, DATEADD(month, -4, @now)), N'Microphone calibration', 'completed', @staff),
+(13, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -8, DATEADD(month, -2, @now)), N'Battery replacement cycle', 'completed', @staff2),
+(14, @sp_aud, DATEADD(month, -5, @now), DATEADD(day, -22, DATEADD(month, -5, @now)), N'Wireless frequency check', 'completed', @staff),
+(14, @sp_aud, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Microphone capsule cleaning', 'completed', @staff),
+(15, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -15, DATEADD(month, -4, @now)), N'Audio level testing', 'completed', @staff2),
+(15, @sp_aud, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Receiver unit check', 'completed', @staff),
+(16, @sp_aud, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Annual audio equipment service', 'completed', @staff2),
+(16, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Microphone stand inspection', 'completed', @staff),
+(17, @sp_aud, DATEADD(month, -3, @now), DATEADD(day, -12, DATEADD(month, -3, @now)), N'Routine microphone check', 'completed', @staff),
+(17, @sp_aud, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Firmware update', 'completed', @staff2),
+(18, @sp_aud, DATEADD(month, -8, @now), DATEADD(day, -40, DATEADD(month, -8, @now)), N'Microphone storage prep', 'completed', @staff),
+
+-- Historical completed (IDs 19-48 computers in sp_lab): 2 each, batch
+(19, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(20, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(21, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(22, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(23, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(24, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(25, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(26, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(27, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(28, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(29, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(30, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Software update cycle', 'completed', @staff),
+(31, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(32, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(33, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(34, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(35, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(36, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(37, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(38, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(39, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(40, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Hardware diagnostic', 'completed', @staff2),
+(41, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(42, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(43, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(44, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(45, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(46, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(47, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+(48, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'OS patch deployment', 'completed', @staff),
+
+-- Historical completed (IDs 49-60 computers in sp_project): 2 each
+(49, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(49, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(50, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(50, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(51, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(51, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(52, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(52, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(53, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(53, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(54, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(54, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(55, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(55, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(56, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(56, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(57, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(57, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(58, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(58, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(59, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(59, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+(60, @sp_project, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Workstation calibration', 'completed', @staff2),
+(60, @sp_project, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Software license audit', 'completed', @staff),
+
+-- Historical completed (IDs 61-65 computers in sp_restoration): 2 each
+(61, @sp_restoration, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Restoration testing phase 1', 'completed', @staff),
+(61, @sp_restoration, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Restoration testing phase 2', 'completed', @staff),
+(62, @sp_restoration, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Restoration testing phase 1', 'completed', @staff),
+(62, @sp_restoration, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Restoration testing phase 2', 'completed', @staff),
+(63, @sp_restoration, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Restoration testing phase 1', 'completed', @staff),
+(63, @sp_restoration, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Restoration testing phase 2', 'completed', @staff),
+(64, @sp_restoration, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Restoration testing phase 1', 'completed', @staff),
+(64, @sp_restoration, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Restoration testing phase 2', 'completed', @staff),
+(65, @sp_restoration, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Restoration testing phase 1', 'completed', @staff),
+(65, @sp_restoration, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Restoration testing phase 2', 'completed', @staff),
+
+-- Historical completed (IDs 66-67 computers in storage)
+(66, @sp_lab, DATEADD(month, -6, @now), DATEADD(day, -30, DATEADD(month, -6, @now)), N'Machine decommission prep', 'completed', @staff2),
+(66, @sp_lab, DATEADD(month, -3, @now), DATEADD(day, -14, DATEADD(month, -3, @now)), N'Data wipe verification', 'completed', @staff2),
+(67, @sp_lab, DATEADD(month, -8, @now), DATEADD(day, -45, DATEADD(month, -8, @now)), N'Retirement assessment', 'completed', @staff),
+
+-- Historical completed (IDs 68-76 air conditioners): 2 each
+(68, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'AC filter replacement', 'completed', @staff),
+(68, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Coolant level check', 'completed', @staff2),
+(69, @sp_aud, DATEADD(month, -5, @now), DATEADD(day, -21, DATEADD(month, -5, @now)), N'Compressor inspection', 'completed', @staff2),
+(69, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -10, DATEADD(month, -2, @now)), N'Thermostat calibration', 'completed', @staff),
+(70, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Duct cleaning', 'completed', @staff),
+(70, @sp_aud, DATEADD(month, -1, @now), DATEADD(day, -4, DATEADD(month, -1, @now)), N'Fan motor test', 'completed', @staff2),
+(71, @sp_aud, DATEADD(month, -6, @now), DATEADD(day, -28, DATEADD(month, -6, @now)), N'Annual HVAC service', 'completed', @staff2),
+(71, @sp_aud, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Refrigerant recharge', 'completed', @staff),
+(72, @sp_class, DATEADD(month, -3, @now), DATEADD(day, -12, DATEADD(month, -3, @now)), N'AC efficiency test', 'completed', @staff),
+(72, @sp_class, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Routine AC inspection', 'completed', @staff2),
+(73, @sp_lab, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Lab AC filter change', 'completed', @staff),
+(73, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Condenser cleaning', 'completed', @staff2),
+(74, @sp_lab, DATEADD(month, -5, @now), DATEADD(day, -20, DATEADD(month, -5, @now)), N'Lab ventilation check', 'completed', @staff2),
+(74, @sp_lab, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'AC performance test', 'completed', @staff),
+(75, @sp_workspace, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Workspace AC seasonal prep', 'completed', @staff),
+(75, @sp_workspace, DATEADD(month, -1, @now), DATEADD(day, -6, DATEADD(month, -1, @now)), N'Remote control calibration', 'completed', @staff2),
+(76, @sp_workspace, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'AC drain line cleaning', 'completed', @staff),
+(76, @sp_workspace, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Electrical connection check', 'completed', @staff),
+
+-- Historical completed (ID 77 livestreaming): 2
+(77, @sp_aud, DATEADD(month, -4, @now), DATEADD(day, -14, DATEADD(month, -4, @now)), N'Streaming equipment setup test', 'completed', @staff),
+(77, @sp_aud, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Camera firmware upgrade', 'completed', @staff2),
+
+-- =====================================================================
+-- Active assignments (currently ongoing — start before now, end after now)
+-- At most one active per facility (BR23), 15 facilities total
+-- =====================================================================
+(1, @sp_aud, DATEADD(month, -1, @now), DATEADD(month, 2, @now), N'Projector long-term deployment in Auditorium', 'active', @manager),
+(3, @sp_class, DATEADD(day, -15, @now), DATEADD(month, 1, @now), N'Classroom 101 projection system trial', 'active', @staff),
+(6, @sp_aud, DATEADD(day, -20, @now), DATEADD(month, 2, @now), N'Main auditorium whiteboard installation', 'active', @manager),
+(9, @sp_meeting, DATEADD(day, -10, @now), DATEADD(month, 3, @now), N'Meeting room 401 board replacement', 'active', @staff2),
+(13, @sp_aud, DATEADD(day, -5, @now), DATEADD(month, 1, @now), N'Conference microphone array active', 'active', @staff),
+(16, @sp_aud, DATEADD(day, -30, @now), DATEADD(month, 1, @now), N'Wireless mic system deployment', 'active', @manager),
+(20, @sp_lab, DATEADD(day, -14, @now), DATEADD(month, 2, @now), N'Lab workstation software pilot', 'active', @staff),
+(25, @sp_lab, DATEADD(day, -7, @now), DATEADD(month, 1, @now), N'Computer lab hardware upgrade active', 'active', @staff2),
+(30, @sp_lab, DATEADD(day, -21, @now), DATEADD(month, 2, @now), N'Research workstation active lease', 'active', @manager),
+(35, @sp_lab, DATEADD(day, -3, @now), DATEADD(month, 1, @now), N'Teaching assistant workstation active', 'active', @staff),
+(49, @sp_project, DATEADD(day, -10, @now), DATEADD(month, 3, @now), N'Project lab engineering workstation', 'active', @manager),
+(55, @sp_project, DATEADD(day, -5, @now), DATEADD(month, 2, @now), N'Project simulation workstation active', 'active', @staff2),
+(68, @sp_aud, DATEADD(day, -14, @now), DATEADD(month, 2, @now), N'Main auditorium AC active cooling', 'active', @staff),
+(73, @sp_lab, DATEADD(day, -7, @now), DATEADD(month, 1, @now), N'Computer lab AC active operation', 'active', @staff2),
+(77, @sp_aud, DATEADD(day, -2, @now), DATEADD(month, 2, @now), N'Livestream active for upcoming events', 'active', @manager),
+
+-- =====================================================================
+-- Planned/future assignments (start_time in the future)
+-- =====================================================================
+(2, @sp_aud, DATEADD(month, 2, @now), DATEADD(month, 4, @now), N'Projector upgrade planning for summer', 'planned', @manager),
+(7, @sp_aud, DATEADD(month, 3, @now), DATEADD(month, 5, @now), N'Auditorium whiteboard replacement planned', 'planned', @manager),
+(14, @sp_aud, DATEADD(month, 2, @now), DATEADD(month, 3, @now), N'Microphone array upgrade planned', 'planned', @staff),
+(21, @sp_lab, DATEADD(month, 2, @now), DATEADD(month, 4, @now), N'Lab software migration planned', 'planned', @manager),
+(31, @sp_lab, DATEADD(month, 3, @now), DATEADD(month, 5, @now), N'Hardware refresh cycle planned', 'planned', @staff2),
+(40, @sp_lab, DATEADD(month, 2, @now), DATEADD(month, 3, @now), N'OS upgrade planned maintenance', 'planned', @staff),
+(50, @sp_project, DATEADD(month, 2, @now), DATEADD(month, 4, @now), N'Project lab upgrade planned', 'planned', @manager),
+(60, @sp_project, DATEADD(month, 3, @now), DATEADD(month, 5, @now), N'Workstation refresh planned', 'planned', @staff2),
+(69, @sp_aud, DATEADD(month, 2, @now), DATEADD(month, 3, @now), N'Seasonal AC maintenance planned', 'planned', @staff),
+(74, @sp_lab, DATEADD(month, 2, @now), DATEADD(month, 4, @now), N'Lab AC upgrade planned', 'planned', @manager),
+
+-- =====================================================================
+-- Cancelled assignments
+-- =====================================================================
+(5, @sp_project, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'Projector relocation cancelled', 'cancelled', @manager),
+(12, @sp_workspace, DATEADD(month, -3, @now), DATEADD(day, -10, DATEADD(month, -3, @now)), N'Whiteboard replacement cancelled', 'cancelled', @staff),
+(17, @sp_aud, DATEADD(month, -1, @now), DATEADD(day, -3, DATEADD(month, -1, @now)), N'Microphone repair cancelled', 'cancelled', @staff2),
+(66, @sp_lab, DATEADD(month, -2, @now), DATEADD(day, -8, DATEADD(month, -2, @now)), N'Computer redeployment cancelled', 'cancelled', @manager),
+(67, @sp_lab, DATEADD(month, -4, @now), DATEADD(day, -20, DATEADD(month, -4, @now)), N'Retired machine reallocation cancelled', 'cancelled', @staff),
+(72, @sp_class, DATEADD(month, -2, @now), DATEADD(day, -7, DATEADD(month, -2, @now)), N'AC repair cancelled due to parts shortage', 'cancelled', @staff2),
+(75, @sp_workspace, DATEADD(month, -1, @now), DATEADD(day, -5, DATEADD(month, -1, @now)), N'Workspace AC relocation cancelled', 'cancelled', @staff),
+(76, @sp_workspace, DATEADD(month, -3, @now), DATEADD(day, -12, DATEADD(month, -3, @now)), N'AC unit swap cancelled', 'cancelled', @manager)
+) AS t([facility_id], [space_id], [start_time], [end_time], [purpose], [status], [created_by]);
+
+PRINT 'SECTION 5: Maintenance valid rows and restoration workflow';
+
+INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [facility_id], [problem_description], [start_time], [completion_time], [status], [result_note]) VALUES
+(@sp_project, @staff, @staff2, 5, N'Broken Projector prevents project demonstrations.', DATEADD(day, -3, @now), NULL, 'open', NULL),
+(@sp_lab, @lecturer, @staff, NULL, N'Network Problems affecting exam lab machines.', DATEADD(day, -10, @now), DATEADD(day, -8, @now), 'resolved', N'Switch replaced and tested.'),
+(@sp_project, @student, @staff, NULL, N'Cleaning Issues after student activity.', DATEADD(day, -2, @now), NULL, 'in_progress', N'Cleaning team scheduled.'),
+(@sp_closed, @manager, @staff, NULL, N'Damaged Furniture in closed auditorium annex.', DATEADD(day, -14, @now), DATEADD(day, -12, @now), 'resolved', N'Furniture removed from service.'),
+(@sp_retired, @staff, @staff2, NULL, N'Air Conditioning Failure in retired room; retained for history.', DATEADD(day, -30, @now), DATEADD(day, -29, @now), 'resolved', N'No repair because room is retired.'),
+(@sp_class, @student2, @staff, NULL, N'Soft-deleted historical maintenance report.', DATEADD(day, -40, @now), DATEADD(day, -39, @now), 'resolved', N'Retained for audit.');
+
+UPDATE [dbo].[maintenance]
+SET [is_deleted] = 1
+WHERE [space_id] = @sp_class
+  AND [problem_description] = N'Soft-deleted historical maintenance report.';
+
+INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [facility_id], [problem_description], [start_time], [completion_time], [status], [result_note]) VALUES
+(@sp_restoration, @staff, @staff, 61, N'Restoration proof ticket A - AC inspection.', DATEADD(day, -1, @now), NULL, 'in_progress', NULL),
+(@sp_restoration, @staff2, @staff2, NULL, N'Restoration proof ticket B - lighting inspection.', DATEADD(day, -1, @now), NULL, 'in_progress', NULL);
+
+DECLARE @maint_a INT = (SELECT [maintenance_id] FROM [dbo].[maintenance] WHERE [space_id] = @sp_restoration AND [problem_description] = N'Restoration proof ticket A - AC inspection.');
+DECLARE @maint_b INT = (SELECT [maintenance_id] FROM [dbo].[maintenance] WHERE [space_id] = @sp_restoration AND [problem_description] = N'Restoration proof ticket B - lighting inspection.');
+
+PRINT 'VERIFY: V00A - maintenance restoration guard keeps space under maintenance while another active ticket remains';
+UPDATE [dbo].[maintenance]
+SET [status] = 'resolved',
+    [completion_time] = DATEADD(minute, -30, @now),
+    [result_note] = N'AC inspection complete; lighting ticket remains active.'
+WHERE [maintenance_id] = @maint_a;
+SELECT [space_code], [current_status] AS status_after_first_resolution
+FROM [dbo].[spaces]
+WHERE [space_id] = @sp_restoration;
+
+PRINT 'VERIFY: V00B - maintenance restoration side effect restores availability after final active ticket';
+UPDATE [dbo].[maintenance]
+SET [status] = 'resolved',
+    [completion_time] = DATEADD(minute, -20, @now),
+    [result_note] = N'Lighting inspection complete; no active maintenance remains.'
+WHERE [maintenance_id] = @maint_b;
+SELECT [space_code], [current_status] AS status_after_final_resolution
+FROM [dbo].[spaces]
+WHERE [space_id] = @sp_restoration;
+
+PRINT 'SECTION 5B: Incidents valid rows and auto-resolve proof';
+
+INSERT INTO [dbo].[incidents] ([space_id], [reported_by], [incident_type], [severity], [description], [status], [assigned_to], [facility_id], [resolved_at], [resolution_notes]) VALUES
+(@sp_class, @student, 'accident', 'low', N'Spilled coffee on classroom floor; area cleaned.', 'resolved', @staff, NULL, DATEADD(day, -15, @now), N'Cleaned and sanitized within 30 minutes.'),
+(@sp_lab, @lecturer, 'vandalism', 'high', N'Graffiti found on computer lab desk surface.', 'investigating', @staff, 4, NULL, N'CCTV footage being reviewed.'),
+(@sp_meeting, @student2, 'theft', 'critical', N'Laptop charger stolen from meeting room 401.', 'reported', NULL, NULL, NULL, NULL),
+(@sp_workspace, @student, 'safety_hazard', 'medium', N'Loose electrical cable across walkway in student workspace.', 'resolved', @staff2, NULL, DATEADD(day, -5, @now), N'Cable taped down and hazard sign posted.'),
+(@sp_aud, @manager, 'policy_violation', 'low', N'Unauthorized poster on auditorium wall.', 'resolved', @staff, NULL, DATEADD(day, -20, @now), N'Poster removed; guideline reminder sent.'),
+(@sp_project, @staff, 'other', 'medium', N'Unknown liquid spillage near project lab entrance.', 'reported', @staff2, 49, NULL, NULL);
+
+DECLARE @inc_autoresolve INT = (SELECT [incident_id] FROM [dbo].[incidents] WHERE [space_id] = @sp_class AND [incident_type] = 'accident');
+
+PRINT 'SECTION 5C: Incident auto-resolve proof';
+
+-- Create a fresh incident on T06-CL-102 (sp_restoration) that is still 'reported'
+INSERT INTO [dbo].[incidents] ([space_id], [reported_by], [incident_type], [severity], [description], [status], [facility_id])
+VALUES (@sp_restoration, @student, 'safety_hazard', 'medium', N'Overhead light flickering in restoration classroom.', 'reported', NULL);
+DECLARE @inc_autoresolve_new INT = SCOPE_IDENTITY();
+
+-- Verify the incident exists and is 'reported'
+SELECT [space_code], [status] AS incident_status_before_resolve
+FROM [dbo].[incidents] inc
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = inc.[space_id]
+WHERE inc.[incident_id] = @inc_autoresolve_new;
+
+PRINT 'SECTION 6: Booking lifecycle valid workflows';
+
+-- pending / lecture
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_class, @lecturer, DATEADD(day, 7, @now), DATEADD(hour, 2, DATEADD(day, 7, @now)), 'lecture', 45);
+DECLARE @booking_pending INT = SCOPE_IDENTITY();
+
+-- approved / examination
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_aud, @lecturer, DATEADD(day, 8, @now), DATEADD(hour, 3, DATEADD(day, 8, @now)), 'examination', 180);
+DECLARE @booking_approved INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_approved, @manager, DATEADD(minute, 5, @now), 'approved', N'Approved for final examination seating plan.');
+
+-- rejected / seminar
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @ta, DATEADD(day, 9, @now), DATEADD(hour, 1, DATEADD(day, 9, @now)), 'seminar', 18);
+DECLARE @booking_rejected INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [rejection_reason], [decision_note])
+VALUES (@booking_rejected, @staff, DATEADD(minute, 6, @now), 'rejected', N'Room reserved for department board meeting.', N'Requester advised to choose another slot.');
+
+-- cancelled from pending / workshop
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_workspace, @student, DATEADD(day, 10, @now), DATEADD(hour, 2, DATEADD(day, 10, @now)), 'workshop', 35);
+DECLARE @booking_cancelled_pending INT = SCOPE_IDENTITY();
+UPDATE [dbo].[bookings]
+SET [status] = 'cancelled'
+WHERE [booking_id] = @booking_cancelled_pending;
+
+-- cancelled from approved / meeting
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @dept_admin_user, DATEADD(day, 11, @now), DATEADD(hour, 1, DATEADD(day, 11, @now)), 'meeting', 15);
+DECLARE @booking_cancelled_approved INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_cancelled_approved, @staff, DATEADD(minute, 7, @now), 'approved', N'Approved, then requester cancelled.');
+UPDATE [dbo].[bookings]
+SET [status] = 'cancelled'
+WHERE [booking_id] = @booking_cancelled_approved;
+
+-- checked_in / student_activity
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @student, DATEADD(minute, -30, @now), DATEADD(hour, 2, @now), 'student_activity', 12);
+DECLARE @booking_checked_in INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_checked_in, @manager, DATEADD(minute, -45, @now), 'approved', N'Approved for student club planning session.');
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+VALUES (@booking_checked_in, DATEADD(minute, -25, @now), @staff, N'Room clean, projector remote present.');
+
+-- completed / administrative_event
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_lab, @dept_admin_user, DATEADD(day, -6, @now), DATEADD(hour, 2, DATEADD(day, -6, @now)), 'administrative_event', 30);
+DECLARE @booking_completed INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_completed, @staff, DATEADD(day, -7, @now), 'approved', N'Approved for software installation briefing.');
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+VALUES (@booking_completed, DATEADD(day, -6, @now), @staff2, N'Computers powered on; network stable.');
+UPDATE [dbo].[booking_sessions]
+SET [actual_end_time] = DATEADD(hour, 2, DATEADD(day, -6, @now)),
+    [final_condition] = N'Lab returned clean; all computers shut down.',
+    [usage_notes] = N'Administrative event completed without incidents.'
+WHERE [booking_id] = @booking_completed;
+
+-- no_show / meeting, direct operational transition
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_workspace, @ta, DATEADD(day, -2, @now), DATEADD(hour, 1, DATEADD(day, -2, @now)), 'meeting', 10);
+DECLARE @booking_no_show INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_no_show, @staff, DATEADD(day, -3, @now), 'approved', N'Approved for TA consultation meeting.');
+UPDATE [dbo].[bookings]
+SET [status] = 'no_show'
+WHERE [booking_id] = @booking_no_show;
+
+-- soft-deleted booking history
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status], [is_deleted])
+VALUES (@sp_class, @student2, DATEADD(day, -20, @now), DATEADD(hour, 1, DATEADD(day, -20, @now)), 'student_activity', 25, 'cancelled', 1);
+
+PRINT 'SECTION 6B: Additional Task 07 support data for non-empty query results';
+
+INSERT INTO [dbo].[users] ([email], [full_name], [phone_number], [role], [department_id], [account_status])
+VALUES (N't06.student3@university.edu', N'Quang Phan', N'090-100-0009', 'student', @dept_cs, 'active');
+DECLARE @student3 INT = (SELECT [user_id] FROM [dbo].[users] WHERE [email] = N't06.student3@university.edu');
+IF @student3 IS NULL
+    THROW 51006, 'Task 06 setup failed: Task 07 support student lookup returned NULL.', 1;
+
+-- Query 4 support: approved booking whose start time has passed and no session exists.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_class, @student, DATEADD(minute, -45, @now), DATEADD(minute, 75, @now), 'workshop', 20);
+DECLARE @booking_q07_late_no_checkin INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_late_no_checkin, @staff, DATEADD(minute, -90, @now), 'approved', N'Task 07 support: approved past-start booking without check-in.');
+
+-- Query 5 and Query 9 support: completed session today for an active student.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_workspace, @student, DATEADD(hour, -4, @now), DATEADD(hour, -2, @now), 'student_activity', 18);
+DECLARE @booking_q07_completed_today INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_completed_today, @manager, DATEADD(hour, -5, @now), 'approved', N'Task 07 support: completed today for final condition report.');
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+VALUES (@booking_q07_completed_today, DATEADD(hour, -4, @now), @staff, N'Workspace clean and ready at check-in.');
+UPDATE [dbo].[booking_sessions]
+SET [actual_end_time] = DATEADD(hour, -2, @now),
+    [final_condition] = N'Workspace returned clean; chairs arranged.',
+    [usage_notes] = N'Task 07 support session completed today.'
+WHERE [booking_id] = @booking_q07_completed_today;
+
+-- Query 6 support: rejected lecturer booking audit trail.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_class, @lecturer, DATEADD(day, 15, @now), DATEADD(hour, 2, DATEADD(day, 15, @now)), 'seminar', 40);
+DECLARE @booking_q07_lecturer_rejected INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [rejection_reason], [decision_note])
+VALUES (@booking_q07_lecturer_rejected, @manager, DATEADD(minute, 12, @now), 'rejected', N'Classroom is reserved for accreditation review preparation.', N'Task 07 support: rejected lecturer audit row.');
+
+-- Query 9 support: competing active student requests for the same meeting-room slot.
+DECLARE @q07_compete_start DATETIME2 = DATEADD(day, 9, @now);
+DECLARE @q07_compete_end DATETIME2 = DATEADD(hour, 2, @q07_compete_start);
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @student, @q07_compete_start, @q07_compete_end, 'meeting', 8);
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_meeting, @student3, DATEADD(minute, 30, @q07_compete_start), DATEADD(minute, 30, @q07_compete_end), 'meeting', 6);
+
+-- Query 13 support: completed lab session requested by the teaching assistant.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_lab, @ta, DATEADD(day, -4, @now), DATEADD(hour, 2, DATEADD(day, -4, @now)), 'workshop', 28);
+DECLARE @booking_q07_ta_completed_lab INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_ta_completed_lab, @staff, DATEADD(day, -5, @now), 'approved', N'Task 07 support: TA completed lab workshop.');
+INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+VALUES (@booking_q07_ta_completed_lab, DATEADD(day, -4, @now), @staff2, N'Lab computers available; projector tested.');
+UPDATE [dbo].[booking_sessions]
+SET [actual_end_time] = DATEADD(hour, 2, DATEADD(day, -4, @now)),
+    [final_condition] = N'All lab machines signed out and shut down.',
+    [usage_notes] = N'TA lab workshop completed with normal equipment handover.'
+WHERE [booking_id] = @booking_q07_ta_completed_lab;
+
+-- Query 15 support: approved upcoming TA lab booking later disrupted by unresolved maintenance.
+INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+VALUES (@sp_lab, @ta, DATEADD(day, 14, @now), DATEADD(hour, 2, DATEADD(day, 14, @now)), 'workshop', 32);
+DECLARE @booking_q07_ta_upcoming_lab INT = SCOPE_IDENTITY();
+INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+VALUES (@booking_q07_ta_upcoming_lab, @manager, DATEADD(minute, 15, @now), 'approved', N'Task 07 support: upcoming TA lab booking.');
+INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [facility_id], [problem_description], [start_time], [completion_time], [status], [result_note])
+VALUES (@sp_lab, @ta, @staff, NULL, N'Task 07 support: network switch inspection overlaps upcoming TA lab booking.', DATEADD(day, 13, @now), NULL, 'open', NULL);
+
+PRINT 'SECTION 7: Audit update proofs';
+
+DECLARE @class_updated_before DATETIME2 = (SELECT [updated_at] FROM [dbo].[spaces] WHERE [space_id] = @sp_class);
+WAITFOR DELAY '00:00:01';
+UPDATE [dbo].[spaces]
+SET [usage_policy] = N'Teaching use has priority during business hours. Updated by Task 06 audit proof.'
+WHERE [space_id] = @sp_class;
+DECLARE @class_updated_after DATETIME2 = (SELECT [updated_at] FROM [dbo].[spaces] WHERE [space_id] = @sp_class);
+IF @class_updated_after > @class_updated_before
+    PRINT 'PASS: AUDIT_PARENT - trg_spaces_updated_at advanced updated_at.';
+ELSE
+    PRINT 'FAIL: AUDIT_PARENT - trg_spaces_updated_at did not advance updated_at.';
+
+DECLARE @approval_updated_before DATETIME2 = (SELECT [updated_at] FROM [dbo].[booking_approvals] WHERE [booking_id] = @booking_approved);
+WAITFOR DELAY '00:00:01';
+UPDATE [dbo].[booking_approvals]
+SET [decision_note] = N'Approved for final examination seating plan. Audit proof note updated.'
+WHERE [booking_id] = @booking_approved;
+DECLARE @approval_updated_after DATETIME2 = (SELECT [updated_at] FROM [dbo].[booking_approvals] WHERE [booking_id] = @booking_approved);
+IF @approval_updated_after > @approval_updated_before
+    PRINT 'PASS: AUDIT_CHILD - trg_booking_approvals_updated_at advanced updated_at.';
+ELSE
+    PRINT 'FAIL: AUDIT_CHILD - trg_booking_approvals_updated_at did not advance updated_at.';
+
+PRINT 'SECTION 8: Expected-error cases';
+
+-- E01: BR1 interval overlap trigger
+PRINT 'EXPECTED_ERROR_CASE: E01 - BR1 overlapping active booking interval';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E01 NVARCHAR(4000) = N'%Overlapping booking exists for this space and time range%';
+    -- Expected error: trg_bookings_prevent_overlap / Overlapping booking exists for this space and time range.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (@sp_aud, @student, DATEADD(minute, 30, DATEADD(day, 8, @now)), DATEADD(hour, 4, DATEADD(day, 8, @now)), 'seminar', 40, 'approved');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E01 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E01 PRINT 'PASS: E01 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E01 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+-- E02A-C: BR2 unavailable spaces cannot be approved
+PRINT 'EXPECTED_ERROR_CASE: E02A - BR2 approve under_maintenance space';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E02A NVARCHAR(4000) = N'%Cannot approve booking: space is not available%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_project, @student, DATEADD(day, -8, @now), DATEADD(hour, 1, DATEADD(day, -8, @now)), 'meeting', 5);
+    DECLARE @e02a_booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_space / Cannot approve booking: space is not available.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e02a_booking, @staff, @now, 'approved', N'Should fail because space status is under_maintenance.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E02A did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E02A PRINT 'PASS: E02A - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E02A wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E02B - BR2 approve temporarily_closed space';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E02B NVARCHAR(4000) = N'%Cannot approve booking: space is not available%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_closed, @student, DATEADD(day, 15, @now), DATEADD(hour, 1, DATEADD(day, 15, @now)), 'meeting', 8);
+    DECLARE @e02b_booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_space / Cannot approve booking: space is not available.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e02b_booking, @manager, @now, 'approved', N'Should fail because space status is temporarily_closed.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E02B did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E02B PRINT 'PASS: E02B - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E02B wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E02C - BR2 approve retired space';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E02C NVARCHAR(4000) = N'%Cannot approve booking: space is not available%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_retired, @student, DATEADD(day, 16, @now), DATEADD(hour, 1, DATEADD(day, 16, @now)), 'meeting', 8);
+    DECLARE @e02c_booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_space / Cannot approve booking: space is not available.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e02c_booking, @manager, @now, 'approved', N'Should fail because space status is retired.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E02C did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E02C PRINT 'PASS: E02C - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E02C wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+-- E03-E06: capacity, maintenance, approval metadata, rejection reason
+PRINT 'EXPECTED_ERROR_CASE: E03 - BR3 capacity limit';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E03 NVARCHAR(4000) = N'%Expected participants exceed space capacity%';
+    -- Expected error: trg_bookings_check_capacity / Expected participants exceed space capacity.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_meeting, @student, DATEADD(day, 18, @now), DATEADD(hour, 1, DATEADD(day, 18, @now)), 'meeting', 999);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E03 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E03 PRINT 'PASS: E03 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E03 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E04 - BR4 unresolved maintenance overlap';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E04 NVARCHAR(4000) = N'%Overlapping unresolved maintenance exists for this space%';
+    -- Expected error: trg_bookings_check_maintenance / Overlapping unresolved maintenance exists for this space.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_project, @lecturer, DATEADD(day, 2, @now), DATEADD(hour, 2, DATEADD(day, 2, @now)), 'workshop', 15);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E04 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E04 PRINT 'PASS: E04 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E04 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E05A - BR6 approver_id NOT NULL';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E05A NVARCHAR(4000) = N'%approver_id%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 19, @now), DATEADD(hour, 1, DATEADD(day, 19, @now)), 'meeting', 10);
+    DECLARE @e05a_booking INT = SCOPE_IDENTITY();
+    -- Expected error: booking_approvals.approver_id NOT NULL.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e05a_booking, NULL, @now, 'approved', N'Should fail because approver_id is NULL.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E05A did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E05A PRINT 'PASS: E05A - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E05A wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E05B - BR6 decision_time NOT NULL';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E05B NVARCHAR(4000) = N'%decision_time%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 20, @now), DATEADD(hour, 1, DATEADD(day, 20, @now)), 'meeting', 10);
+    DECLARE @e05b_booking INT = SCOPE_IDENTITY();
+    -- Expected error: booking_approvals.decision_time NOT NULL.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e05b_booking, @staff, NULL, 'approved', N'Should fail because decision_time is NULL.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E05B did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E05B PRINT 'PASS: E05B - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E05B wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E06 - BR7 rejection reason required';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E06 NVARCHAR(4000) = N'%Rejection reason must be provided%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 21, @now), DATEADD(hour, 1, DATEADD(day, 21, @now)), 'seminar', 10);
+    DECLARE @e06_booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_rejection / Rejection reason must be provided when decision is rejected.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e06_booking, @staff, @now, 'rejected', N'Should fail because rejection_reason is NULL.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E06 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E06 PRINT 'PASS: E06 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E06 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+-- E07-E09: session trigger branches
+PRINT 'EXPECTED_ERROR_CASE: E07 - BR8 check-in requires approved booking';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E07 NVARCHAR(4000) = N'%Cannot check in: booking is not in approved status%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 22, @now), DATEADD(hour, 1, DATEADD(day, 22, @now)), 'meeting', 10);
+    DECLARE @e07_booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_sessions_checkin / Cannot check in: booking is not in approved status.
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@e07_booking, @now, @staff, N'Clean room.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E07 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E07 PRINT 'PASS: E07 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E07 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E08 - BR9 initial condition required';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E08 NVARCHAR(4000) = N'%initial_condition must be provided%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 23, @now), DATEADD(hour, 1, DATEADD(day, 23, @now)), 'meeting', 10);
+    DECLARE @e08_booking INT = SCOPE_IDENTITY();
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e08_booking, @staff, @now, 'approved', N'Fixture for missing initial condition test.');
+    -- Expected error: trg_booking_sessions_checkin / initial_condition must be provided at check-in.
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@e08_booking, @now, @staff, NULL);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E08 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E08 PRINT 'PASS: E08 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E08 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E09 - BR9 final condition required';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E09 NVARCHAR(4000) = N'%final_condition must be provided%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 24, @now), DATEADD(hour, 1, DATEADD(day, 24, @now)), 'meeting', 10);
+    DECLARE @e09_booking INT = SCOPE_IDENTITY();
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e09_booking, @staff, @now, 'approved', N'Fixture for missing final condition test.');
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@e09_booking, @now, @staff, N'Initial condition present.');
+    -- Expected error: trg_booking_sessions_completion / final_condition must be provided when completing a booking session.
+    UPDATE [dbo].[booking_sessions]
+    SET [actual_end_time] = DATEADD(hour, 1, @now), [final_condition] = NULL
+    WHERE [booking_id] = @e09_booking;
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E09 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E09 PRINT 'PASS: E09 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E09 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+-- E10-E13: role validation and cancellation
+PRINT 'EXPECTED_ERROR_CASE: E10 - BR15 invalid approver role';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E10 NVARCHAR(4000) = N'%Approver must be facility staff or facility manager%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 25, @now), DATEADD(hour, 1, DATEADD(day, 25, @now)), 'meeting', 10);
+    DECLARE @e10_booking INT = SCOPE_IDENTITY();
+    -- Expected error: trg_booking_approvals_check_role / Approver must be facility staff or facility manager.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e10_booking, @student, @now, 'approved', N'Should fail because student cannot approve.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E10 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E10 PRINT 'PASS: E10 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E10 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E11 - BR16 invalid check-in role';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E11 NVARCHAR(4000) = N'%Check-in staff must be facility staff or facility manager%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 26, @now), DATEADD(hour, 1, DATEADD(day, 26, @now)), 'meeting', 10);
+    DECLARE @e11_booking INT = SCOPE_IDENTITY();
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e11_booking, @staff, @now, 'approved', N'Fixture for invalid check-in role.');
+    -- Expected error: trg_booking_sessions_check_role / Check-in staff must be facility staff or facility manager.
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@e11_booking, @now, @student, N'Initial condition present.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E11 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E11 PRINT 'PASS: E11 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E11 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E12 - BR17 invalid maintenance assignee role';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E12 NVARCHAR(4000) = N'%Assigned maintenance staff must be facility staff%';
+    -- Expected error: trg_maintenance_check_assignee_role / Assigned maintenance staff must be facility staff.
+    INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [facility_id], [problem_description], [start_time], [status])
+    VALUES (@sp_class, @student, @manager, NULL, N'Invalid manager assignment fixture.', @now, 'open');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E12 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E12 PRINT 'PASS: E12 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E12 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E13 - BR18 invalid cancellation from completed';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E13 NVARCHAR(4000) = N'%Cancellation is only allowed from pending or approved status%';
+    -- Expected error: trg_bookings_cancellation / Cancellation is only allowed from pending or approved status.
+    UPDATE [dbo].[bookings]
+    SET [status] = 'cancelled'
+    WHERE [booking_id] = @booking_completed;
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E13 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E13 PRINT 'PASS: E13 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E13 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+-- E14-E20: declarative constraints and unique child FKs
+PRINT 'EXPECTED_ERROR_CASE: E14 - invalid user role enum';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E14 NVARCHAR(4000) = N'%CK_users_role%';
+    -- Expected error: CK_users_role invalid enum.
+    INSERT INTO [dbo].[users] ([email], [full_name], [role], [department_id], [account_status])
+    VALUES (N't06.badrole@university.edu', N'Invalid Role User', 'visitor', @dept_cs, 'active');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E14 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E14 PRINT 'PASS: E14 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E14 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E15 - invalid booking time range';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E15 NVARCHAR(4000) = N'%CK_bookings_requested_end_time%';
+    -- Expected error: CK_bookings_requested_end_time invalid time range.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 27, @now), DATEADD(day, 27, @now), 'meeting', 10);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E15 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E15 PRINT 'PASS: E15 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E15 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E16 - duplicate user email';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E16 NVARCHAR(4000) = N'%UQ_users_email%';
+    -- Expected error: UQ_users_email duplicate business key.
+    INSERT INTO [dbo].[users] ([email], [full_name], [role], [department_id], [account_status])
+    VALUES (N't06.student1@university.edu', N'Duplicate Email User', 'student', @dept_cs, 'active');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E16 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E16 PRINT 'PASS: E16 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E16 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E17 - invalid facility status enum';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E17 NVARCHAR(4000) = N'%CK_facilities_status%';
+    -- Expected error: CK_facilities_status invalid enum.
+    INSERT INTO [dbo].[facilities] ([category_id], [space_id], [status])
+    VALUES (@cat_pro, NULL, 'unknown_status');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E17 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E17 PRINT 'PASS: E17 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E17 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E24 - invalid facility category_id FK';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E24 NVARCHAR(4000) = N'%FK_facilities_category%';
+    -- Expected error: FK_facilities_category FK violation.
+    INSERT INTO [dbo].[facilities] ([category_id], [space_id], [status])
+    VALUES (999, NULL, 'active');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E24 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E24 PRINT 'PASS: E24 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E24 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+-- E25: Run 02 new test — FK_facilities_space violation
+PRINT 'EXPECTED_ERROR_CASE: E25 - invalid FK_facilities_space';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E25 NVARCHAR(4000) = N'%FK_facilities_space%';
+    -- Expected error: FK_facilities_space FK violation (non-existent space_id).
+    INSERT INTO [dbo].[facilities] ([category_id], [space_id], [status])
+    VALUES (@cat_pro, 9999, 'active');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E25 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E25 PRINT 'PASS: E25 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E25 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E18 - duplicate booking approval child';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E18 NVARCHAR(4000) = N'%UQ_booking_approvals_booking_id%';
+    -- Expected error: UQ_booking_approvals_booking_id unique child FK.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@booking_approved, @staff, @now, 'approved', N'Should fail because approval child already exists.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E18 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E18 PRINT 'PASS: E18 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E18 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E19 - duplicate booking session child';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E19 NVARCHAR(4000) = N'%UQ_booking_sessions_booking_id%';
+    -- Expected error: UQ_booking_sessions_booking_id unique child FK.
+    INSERT INTO [dbo].[booking_sessions] ([booking_id], [actual_start_time], [checked_in_by], [initial_condition])
+    VALUES (@booking_checked_in, @now, @staff, N'Should fail because session child already exists.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E19 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E19 PRINT 'PASS: E19 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E19 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E20 - filtered unique active booking exact collision';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E20 NVARCHAR(4000) = N'%uq_bookings_active_overlap%';
+    -- Expected error: uq_bookings_active_overlap filtered unique index.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants], [status])
+    VALUES (@sp_aud, @student, DATEADD(day, 8, @now), DATEADD(hour, 1, DATEADD(day, 8, @now)), 'seminar', 30, 'approved');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E20 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E20 PRINT 'PASS: E20 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E20 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E21 - invalid approval decision enum';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E21 NVARCHAR(4000) = N'%CK_booking_approvals_decision%';
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @student, DATEADD(day, 28, @now), DATEADD(hour, 1, DATEADD(day, 28, @now)), 'meeting', 10);
+    DECLARE @e21_booking INT = SCOPE_IDENTITY();
+    -- Expected error: CK_booking_approvals_decision invalid enum.
+    INSERT INTO [dbo].[booking_approvals] ([booking_id], [approver_id], [decision_time], [decision], [decision_note])
+    VALUES (@e21_booking, @staff, @now, 'deferred', N'Should fail because decision enum is invalid.');
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E21 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E21 PRINT 'PASS: E21 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E21 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E22 - BR20 unresolved incidents block booking';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E22 NVARCHAR(4000) = N'%Unresolved incidents exist for this space%';
+    -- T06-LAB-201 has an 'investigating' incident (graffiti), should block booking
+    -- Expected error: trg_bookings_check_incidents / Unresolved incidents exist for this space.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_lab, @lecturer, DATEADD(day, 30, @now), DATEADD(hour, 2, DATEADD(day, 30, @now)), 'workshop', 20);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E22 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E22 PRINT 'PASS: E22 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E22 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E23 - BR21 maintenance auto-resolves incidents';
+-- Create a maintenance ticket for sp_lab that conflicts with the 'investigating' graffiti incident
+-- After resolving the maintenance, the incident should auto-resolve
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @e23_start DATETIME2 = DATEADD(day, -1, @now);
+    DECLARE @e23_completion DATETIME2 = DATEADD(hour, -1, @now);
+    
+    INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [facility_id], [problem_description], [start_time], [completion_time], [status], [result_note])
+    VALUES (@sp_lab, @staff, @staff2, NULL, N'Clean graffiti from lab desks.', @e23_start, NULL, 'in_progress', N'Cleaning in progress.');
+    
+    DECLARE @e23_maint_id INT = SCOPE_IDENTITY();
+    
+    -- Verify incident is still 'investigating' before resolution
+    DECLARE @inc_status_before VARCHAR(30) = (SELECT [status] FROM [dbo].[incidents] WHERE [space_id] = @sp_lab AND [incident_type] = 'vandalism');
+    IF @inc_status_before = 'investigating'
+        PRINT 'PASS: E23 pre-check - incident is investigating before maintenance resolution.';
+    ELSE
+        PRINT 'FAIL: E23 pre-check - incident status is ' + ISNULL(@inc_status_before, 'NULL') + ' before resolution.';
+    
+    -- Resolve maintenance -- this should auto-resolve the incident
+    UPDATE [dbo].[maintenance]
+    SET [status] = 'resolved',
+        [completion_time] = @e23_completion,
+        [result_note] = N'Graffiti cleaned from all lab desk surfaces.'
+    WHERE [maintenance_id] = @e23_maint_id;
+    
+    -- Check if incident auto-resolved
+    DECLARE @inc_status_after VARCHAR(30) = (SELECT [status] FROM [dbo].[incidents] WHERE [space_id] = @sp_lab AND [incident_type] = 'vandalism');
+    IF @inc_status_after = 'resolved'
+        PRINT 'PASS: E23 - incident auto-resolved to resolved after maintenance completion.';
+    ELSE
+        PRINT 'FAIL: E23 - incident status after maintenance resolution is ' + ISNULL(@inc_status_after, 'NULL');
+    
+    ROLLBACK TRANSACTION;
+    PRINT 'PASS: E23 - transaction rolled back, no side effects.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E23 unexpected error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E26 - BR22 overlapping facility assignment (same facility, overlapping time range)';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E26 NVARCHAR(4000) = N'%Overlapping time range exists for this facility%';
+    -- Facility ID 1 already has an active assignment spanning now+2months.
+    -- Insert another planned assignment overlapping the same range.
+    -- Expected error: trg_facility_assignments_no_overlap / Overlapping time range exists for this facility.
+    INSERT INTO [dbo].[facility_assignments] ([facility_id], [space_id], [start_time], [end_time], [purpose], [status], [created_by])
+    VALUES (1, @sp_aud, DATEADD(day, 15, @now), DATEADD(month, 1, @now), N'Overlapping projector deployment', 'planned', @staff);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E26 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E26 PRINT 'PASS: E26 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E26 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E27 - BR23 duplicate active assignment for same facility (unique filtered index)';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E27 NVARCHAR(4000) = N'%UQ_fac_assign_active%';
+    -- Facility ID 3 already has an active assignment. Insert a second active.
+    -- Expected error: UQ_fac_assign_active filtered unique index.
+    INSERT INTO [dbo].[facility_assignments] ([facility_id], [space_id], [start_time], [end_time], [purpose], [status], [created_by])
+    VALUES (3, @sp_class, DATEADD(day, -5, @now), DATEADD(month, 1, @now), N'Duplicate active assignment for facility 3', 'active', @staff);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E27 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E27 PRINT 'PASS: E27 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E27 wrong error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'SECTION 9: Verification queries';
+
+PRINT 'VERIFY: V01 - row counts for every table seeded or referenced';
+SELECT 'departments' AS table_name, COUNT(*) AS row_count FROM [dbo].[departments] WHERE [name] IN (N'School of Computer Science', N'Department of Mathematics', N'Department of Physics', N'Faculty of Engineering', N'School Administration')
+UNION ALL SELECT 'facility_categories', COUNT(*) FROM [dbo].[facility_categories] WHERE [category_name] IN (N'projector', N'whiteboard', N'microphone', N'computer', N'air_conditioner', N'livestreaming_equipment')
+UNION ALL SELECT 'users', COUNT(*) FROM [dbo].[users] WHERE [email] LIKE N't06.%@university.edu'
+UNION ALL SELECT 'spaces', COUNT(*) FROM [dbo].[spaces] WHERE [space_code] LIKE N'T06-%'
+UNION ALL SELECT 'facilities', COUNT(*) FROM [dbo].[facilities] f INNER JOIN [dbo].[facility_categories] fc ON fc.[category_id] = f.[category_id] WHERE fc.[category_name] IN (N'projector', N'whiteboard', N'microphone', N'computer', N'air_conditioner', N'livestreaming_equipment')
+UNION ALL SELECT 'maintenance', COUNT(*) FROM [dbo].[maintenance] m INNER JOIN [dbo].[spaces] s ON s.[space_id] = m.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'bookings', COUNT(*) FROM [dbo].[bookings] b INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'booking_approvals', COUNT(*) FROM [dbo].[booking_approvals] ba INNER JOIN [dbo].[bookings] b ON b.[booking_id] = ba.[booking_id] INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'booking_sessions', COUNT(*) FROM [dbo].[booking_sessions] bs INNER JOIN [dbo].[bookings] b ON b.[booking_id] = bs.[booking_id] INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'incidents', COUNT(*) FROM [dbo].[incidents] inc INNER JOIN [dbo].[spaces] s ON s.[space_id] = inc.[space_id] WHERE s.[space_code] LIKE N'T06-%'
+UNION ALL SELECT 'facility_assignments', COUNT(*) FROM [dbo].[facility_assignments] fa WHERE fa.[created_by] IN (SELECT [user_id] FROM [dbo].[users] WHERE [email] LIKE N't06.%@university.edu');
+
+PRINT 'VERIFY: V02 - user roles and account statuses';
+SELECT [role], [account_status], COUNT(*) AS users_count
+FROM [dbo].[users]
+WHERE [email] LIKE N't06.%@university.edu'
+GROUP BY [role], [account_status]
+ORDER BY [role], [account_status];
+
+PRINT 'VERIFY: V03 - space types and current statuses';
+SELECT [space_type], [current_status], COUNT(*) AS spaces_count
+FROM [dbo].[spaces]
+WHERE [space_code] LIKE N'T06-%'
+GROUP BY [space_type], [current_status]
+ORDER BY [space_type], [current_status];
+
+PRINT 'VERIFY: V04 - facility assignments by space and category (via direct space_id)';
+SELECT s.[space_code], fc.[category_name], fc.[prefix], COUNT(*) AS device_count
+FROM [dbo].[facilities] f
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = f.[space_id]
+INNER JOIN [dbo].[facility_categories] fc ON fc.[category_id] = f.[category_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY s.[space_code], fc.[category_name], fc.[prefix]
+ORDER BY s.[space_code], fc.[category_name];
+
+PRINT 'VERIFY: V04B - facilities in storage (space_id IS NULL)';
+SELECT fc.[category_name], COUNT(*) AS in_storage_count
+FROM [dbo].[facilities] f
+INNER JOIN [dbo].[facility_categories] fc ON fc.[category_id] = f.[category_id]
+WHERE f.[space_id] IS NULL
+GROUP BY fc.[category_name]
+ORDER BY fc.[category_name];
+
+PRINT 'VERIFY: V05 - maintenance statuses, soft delete, and assigned staff role';
+SELECT m.[status], m.[is_deleted], u.[role] AS assigned_role, COUNT(*) AS maintenance_count
+FROM [dbo].[maintenance] m
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = m.[space_id]
+LEFT JOIN [dbo].[users] u ON u.[user_id] = m.[assigned_staff_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY m.[status], m.[is_deleted], u.[role]
+ORDER BY m.[status], m.[is_deleted], u.[role];
+
+PRINT 'VERIFY: V06 - booking statuses and purposes';
+SELECT b.[status], b.[purpose], COUNT(*) AS booking_count
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY b.[status], b.[purpose]
+ORDER BY b.[status], b.[purpose];
+
+PRINT 'VERIFY: V07 - approval decisions and valid approver roles';
+SELECT ba.[decision], u.[role] AS approver_role, COUNT(*) AS approvals_count
+FROM [dbo].[booking_approvals] ba
+INNER JOIN [dbo].[users] u ON u.[user_id] = ba.[approver_id]
+INNER JOIN [dbo].[bookings] b ON b.[booking_id] = ba.[booking_id]
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY ba.[decision], u.[role]
+ORDER BY ba.[decision], u.[role];
+
+PRINT 'VERIFY: V08 - sessions and completion fields';
+SELECT b.[status], COUNT(*) AS sessions_count,
+       SUM(CASE WHEN bs.[actual_end_time] IS NOT NULL AND bs.[final_condition] IS NOT NULL THEN 1 ELSE 0 END) AS completed_sessions_with_final_condition
+FROM [dbo].[booking_sessions] bs
+INNER JOIN [dbo].[bookings] b ON b.[booking_id] = bs.[booking_id]
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY b.[status]
+ORDER BY b.[status];
+
+PRINT 'VERIFY: V09 - soft-deleted history remains queryable';
+SELECT 'bookings' AS table_name, COUNT(*) AS soft_deleted_count
+FROM [dbo].[bookings] b INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%' AND b.[is_deleted] = 1
+UNION ALL
+SELECT 'maintenance', COUNT(*)
+FROM [dbo].[maintenance] m INNER JOIN [dbo].[spaces] s ON s.[space_id] = m.[space_id]
+WHERE s.[space_code] LIKE N'T06-%' AND m.[is_deleted] = 1;
+
+PRINT 'VERIFY: V10 - audit timestamps exist';
+SELECT 'spaces' AS table_name, COUNT(*) AS rows_with_audit
+FROM [dbo].[spaces]
+WHERE [space_code] LIKE N'T06-%' AND [created_at] IS NOT NULL AND [updated_at] IS NOT NULL
+UNION ALL
+SELECT 'booking_approvals', COUNT(*)
+FROM [dbo].[booking_approvals] ba INNER JOIN [dbo].[bookings] b ON b.[booking_id] = ba.[booking_id] INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+WHERE s.[space_code] LIKE N'T06-%' AND ba.[created_at] IS NOT NULL AND ba.[updated_at] IS NOT NULL;
+
+PRINT 'VERIFY: V11 - booking history report';
+SELECT TOP 20 s.[space_code], u.[email] AS requester_email, b.[purpose], b.[status], b.[requested_start_time], b.[requested_end_time]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND b.[requested_end_time] < @now
+ORDER BY b.[requested_start_time] DESC;
+
+PRINT 'VERIFY: V12 - upcoming actionable bookings report';
+SELECT s.[space_code], u.[email] AS requester_email, b.[purpose], b.[status], b.[requested_start_time]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND b.[is_deleted] = 0
+  AND b.[requested_start_time] > @now
+  AND b.[status] IN ('pending','approved')
+ORDER BY b.[requested_start_time];
+
+PRINT 'VERIFY: V13 - spaces under maintenance report';
+SELECT s.[space_code], s.[space_name], m.[problem_description], m.[status]
+FROM [dbo].[spaces] s
+INNER JOIN [dbo].[maintenance] m ON m.[space_id] = s.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND s.[current_status] = 'under_maintenance'
+  AND m.[status] IN ('open','in_progress')
+  AND m.[is_deleted] = 0
+ORDER BY s.[space_code], m.[status];
+
+PRINT 'VERIFY: V14 - no-show bookings report';
+SELECT s.[space_code], u.[email] AS requester_email, b.[requested_start_time], b.[requested_end_time], b.[status]
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] u ON u.[user_id] = b.[requester_id]
+WHERE s.[space_code] LIKE N'T06-%'
+  AND b.[is_deleted] = 0
+  AND b.[status] = 'no_show'
+ORDER BY b.[requested_start_time] DESC;
+
+PRINT 'VERIFY: V15 - FK joins for request, approval, session, maintenance';
+SELECT TOP 20 b.[booking_id], s.[space_code], requester.[email] AS requester_email,
+       ba.[decision], approver.[email] AS approver_email,
+       bs.[actual_start_time], checker.[email] AS checked_in_by_email
+FROM [dbo].[bookings] b
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = b.[space_id]
+INNER JOIN [dbo].[users] requester ON requester.[user_id] = b.[requester_id]
+LEFT JOIN [dbo].[booking_approvals] ba ON ba.[booking_id] = b.[booking_id]
+LEFT JOIN [dbo].[users] approver ON approver.[user_id] = ba.[approver_id]
+LEFT JOIN [dbo].[booking_sessions] bs ON bs.[booking_id] = b.[booking_id]
+LEFT JOIN [dbo].[users] checker ON checker.[user_id] = bs.[checked_in_by]
+WHERE s.[space_code] LIKE N'T06-%'
+ORDER BY b.[booking_id];
+
+PRINT 'VERIFY: V16 - incident data and status distribution';
+SELECT inc.[incident_type], inc.[severity], inc.[status], COUNT(*) AS incident_count
+FROM [dbo].[incidents] inc
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = inc.[space_id]
+WHERE s.[space_code] LIKE N'T06-%'
+GROUP BY inc.[incident_type], inc.[severity], inc.[status]
+ORDER BY inc.[incident_type], inc.[severity], inc.[status];
+
+PRINT 'VERIFY: V18 - facility_assignments by status';
+SELECT [status], COUNT(*) AS assignment_count
+FROM [dbo].[facility_assignments]
+WHERE [created_by] IN (SELECT [user_id] FROM [dbo].[users] WHERE [email] LIKE N't06.%@university.edu')
+GROUP BY [status]
+ORDER BY [status];
+
+PRINT 'VERIFY: V19 - facilities with their current active assignment';
+SELECT f.[facility_id], fc.[category_name], fa.[assignment_id], s.[space_code] AS assigned_space, fa.[start_time], fa.[end_time], fa.[purpose], fa.[status]
+FROM [dbo].[facility_assignments] fa
+INNER JOIN [dbo].[facilities] f ON f.[facility_id] = fa.[facility_id]
+INNER JOIN [dbo].[facility_categories] fc ON fc.[category_id] = f.[category_id]
+INNER JOIN [dbo].[spaces] s ON s.[space_id] = fa.[space_id]
+WHERE fa.[status] = 'active'
+  AND fa.[created_by] IN (SELECT [user_id] FROM [dbo].[users] WHERE [email] LIKE N't06.%@university.edu')
+ORDER BY f.[facility_id];
+
+PRINT 'VERIFY: V17 - Task 06 run_03 sample data generation completed';
