@@ -726,7 +726,7 @@ BEGIN
 END
 GO
 
--- BR20: Unresolved incidents block booking
+-- BR20: Unresolved incidents block booking unless a completed maintenance resolution covers the incident before the booking starts
 GO
 CREATE TRIGGER trg_bookings_check_incidents
 ON bookings
@@ -740,9 +740,21 @@ BEGIN
         INNER JOIN incidents inc
             ON inc.space_id = i.space_id
         WHERE inc.status IN ('reported','investigating')
+          AND NOT EXISTS (
+              SELECT 1 FROM maintenance m
+              WHERE m.space_id = inc.space_id
+                AND m.is_deleted = 0
+                AND (
+                    (inc.facility_id IS NULL AND m.facility_id IS NULL)     -- space-level match
+                    OR
+                    (inc.facility_id IS NOT NULL AND m.facility_id = inc.facility_id)  -- device-level match
+                )
+                AND m.status = 'resolved'
+                AND m.completion_time <= i.requested_start_time
+          )
     )
     BEGIN
-        RAISERROR('Unresolved incidents exist for this space.', 16, 1);
+        RAISERROR('Unresolved incidents exist for this space with no completed maintenance resolution before the booking start time.', 16, 1);
         ROLLBACK TRANSACTION;
         RETURN;
     END

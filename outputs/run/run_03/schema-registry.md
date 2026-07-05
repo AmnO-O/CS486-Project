@@ -423,7 +423,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | BR17 | Assigned maintenance staff must be facility staff | `trg_maintenance_check_assignee_role` trigger | Database | ✅ Enforced |
 | BR18 | Cancellation validity and space cleanup | `trg_bookings_cancellation` trigger | Database | ✅ Enforced |
 | BR19 | Maintenance completion restores space status | `trg_maintenance_completion_space_status` trigger | Database | ✅ Enforced |
-| BR20 | Unresolved incidents block booking | `trg_bookings_check_incidents` trigger | Database | ✅ Enforced |
+| BR20 | Unresolved incidents block booking unless a completed maintenance resolution covers the incident before the booking starts | `trg_bookings_check_incidents` trigger — blocks when an unresolved incident exists for the space AND no resolved maintenance for the same `(space_id, facility_id)` has `completion_time <= requested_start_time` | Database | ✅ Enforced |
 | BR21 | Maintenance completion auto-resolves incidents | `trg_incidents_autoresolve` trigger | Database | ✅ Enforced |
 | BR22 | Facility assignment no-overlap | `trg_facility_assignments_no_overlap` trigger — prevents overlapping time ranges for same facility with status IN ('planned','active') | Database | ✅ Enforced |
 | BR23 | Only one active assignment per facility | `UQ_fac_assign_active` — filtered unique index WHERE status='active' | Database | ✅ Enforced |

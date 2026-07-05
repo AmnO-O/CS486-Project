@@ -1148,9 +1148,10 @@ END CATCH;
 PRINT 'EXPECTED_ERROR_CASE: E22 - BR20 unresolved incidents block booking';
 BEGIN TRY
     BEGIN TRANSACTION;
-    DECLARE @expected_error_pattern_E22 NVARCHAR(4000) = N'%Unresolved incidents exist for this space%';
-    -- T06-LAB-201 has an 'investigating' incident (graffiti), should block booking
-    -- Expected error: trg_bookings_check_incidents / Unresolved incidents exist for this space.
+    DECLARE @expected_error_pattern_E22 NVARCHAR(4000) = N'%Unresolved incidents exist for this space with no completed maintenance resolution%';
+    -- T06-LAB-201 has an 'investigating' incident (graffiti, facility_id=4 projector) but no matching resolved maintenance for facility_id=4
+    -- → block (no covering maintenance)
+    -- Expected error: trg_bookings_check_incidents / Unresolved incidents exist for this space with no completed maintenance resolution before the booking start time.
     INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
     VALUES (@sp_lab, @lecturer, DATEADD(day, 30, @now), DATEADD(hour, 2, DATEADD(day, 30, @now)), 'workshop', 20);
     ROLLBACK TRANSACTION;
@@ -1202,6 +1203,47 @@ END TRY
 BEGIN CATCH
     IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
     PRINT 'FAIL: E23 unexpected error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_SUCCESS_CASE: E24 - BR20 incident covered by resolved space-level maintenance does NOT block booking';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    -- Create a space-level incident on sp_class (facility_id=NULL)
+    INSERT INTO [dbo].[incidents] ([space_id], [reported_by], [incident_type], [severity], [description], [status], [assigned_to], [facility_id], [resolved_at], [resolution_notes])
+    VALUES (@sp_class, @student, 'safety_hazard', 'low', N'Flickering light in classroom - covered by completed maintenance.', 'reported', @staff, NULL, NULL, NULL);
+
+    -- Create a space-level maintenance (facility_id=NULL) resolved before booking time
+    INSERT INTO [dbo].[maintenance] ([space_id], [reporter_id], [assigned_staff_id], [facility_id], [problem_description], [start_time], [completion_time], [status], [result_note])
+    VALUES (@sp_class, @staff, @staff2, NULL, N'Light fixture replacement completed before the booking.', DATEADD(day, -5, @now), DATEADD(day, -2, @now), 'resolved', N'Fixture replaced and tested.');
+
+    -- Booking 1 day from now → maintenance resolved 2 days ago → should ALLOW
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_class, @lecturer, DATEADD(day, 1, @now), DATEADD(hour, 2, DATEADD(day, 1, @now)), 'lecture', 30);
+
+    ROLLBACK TRANSACTION;
+    PRINT 'PASS: E24 - booking allowed because resolved space-level maintenance covers the incident before start time.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E24 unexpected error - ' + ERROR_MESSAGE();
+END CATCH;
+
+PRINT 'EXPECTED_ERROR_CASE: E25 - BR20 incident with NO maintenance blocks booking';
+BEGIN TRY
+    BEGIN TRANSACTION;
+    DECLARE @expected_error_pattern_E25 NVARCHAR(4000) = N'%Unresolved incidents exist for this space with no completed maintenance resolution%';
+    -- sp_meeting has an incident 'theft' (reported, facility_id=NULL) and ZERO maintenance records
+    -- → block unconditionally (no covering maintenance exists at all)
+    -- Expected error: trg_bookings_check_incidents / Unresolved incidents exist for this space with no completed maintenance resolution before the booking start time.
+    INSERT INTO [dbo].[bookings] ([space_id], [requester_id], [requested_start_time], [requested_end_time], [purpose], [expected_participants])
+    VALUES (@sp_meeting, @lecturer, DATEADD(day, 10, @now), DATEADD(hour, 2, DATEADD(day, 10, @now)), 'meeting', 10);
+    ROLLBACK TRANSACTION;
+    PRINT 'FAIL: E25 did not raise an error.';
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    IF ERROR_MESSAGE() LIKE @expected_error_pattern_E25 PRINT 'PASS: E25 - ' + ERROR_MESSAGE();
+    ELSE PRINT 'FAIL: E25 wrong error - ' + ERROR_MESSAGE();
 END CATCH;
 
 PRINT 'EXPECTED_ERROR_CASE: E26 - BR22 overlapping facility assignment (same facility, overlapping time range)';
