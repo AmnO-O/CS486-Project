@@ -46,3 +46,35 @@ Project constraints & standards
 
 Reference files
 - `req/business-requirement.md` — definitive business rules and examples
+
+---
+
+# Phase 2 scope (extension of the Phase 1 baseline)
+
+Phase 2 (Tasks 08–16) extends the space booking system after a one-semester pilot.
+Source of truth: `docs/project_phase2_description.md`. Summary:
+
+1. **Maintenance impact levels.** A maintenance record now has an impact level:
+   - `out-of-service` — space cannot be booked for any period overlapping maintenance
+     (Phase 1 behaviour).
+   - `advisory` — space can still be booked, but the requester must be notified of
+     all active advisories at booking time and the acknowledgement stored with the
+     booking.
+   - A space may have several active maintenance records at once; the impact level
+     may be escalated/downgraded while open. Escalation to `out-of-service` must
+     surface already-approved bookings that overlap the period.
+2. **Concurrent booking & approval.** Popular spaces may receive many near-simultaneous
+   requests at term start; eligible space types may auto-approve at submission
+   (instant booking). Concurrency control must guarantee two approved bookings can
+   never overlap the same space, across both instant and staff approval paths.
+3. **New reporting needs.** Approved-hour totals per space per semester; approved
+   bookings by weekday/hour; capacity+facility room finder; and bookings affected by
+   escalation. Followed by index tuning on the conflict check, the room finder, and
+   two selected reports.
+4. **Data & validation.** Generate ≥3 academic years of realistic data with ≥100,000
+   bookings (incl. maintenance, cancellations, no-shows, advisory acknowledgements);
+   re-verify 3NF for the updated schema.
+
+Deliverables for the extension are Tasks 08–16 (see `docs/README.md` and
+`memory/Progress.md`); the schema is unfrozen for Phase-2 re-design of affected
+tables (see `docs/design-decisions.md`).

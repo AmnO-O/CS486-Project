@@ -45,7 +45,17 @@ Column rules:
 
 Discovery-status legend: ⬜ draft · 🔄 refining · 🔒 locked (post-Task 03).
 
-> ✅ **All entities below are 🔒 locked as of Task 03 (2026-07-01).**
+> ### 🔓 Phase 2 status (Tasks 08–16)
+> - **Phase 1 (Tasks 01–07) is complete and locked.** All entities below were
+>   frozen as of Task 03 (2026-07-01).
+> - **Phase 2 re-design is in progress.** Per `docs/project_phase2_description.md`, the
+>   schema is **unfrozen** for Phase-2 re-design of the *affected* entities (notably
+>   **Maintenance** — impact levels; **Bookings** — advisory acknowledgement +
+>   instant/auto-approval origin). Conceptual updates land here during **Task 09**
+>   (updated ERD + logical design); until then the Phase 1 definitions below remain
+>   authoritative for unchanged entities/departments/users.
+> - Phase 2 also requires a **3NF re-validation** of the updated schema (Task 09) and
+>   **index re-tuning** (Task 15).
 
 ---
 ## Relationships registry
@@ -301,6 +311,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-08-02 | 🔓 Unfroze for Phase 2 re-design — project extended to 16 tasks (08–16); added Phase 2 status banner. Affected entities (Maintenance, Bookings) to be updated in Task 09 | Phase 2 kickoff (`docs/project_phase2_description.md`) |
 | 2026-07-01 | Finalized and locked all 9 entities — added audit columns to Booking_Approvals and Booking_Sessions | Task 03 regeneration — logical design finalization |
 | 2026-06-18 | Split Bookings into Bookings + Booking_Approvals + Booking_Sessions per SRP | Architectural refactor based on new_proposed_erd.md |
 | 2026-06-15 | Revision 1: no entity changes — trigger/index decisions captured in schema-registry | Task 03 revision |

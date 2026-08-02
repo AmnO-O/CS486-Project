@@ -57,3 +57,19 @@ Total Score = Sum(Weighted Score)
 | Business rules are preserved across the pipeline. | Requirement -> SQL/query traceability |
 | Advanced logical constraints translate to DDL | Trigger logic and specialized indexes (e.g., filtered indexes) designed in `03-logical-design.md` are accurately implemented as valid T-SQL syntax in `05-db-definition.sql`. |
 | **Iterative Validation** | Trajectory logs (`logs/trajectory/*`) show the agent proactively re-evaluating and updating the validation report (e.g., updating constraint coverage from Partial to Enforced) when earlier tasks/schemas are corrected. |
+
+## Phase 2 Evaluation (Tasks 08–16)
+
+Phase 2 (see `docs/project_phase2_description.md`) is scored against these added
+criteria, on top of the Phase 1 rubric. They are intentionally high-level so they do not
+prescribe how the tasks must be carried out.
+
+| Criterion | What To Check |
+|---|---|
+| Requirement-change analysis (08) | Correctly identifies the entities, relationships, and rules affected by the Phase 2 changes, and the concurrency conflicts those changes introduce. |
+| Design update (09) & migration (10) | The updated ERD/logical schema reflect the Phase 2 rules; the migration script alters the Phase 1 baseline while preserving existing data (or documents the approach); normalization re-verified. |
+| Concurrency (11–13) | A real concurrency conflict is identified, a solution is implemented (12), and the tests (13) demonstrate the conflict before the fix and its prevention after, run against a live database. |
+| Data generator (14) | Produces a large, realistic dataset (≥100,000 bookings) spanning several academic years, including the Phase 1 statuses/records. |
+| Analytical queries (16) | Implements all the reporting needs listed in the Phase 2 description (§1.3). |
+| Index tuning (15) | Chooses indexes for the concurrency/conflict-relevant queries and reporting queries, and shows execution comparisons on the generated dataset. |
+| Normalization | Updated relations satisfy ≥3NF. |

@@ -43,6 +43,16 @@
 **Maintenance status:** (not explicitly listed in requirement — use)
 `open`, `in_progress`, `resolved`
 
+## Phase 2 (Tasks 08–16)
+
+Phase 2 is an extension of the Phase 1 system (see `docs/project_phase2_description.md`);
+its scope is summarized in `docs/project-overview.md`. It reuses the Phase 1 stack (MSSQL /
+T-SQL) and conventions — it does **not** introduce a new RDBMS or language.
+
+New enums, columns, indexes, or objects introduced by the Phase 2 re-design are tracked as
+provisional in `docs/design-decisions.md` until they are locked (during Tasks 08–09), at
+which point they are appended here following the existing naming/data-type conventions.
+
 ## Design rules
 
 - All tables must have a surrogate primary key using `INT IDENTITY(1,1)` or `UNIQUEIDENTIFIER` (use `INT IDENTITY` unless globally unique ID is required)

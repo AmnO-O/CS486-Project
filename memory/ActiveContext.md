@@ -3,29 +3,31 @@ name: active-context
 description: Current task being worked on, blocking issues, and immediate next steps. Update at start and end of every session.
 ---
 
-## Current task
-Task 06 — Sample Data ✅ *(completed 2026-06-22)*
+## Current phase
+**Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
+**Phase 2 (Tasks 08–16): IN PROGRESS — bootstrap landed 2026-08-02**
 
-## Status
-- Task 06 output: `outputs/06-sample-data-G05.sql` (1077 lines) ✅
-- Execution evidence: `logs/execution/task06/2026-06-22-0948-output.txt` ✅
-- Evaluation report: `logs/eval/task06/2026-06-22-0951-eval.md` ✅ (score 5.00/5.00)
-- Task 05 DDL: `outputs/05-db-definition-G05.sql` (schema frozen, used as Task 06 base) 
+Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
+levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
+≥100k-row data generator, index tuning, and analytical queries. The schema is unfrozen
+for the affected tables (Option A, `docs/design-decisions.md`).
 
-## Verification summary
-- **7 data sections** in FK-safe order: departments → users → spaces → facilities → space_facilities → maintenances → bookings
-- **9 spaces** covering all 5 space statuses (available, temporarily_closed, retired, under_maintenance, in_use)
-- **11 valid bookings** covering 7 booking statuses (pending, approved, checked_in, completed, no_show, rejected, cancelled) + soft-deleted
-- **5 maintenance records** covering all 3 maintenance statuses (open, in_progress, resolved) + soft-deleted
-- **8 users** covering all 6 roles across 3 account statuses
-- **13 expected-error (ECASE) tests** in TRY/CATCH blocks covering: BR1 overlap, BR2 unavailable space (3 variants), BR3 capacity, BR4 maintenance overlap, BR6 approval metadata, BR7 rejection reason, BR8/BR9 check-in/completion fields, duplicate email, invalid enum, invalid time range
-- **13 verification queries** — row counts, enum distributions, audit timestamps, soft-delete, future bookings, maintenance, no-show, booking history
-- **Idempotent** — cleanup-and-reseed strategy via T06- prefix + reverse-FK-order DELETE
-- **Top eval recommendations:** (1) include common reads in trajectory; (2) run third execution to prove idempotence; (3) note ECASE 7-10 pending orphan rows in assumptions
+## Status (Phase 1 baseline — reference)
+- Task 07 output: `outputs/07-query-design-G05.sql` ✅
+- Phase 1 schema is frozen (9 tables). Task 08 is next.
+- Phase 2 bootstrap: all agent-facing surfaces updated to the 16-task scope
+  (`AGENTS.md`, `docs/*`, `memory/*`, `structure.md`, `README.md`, evaluation files).
+  Task skills/commands for 08–16 are **not yet scaffolded** — pending review.
+
+## Verification summary (Phase 1 dependency for Phase 2)
+- SCHEMA FREEZE approved (Task 04), DDL `outputs/05-db-definition-G05.sql`.
+- Sample data / queries landed as upstream inputs for Phase 2 re-design.
 
 ## Blocking issues
-- None — SCHEMA FREEZE approved (Task 06 dependant on it, already executed)
+- None. Phase 2 underway.
 
 ## Next steps
-1. Proceed to Task 07 — Query Design (`generate-queries --group G05`)
-2. Review top improvements from eval report (idempotence proof, trajectory completeness, ECASE orphan documentation)
+1. Review Phase-2 bootstrap changes; then scaffold **Task 08** (requirement-change
+   analysis): add command `08-…`, skill `08-…`, and generate
+   `outputs/08-requirement-change-analysis-G05.md`.
+2. Continue the dependency chain 08 → 09 → 10 → … → 16 per `memory/Progress.md`.

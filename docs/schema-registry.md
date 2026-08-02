@@ -3,6 +3,21 @@
 Relational schema: table definitions, FK wiring, indexes, and 3NF proof.
 For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
+> ### 🔓 Phase 2 status (Tasks 08–16)
+> - **Phase 1 (Tasks 01–07) is complete and locked** — the 9 tables below were the
+>   SCHEMA FREEZE baseline (2026-07-01).
+> - **Phase 2 re-design is in progress.** Per `docs/project_phase2_description.md`, the
+>   schema is **unfrozen** for the *affected* tables: **`maintenance`** (impact
+>   levels), **`bookings`** (advisory acknowledgement + instant/auto-approval), and
+>   any new concurrency/index objects. Relational updates land here during **Task 09**
+>   and are implemented in **Task 10 (schema migration)** on top of the Phase 1 baseline.
+> - Phase 2 also requires a **3NF re-validation** of the updated schema (Task 09) and
+>   an **index-tuning pass** targeted at the booking conflict check, the room finder,
+>   and two analytical reports (Task 15).
+> - The Phase 1 DDL and indexes below remain valid for unchanged tables until the
+>   migration (Task 10). Do not treat SCHEMA FREEZE as a hard lock on the affected
+>   tables for Phase 2.
+
 ---
 
 ## Table inventory
@@ -14,10 +29,12 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | 3 | spaces | entity | 🔒 | Spaces |
 | 4 | facilities | entity | 🔒 | Facilities |
 | 5 | space_facilities | junction | 🔒 | Spaces ↔ Facilities (R6) |
-| 6 | bookings | entity | 🔒 | Bookings |
+| 6 | bookings | entity | 🔓 P2 | Bookings |
 | 7 | booking_approvals | entity | 🔒 | Booking_Approvals |
 | 8 | booking_sessions | entity | 🔒 | Booking_Sessions |
-| 9 | maintenance | entity | 🔒 | Maintenance |
+| 9 | maintenance | entity | 🔓 P2 | Maintenance |
+
+> Status legend: 🔒 = Phase 1 locked; 🔓 P2 = unfrozen, Phase-2 re-design pending Task 09/10.
 
 ## CREATE TABLE dependency order
 
@@ -345,8 +362,9 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | Schema registry populated | ✅ 🔒 | Task 03 (2026-07-01) — regenerated with 9-table schema |
 | Design validation passed | ✅ | Task 04 (2026-06-17) — re-validated 2026-06-18 |
 | Index sync | ✅ Resolved | 2026-06-18 |
-| **SCHEMA FREEZE** |  | — |
+| **SCHEMA FREEZE** | ✅ (Phase 1) | — |
+| **🔓 Phase 2 re-design** | 🔄 In progress | 2026-08-02 — project extended to 16 tasks; `maintenance` / `bookings` unfrozen. Re-freeze expected at Task 09/10 |
 
 ---
 
-*Last updated: 2026-07-01 — 9-table schema with SRP booking split (bookings + booking_approvals + booking_sessions)*
+*Last updated: 2026-08-02 — Phase 2 kickoff. Project extended to 16 tasks (08–16); schema unfrozen for the affected tables (`maintenance`, `bookings`) pending the Task 09 re-design and Task 10 migration.*

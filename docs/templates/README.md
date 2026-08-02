@@ -4,6 +4,13 @@
 > It is the single routing index for `docs/templates/`.
 >
 > Read this file at the start of every task, after `docs/README.md`.
+>
+> **Phase 2 (Tasks 08–16):** the tables above extend to the two-phase 16-task
+> pipeline. Task 09 (updated ERD + logical design) is where the registries are
+> rewritten for Phase 2 — register each new/changed column with a "Phase 2 / revision"
+> marker per the Option-A unfreeze in `docs/design-decisions.md`. Task 10 produces a
+> `10-schema-migration-G05.sql` delta on the Phase 1 baseline; Tasks 13/14 are
+> directories (`13-concurrency-tests-G05/`, `14-data-generator-G05/`).
 
 ---
 

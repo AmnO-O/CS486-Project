@@ -165,6 +165,26 @@ The `outputs/` folder contains the following files (example for Group 05):
 07-query-design-G05.sql
 ```
 
+### Phase 2 (Tasks 08–16) — project extended
+
+Building on the Phase 1 baseline, Phase 2 adds (source: `docs/project_phase2_description.md`):
+
+```text
+08-requirement-change-analysis-G05.md
+09-updated-erd-and-logical-design-G05.md
+10-schema-migration-G05.sql
+11-concurrency-design-G05.md
+12-concurrency-implementation-G05.sql
+13-concurrency-tests-G05/        # directory
+14-data-generator-G05/           # directory (≥100,000 bookings)
+15-index-tuning-report-G05.md
+16-analytical-queries-G05.sql
+```
+
+The pipeline is now **2 phases, 16 tasks**. The schema from Phase 1 is unfrozen for
+Phase-2 re-design of the affected tables (see `docs/design-decisions.md` and the
+🔓 P2 markers in `docs/entity-registry.md` / `docs/schema-registry.md`).
+
 
 ## 7. Notes on LLM Model Usage and Cost Control
 

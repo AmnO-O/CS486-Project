@@ -42,6 +42,26 @@ These common reads are expected context, not extra noise.
 
 RO = read-only (allowed to read, must not modify).
 
+## Phase 2 (Tasks 08–16)
+
+Tasks 08–16 are the Phase 2 extension of the Phase 1 baseline (see
+`docs/project_phase2_description.md`). This table records the required deliverables and
+their natural upstream dependencies so evaluation stays aligned with the 16-task pipeline.
+Detailed per-task READ/WRITE lists are finalized when each task is reached, so nothing
+here prescribes how a task must be done.
+
+| Task | Deliverable output | Depends on |
+|---|---|---|
+| 08 requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | Phase 1 (01–07) |
+| 09 updated ERD + logical design | `outputs/09-updated-erd-and-logical-design-G05.md` | Task 08 |
+| 10 schema migration | `outputs/10-schema-migration-G05.sql` | Task 09 |
+| 11 concurrency design | `outputs/11-concurrency-design-G05.md` | Task 09 |
+| 12 concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | Task 11 |
+| 13 concurrency tests | `outputs/13-concurrency-tests-G05/` (directory) | Task 12 |
+| 14 data generator | `outputs/14-data-generator-G05/` (directory) | Task 10 |
+| 15 index-tuning report | `outputs/15-index-tuning-report-G05.md` | Tasks 14, 16 |
+| 16 analytical queries | `outputs/16-analytical-queries-G05.sql` | Task 14 |
+
 ## SQL-task expectations
 
 - Task 05 must use `req/business-requirement.md`, `outputs/01`, and validation

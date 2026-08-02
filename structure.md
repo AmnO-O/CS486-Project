@@ -29,7 +29,18 @@ CS486-Project/
 │   ├── 04-design-validation-G05.md       # Schema validation
 │   ├── 05-db-definition-G05.sql          # T-SQL DDL
 │   ├── 06-sample-data-G05.sql            # Sample data
-│   └── 07-query-design-G05.sql           # [Future] Business queries
+│   ├── 07-query-design-G05.sql           # Business queries
+│   # Phase 2 (Tasks 08–16):
+│   ├── 08-requirement-change-analysis-G05.md   # [P2] Requirement-change analysis
+│   ├── 09-updated-erd-and-logical-design-G05.md # [P2] Updated ERD + logical design
+│   ├── 10-schema-migration-G05.sql             # [P2] Schema migration delta
+│   ├── 11-concurrency-design-G05.md            # [P2] Concurrency design
+│   ├── 12-concurrency-implementation-G05.sql   # [P2] Concurrency implementation
+│   ├── 13-concurrency-tests-G05/               # [P2] Concurrency tests (dir)
+│   ├── 14-data-generator-G05/                  # [P2] Data generator (dir, ≥100k bookings)
+│   ├── 15-index-tuning-report-G05.md           # [P2] Index-tuning report
+│   └── 16-analytical-queries-G05.sql           # [P2] Analytical queries
+│                                               # (pipeline is 2-phase, 16 tasks)
 │
 ├── logs/                                 # Agent execution and evaluation logs
 │   ├── trajectory/                       # Task execution traces
@@ -39,7 +50,8 @@ CS486-Project/
 │   │   ├── task04/                       # Task 04 trace
 │   │   ├── task05/                       # Task 05 trace
 │   │   ├── task06/                       # Task 06 trace
-│   │   └── task07/                       # [Future] Task 07 trace
+│   │   ├── task07/                       # Task 07 trace
+│   │   ├── task08/…task16/               # [P2] Phase 2 task traces
 │   │
 │   ├── execution/                        # Execution run outputs
 │   │   └── task06/                       # Task 06 execution output
@@ -52,6 +64,7 @@ CS486-Project/
 │   │   ├── task05/                       # Task 05 evaluation
 │   │   ├── task06/                       # Task 06 evaluation
 │   │   ├── task07/                       # [Future] Task 07 evaluation
+│   │   ├── task08/…task16/               # [P2] Phase 2 evaluations
 │   │   └── pipeline/                     # [Future] Pipeline evaluation
 │   │
 │   └── registry-snapshots/               # Registry snapshots per task
@@ -66,6 +79,7 @@ CS486-Project/
     │   ├── 05-generate-ddl.md            # Generate Task 05
     │   ├── 06-generate-sample-data.md    # Generate Task 06
     │   ├── 07-generate-query-design.md   # Generate Task 07
+    │   ├── 08-…16-*.md                   # [P2] Phase 2 task commands (add as tasks run)
     │   ├── evaluate-task.md              # Evaluate one task
     │   └── evaluate-pipeline.md          # [Future] Evaluate pipeline
     |
@@ -93,6 +107,16 @@ CS486-Project/
         │   │       └── data-coverage.md
         │   └── 07-query-design/          # [Future] Task 07 skill
         │       └── SKILL.md
+        │   # Phase 2 (Tasks 08–16) skills — added as each task runs
+        │   ├── 08-requirement-change/          # [P2] Task 08 skill
+        │   ├── 09-updated-design/              # [P2] Task 09 skill (ERD + logical + 3NF)
+        │   ├── 10-generate-migration/          # [P2] Task 10 skill
+        │   ├── 11-concurrency-design/          # [P2] Task 11 skill
+        │   ├── 12-concurrency-impl/            # [P2] Task 12 skill
+        │   ├── 13-concurrency-tests/           # [P2] Task 13 skill (dir output)
+        │   ├── 14-data-generator/              # [P2] Task 14 skill (dir output)
+        │   ├── 15-index-tuning/                # [P2] Task 15 skill
+        │   └── 16-analytical-queries/          # [P2] Task 16 skill
         │
         └── evaluations/                  # Evaluation framework
             ├── README.md                 # Evaluation guide

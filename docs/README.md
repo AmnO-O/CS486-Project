@@ -12,6 +12,25 @@
 
 ---
 
+## Phase 2 (Tasks 08–16)
+
+The project is extended to a **two-phase, 16-task pipeline**.
+
+- **Phase 1 (Tasks 01–07)** is complete, approved, and **locked** — the 9-table
+  schema under `entity-registry.md` / `schema-registry.md` was frozen (SCHEMA FREEZE).
+- **Phase 2 (Tasks 08–16)** extends that frozen baseline. The authoritative Phase 2
+  requirement source is **`docs/project_phase2_description.md`**. It adds
+  maintenance impact levels, advisory acknowledgements, concurrent/instant booking,
+  schema migration, a ≥100k-row data generator, index tuning, and analytical queries.
+
+> For any Phase 2 task, first read `docs/project_phase2_description.md` — the
+> authoritative Phase 2 source. `project-overview.md` also has a concise Phase 2 scope
+> summary (already read at onboarding); treat it as a summary, not as an additional
+> authoritative input. Then read the relevant `docs/` file and sub-skill under
+> `.opencode/skills/db-design-pipeline/`. The Phase-2 re-design unfreezes the affected
+> tables; see the Phase-2 markers in the registries. Support for tasks 08–16 exists under
+> `outputs/`, `logs/trajectory/task08/`…`task16/`, and `memory/Progress.md`.
+
 **Quick start (3-step checklist)**
 
 - Read the required docs above in order.

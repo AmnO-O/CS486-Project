@@ -1,3 +1,8 @@
+> **Phase 1 ERD (final).** The project is now extended to Phase 2 (Tasks 08–16). This
+> file reflects the Phase 1 ERD; it will be updated in **Task 09** to add maintenance
+> impact levels, advisory acknowledgements, and instant/auto-approval. See
+> `docs/project_phase2_description.md`.
+
 The last ERD
 ```mermaid
 erDiagram

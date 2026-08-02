@@ -1,13 +1,22 @@
 ---
 name: db-design-pipeline
 description: >
-  MANDATORY — load this skill before executing any of the 7 CS486 deliverables.
+  MANDATORY — load this skill before executing any of the CS486 deliverables.
   Triggers when user runs /generate-* or /evaluate commands, or asks to generate
   business requirement analysis, ERD, logical design, design validation, DDL,
-  sample data, or SQL queries for the Campus Space Management System.
+  sample data, SQL queries, or any Phase 2 task (08–16: requirement-change
+  analysis, schema migration, concurrency, data generation, index tuning,
+  analytical queries) for the Campus Space Management System.
 ---
 
 # DB Design Pipeline Skill
+
+> **Scope note (Phase 2):** the pipeline now spans **16 tasks in two phases**.
+> Phase 1 (01–07) is complete and its schema is frozen as the baseline. Phase 2
+> (08–16) extends that baseline per `docs/project_phase2_description.md`; the schema
+> is unfrozen for Phase-2 re-design. Task-specific sub-skills for 08–16 are added
+> as each task is reached; until one exists for a future task, stop and report
+> the gap (see AGENTS.md).
 
 ## Before ANY task — required reading sequence
 1. `docs/README.md` → determine which files to read for this task

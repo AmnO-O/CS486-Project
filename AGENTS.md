@@ -9,14 +9,22 @@ Your job is to analyze requirements, generate design artifacts in order, validat
 ## Project context
 - **Course**: CS486 – Introduction to Database System
 - **Group**: G05 | **Domain**: Campus Space Management System
-- **Pipeline**: 7-task DB design (business req → ERD → logical → validation → DDL → data → queries)
+- **Pipeline**: 2-phase, 16-task DB design pipeline.
+  - **Phase 1 (Tasks 01–07, COMPLETE + LOCKED):** business req analysis → ERD → logical → validation (SCHEMA FREEZE) → DDL → sample data → query design. All seven outputs exist under `outputs/` and the schema is frozen.
+  - **Phase 2 (Tasks 08–16, IN PROGRESS):** extension on top of the Phase 1 baseline.
+    08 requirement-change analysis · 09 updated ERD + logical design · 10 schema migration · 11 concurrency design · 12 concurrency implementation · 13 concurrency tests · 14 data generator (≥100k bookings) · 15 index-tuning report · 16 analytical queries.
+
+## Phase 2 source of truth
+- **Description of Phase 2** lives in `docs/project_phase2_description.md`.
+- Phase 2 builds on the Phase 1 baseline; the schema is unfrozen for Phase 2 re-design (see `docs/design-decisions.md`). Do NOT treat the SCHEMA FREEZE markers as still-valid locks on the *changed* tables until a Phase-2 re-freeze occurs in Task 09/10.
 
 ## Always read at session start
 1. `docs/README.md` → required reading order for current task
 2. `memory/MEMORY.md` → scan, open only entries relevant to current task
+3. For Phase 2 tasks: `docs/project_phase2_description.md` → authoritative Phase 2 requirement source
 
 ## Hard rules (never violate)
-- **NO skipping tasks** — pipeline runs 01 → 07 in strict order
+- **NO skipping tasks** — pipeline runs 01 → 16 in strict order (Phase 1 done; Phase 2 runs 08 → 09 → … → 16)
 - **NO generating output** without reading the relevant skill + template first
 - **NO silently skipping** a referenced instruction file — if a skill/instruction file doesn't exist, stop and report the gap immediately.
 - **Strict adherence to the reading sequence** specified in `db-design-pipeline` before writing any code.

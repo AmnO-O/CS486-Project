@@ -13,7 +13,27 @@
 | Task 7 | Query design | `outputs/07-query-design-G05.sql` | ✅ Approved  | Task 5 |
 | — | Logs agent improvement | `improvement_logs.md` | ✅ Approved  | — |
 | — | Git repository | — | ✅ Approved | — |
-| — | Report PDF | `outputs/report-G05.pdf` | ✅ Approved  | All tasks |
+| — | Report PDF | `outputs/report-G05.pdf` | ✅ Approved | All tasks |
+
+## Phase 2 pipeline status
+
+**Phase 2 extends the Phase 1 baseline to a 16-task pipeline.** Source of truth:
+`docs/project_phase2_description.md`. The schema is **unfrozen** for Phase-2 re-design
+(Option A, `docs/design-decisions.md`). Deliverables below follow §3.2 of the Phase 2
+description; all are ⬜ until their task runs.
+
+| Task | Deliverable | Output | Status | Depends on |
+|---|---|---|---|---|
+| Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ⬜ | Phase 1 (01–07) |
+| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ⬜ | Task 08 |
+| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ⬜ | Task 09 |
+| Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
+| Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
+| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
+| Task 14 | Data generator (≥100k bookings) | `outputs/14-data-generator-G05/` | ⬜ | Task 10 |
+| Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | ⬜ | Task 14, Task 16 |
+| Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ⬜ | Task 14 |
+| — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ⬜ | All tasks |
 
 ## Status legend
 
@@ -26,11 +46,12 @@
 
 ## Critical gate: SCHEMA FREEZE
 
-**Task 5, 6, 7 cannot start until SCHEMA FREEZE is reached.**
+**Phase 1 (Tasks 5, 6, 7) is gated on SCHEMA FREEZE** → reached & ✅ approved.
 
-SCHEMA FREEZE requires all 4 group members to approve Task 4 (Design validation).
-Once frozen, the schema in `outputs/04-design-validation-G05.md` becomes
-the locked upstream input for DDL, sample data, and queries.
+**Phase 2:** the schema is **unfrozen** (Option A, `docs/design-decisions.md`) for the
+affected tables so the pipeline may continue 08 → 16. A **re-freeze** of the Phase-2
+schema is expected at **Task 09/10** before DDL/migration/generator work is treated as
+locked upstream inputs.
 
 Do NOT generate DDL or sample data before this gate.
 
@@ -40,6 +61,7 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-08-02 | Phase 2 kickoff — project extended to 16 tasks (08–16); schema unfrozen for affected tables (`maintenance`, `bookings`); Option-A evolve-in-place | `docs/project_phase2_description.md`, design-decisions Phase-2 decision |
 | 2026-06-15 | Building/floor as free-text VARCHAR fields | No query requirement for separate building/floor tables |
 | 2026-06-15 | Rejection reason as separate column | BR7 requires storing rejection reason |
 | 2026-06-15 | Usage policy as free-text NVARCHAR(MAX) | No fixed policy set defined |
