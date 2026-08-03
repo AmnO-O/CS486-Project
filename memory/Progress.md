@@ -19,12 +19,12 @@
 
 **Phase 2 extends the Phase 1 baseline to a 16-task pipeline.** Source of truth:
 `docs/project_phase2_description.md`. The schema is **unfrozen** for Phase-2 re-design
-(Option A, `docs/design-decisions.md`). Deliverables below follow §3.2 of the Phase 2
+(see `docs/design-decisions.md`). Deliverables below follow §3.2 of the Phase 2
 description; all are ⬜ until their task runs.
 
 | Task | Deliverable | Output | Status | Depends on |
 |---|---|---|---|---|
-| Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ⬜ | Phase 1 (01–07) |
+| Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
 | Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ⬜ | Task 08 |
 | Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ⬜ | Task 09 |
 | Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
@@ -48,7 +48,7 @@ description; all are ⬜ until their task runs.
 
 **Phase 1 (Tasks 5, 6, 7) is gated on SCHEMA FREEZE** → reached & ✅ approved.
 
-**Phase 2:** the schema is **unfrozen** (Option A, `docs/design-decisions.md`) for the
+**Phase 2:** the schema is **unfrozen** (Option B, `docs/design-decisions.md`) for the
 affected tables so the pipeline may continue 08 → 16. A **re-freeze** of the Phase-2
 schema is expected at **Task 09/10** before DDL/migration/generator work is treated as
 locked upstream inputs.
@@ -61,7 +61,8 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
-| 2026-08-02 | Phase 2 kickoff — project extended to 16 tasks (08–16); schema unfrozen for affected tables (`maintenance`, `bookings`); Option-A evolve-in-place | `docs/project_phase2_description.md`, design-decisions Phase-2 decision |
+| 2026-08-02 | Task 08 done — 3 changes (C1 maintenance impact levels, C2 concurrent/instant booking, C3 reporting), 4 affected entities, 4 concurrency conflicts (K1–K4) identified for Task 11 | `outputs/08-requirement-change-analysis-G05.md`; open items in §6 (U1–U5) feed Task 09 |
+| 2026-08-02 | Phase 2 kickoff — project extended to 16 tasks (08–16); schema unfrozen for affected tables (`maintenance`, `bookings`); Option-B evolve-in-place | `docs/project_phase2_description.md`, design-decisions Phase-2 decision |
 | 2026-06-15 | Building/floor as free-text VARCHAR fields | No query requirement for separate building/floor tables |
 | 2026-06-15 | Rejection reason as separate column | BR7 requires storing rejection reason |
 | 2026-06-15 | Usage policy as free-text NVARCHAR(MAX) | No fixed policy set defined |
@@ -91,6 +92,23 @@ _(All resolved — no open questions remain.)_
 | Q3 | Maintenance-to-booking interaction — can a space be booked after maintenance is resolved but before status is updated? | Auto-trigger on maintenance resolution + cross-check trigger on booking insert | 2026-06-15 (revised) |
 | Q4 | No-show detection — automatic or manual? | Automatic scheduled job | 2026-06-15 (revised) |
 | Q5 | Building/floor — reference tables or varchar fields? | Free-text `NVARCHAR` fields | 2026-06-15 |
+
+---
+
+## Known open questions (Phase 2 — from Task 08)
+
+_Unresolved design questions carried out of `outputs/08-requirement-change-analysis-G05.md` §6.
+Each must be resolved before the task listed in the `Resolved before` column; the agent must ask
+the person responsible for that task for a decision before generating that task's output on an
+unresolved question (see AGENTS.md)._
+
+| # | Question | Resolved before | Resolution | Date |
+|---|---|---|---|---|
+| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ⬜ pending | — |
+| U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ⬜ pending | — |
+| U3 | Escalation → pending vs only approved | Task 11 | ⬜ pending | — |
+| U4 | "Semester" reporting window definition | Task 16 | ⬜ pending | — |
+| U5 | Space-status derivation from maintenance levels | Task 09 | ⬜ pending | — |
 
 ---
 

@@ -37,6 +37,7 @@ Your job is to analyze requirements, generate design artifacts in order, validat
 - After a key design decision: append to `docs/design-decisions.md` immediately
 
 - If a business rule is ambiguous: refer to `req/business-requirement.md` and `docs/project-overview.md` do not assume
+- Before running any Phase 2 task, check the task's assigned open questions in the **"Known open questions (Phase 2)"** table in `memory/Progress.md`. If any of those questions are still ⬜ pending **and directly relevant to the task the person is working on**, ask that person (with the agent) to come up with a final decision on it before proceeding — do **not** silently decide or generate that task's output on an unresolved question.
 
 ## Post-Task Handshake Protocol
 You **MUST NOT** update `memory/Progress.md` or `memory/ActiveContext.md` autonomously. Once you finish generating an output:

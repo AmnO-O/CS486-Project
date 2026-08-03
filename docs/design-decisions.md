@@ -476,7 +476,7 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
-## Revision log
+## Recorded decisions (revisions & Phase 2)
 
 ### Decision: BR7 trigger scoped to status transition only
 
@@ -538,7 +538,30 @@ _(To be populated during Tasks 1–4.)_
 - Reporting queries now JOIN `bookings` → `booking_approvals` / `booking_sessions` for approval/session data
 - `docs/entity-registry.md`, `docs/schema-registry.md`, `outputs/02-erd-design-G05.md`, and `outputs/03-logical-design-G05.md` updated accordingly
 
-**Requirement reference:** SRP design principle; BR6 (decision recording), BR7 (rejection reason), BR8 (actual time recording), BR9 (space condition tracking)
+**Requirement reference:** SRP design principle (BR6: decision recording, BR7: rejection reason, BR8: actual time recording, BR9: space condition tracking)
+
+---
+
+### Decision: Schema unfreeze for Phase 2 affected tables
+
+**Task:** 8 (Requirement-Change Analysis)
+**Date:** 2026-08-02
+
+**Problem:** Phase 2 (Tasks 08–16, per `docs/project_phase2_description.md`) introduces new operating conditions and concurrency requirements. The Phase 1 SCHEMA FREEZE prevented further design changes, which would block the Phase 2 re-design specifically for the tables affected by the new requirements.
+
+**Options considered:**
+- Option A: Maintain a separate Phase-2 parallel design tree — pros: keeps Phase 1 registries untouched as pristine baseline; cons: splits ground truth across two overlapping sources, risks divergence and reconciliation effort
+- Option B: Unfreeze the affected tables in place and evolve the existing registries — pros: single source of truth, builds directly on the Phase 1 baseline; cons: technically reopens frozen tables, requires an explicit re-freeze guard
+
+**Decision:** We chose Option B. Starting at Task 08, the schema is **unfrozen** for the tables affected by the Phase 2 changes — `bookings` and `maintenance` — while all other Phase 1 tables remain frozen (locked). The affected tables carry a `🔓 P2` (unfreeze) marker in the registries; they are re-frozen once the Phase 2 re-design completes in Tasks 09/10. Unaffected tables keep their `🔒` freeze markers unchanged.
+
+**Impact:**
+- `docs/entity-registry.md` and `docs/schema-registry.md`: `🔓 P2` markers on affected tables only.
+- Tables not affected by Phase 2 remain frozen; no other freeze markers change.
+- Tasks 09/10 rewrite the affected registries and produce a migration delta on the Phase 1 baseline; Tasks 11–13 introduce concurrency controls.
+- This decision is recorded without re-opening Phase 1 design conclusions; it concerns only the lifecycle/versioning of the affected tables.
+
+**Requirement reference:** `docs/project_phase2_description.md`; Phase 2 source of truth (`docs/README.md`).
 
 ---
 
@@ -546,6 +569,7 @@ _(To be populated during Tasks 1–4.)_
 
 | Date | Change | By | Task |
 |---|---|---|---|
+| 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
 | 2026-06-18 | Split `bookings` into `bookings` + `booking_approvals` + `booking_sessions` (SRP refactor) | Agent | Post-Task 5 refactor |
 | 2026-06-18 | Added `updated_at` auto-stamp triggers (6 tables) — `AFTER UPDATE` keeps timestamps current beyond the initial INSERT | Agent | Task 05 DDL |
 | 2026-06-18 | Maintenance-completion trigger: `NOT EXISTS` check prevents premature space-status flip with concurrent tickets | Agent | Task 05 DDL |

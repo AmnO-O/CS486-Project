@@ -25,7 +25,7 @@ Prompt:
   - Target run: outputs/run/{{to-run}}/ (or {{to-run}} if absolute path)
   - Group: {{group}}
 
-  Read the skill defined in `.opencode/skills/db-design-pipeline/08-semantic-regeneration/SKILL.md`.
+  Read the skill defined in `.opencode/skills/db-design-pipeline/semantic-regeneration/SKILL.md`.
   
   Determine the downstream steps to execute in sequence:
   - If --from is BusinessReq (Task 01): execute Task 02, 03, 04, 05, 06, 07
