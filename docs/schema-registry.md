@@ -33,6 +33,8 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | 7 | booking_approvals | entity | 🔒 | Booking_Approvals |
 | 8 | booking_sessions | entity | 🔒 | Booking_Sessions |
 | 9 | maintenance | entity | 🔓 P2 | Maintenance |
+| 10 | maintenance_impact_history | entity | 🔓 P2 (new) | Maintenance_Impact_History |
+| 11 | booking_advisory_acknowledgement | entity | 🔓 P2 (new) | Booking_Advisory_Acknowledgement |
 
 > Status legend: 🔒 = Phase 1 locked; 🔓 P2 = unfrozen, Phase-2 re-design pending Task 09/10.
 
@@ -47,6 +49,8 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 7. booking_approvals
 8. booking_sessions
 9. maintenance
+10. maintenance_impact_history
+11. booking_advisory_acknowledgement
 
 ---
 
@@ -71,7 +75,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ### users
 
-**Status:** 🔒 locked
+**Status:** 🔒 locked (reserved seed row `user_id = -1` added — Task 09, Area 2)
 **Maps from entity:** Users
 **Primary key:** user_id (surrogate)
 
@@ -79,8 +83,8 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 | Column | Type | Nullable | Key | Constraint / Default | Notes |
 |--------|------|----------|-----|---------------------|-------|
-| user_id | INT | NO | PK | IDENTITY(1,1) | Surrogate primary key |
-| email | NVARCHAR(255) | NO | UQ | UNIQUE | Business key (A1) |
+| user_id | INT | NO | PK | IDENTITY(1,1) | Surrogate primary key; reserved row `-1` = System Booking Service (instant approver, Phase 2 NR5) |
+| email | NVARCHAR(255) | NO | UQ | UNIQUE | Business key (A1); system row uses `system@campus.edu` |
 | full_name | NVARCHAR(255) | NO | — | — | |
 | phone_number | NVARCHAR(50) | YES | — | — | Optional (A7) |
 | role | VARCHAR(50) | NO | — | CHECK (role IN ('student','lecturer','teaching_assistant','facility_staff','department_admin','facility_manager')) | |
@@ -209,7 +213,8 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 |--------|------|----------|-----|---------------------|-------|
 | approval_id | INT | NO | PK | IDENTITY(1,1) | |
 | booking_id | INT | NO | UQ, FK | FK → bookings.booking_id | R10; UNIQUE enforces 1:0..1 |
-| approver_id | INT | NO | FK | FK → users.user_id | R3; trigger-level: must be facility_staff/facility_manager (BR15) |
+| approver_id | INT | NO | FK | FK → users.user_id | R3; trigger-level: must be facility_staff/facility_manager (BR15); system user -1 for instant approvals |
+| approval_source | VARCHAR(50) | NO | — | CHECK (approval_source IN ('instant','staff')), DEFAULT 'staff' | Phase 2 NR5; 'instant' = auto-approved at submission by system user -1 |
 | decision_time | DATETIME2 | NO | — | — | |
 | decision | VARCHAR(50) | NO | — | CHECK (decision IN ('approved','rejected')) | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Trigger-level: required when decision='rejected' (BR7) |
@@ -274,6 +279,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | start_time | DATETIME2 | NO | — | — | |
 | completion_time | DATETIME2 | YES | — | — | |
 | status | VARCHAR(50) | NO | — | CHECK (status IN ('open','in_progress','resolved')), DEFAULT 'open' | |
+| impact_level | VARCHAR(50) | NO | — | CHECK (impact_level IN ('advisory','out-of-service')), DEFAULT 'out-of-service' | Phase 2 NR1; default preserves Phase 1 blocking |
 | result_note | NVARCHAR(MAX) | YES | — | — | |
 | is_deleted | BIT | NO | — | DEFAULT 0 | Soft delete (BR11) |
 | created_at | DATETIME2 | NO | — | DEFAULT GETDATE() | |
@@ -286,6 +292,63 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | space_id | spaces.space_id | NO ACTION | NO ACTION |
 | reporter_id | users.user_id | NO ACTION | NO ACTION |
 | assigned_staff_id | users.user_id | SET NULL | NO ACTION |
+
+---
+
+### maintenance_impact_history
+
+**Status:** 🔓 P2 (new — Task 09, Area 1)
+**Maps from entity:** Maintenance_Impact_History
+**Primary key:** history_id (surrogate)
+
+**Columns:**
+
+| Column | Type | Nullable | Key | Constraint / Default | Notes |
+|--------|------|----------|-----|---------------------|-------|
+| history_id | INT | NO | PK | IDENTITY(1,1) | |
+| maintenance_id | INT | NO | FK | FK → maintenance.maintenance_id | R12 |
+| changed_by | INT | NO | FK | FK → users.user_id | R13; user who changed the level |
+| prior_level | VARCHAR(50) | NO | — | CHECK (prior_level IN ('advisory','out-of-service')) | |
+| new_level | VARCHAR(50) | NO | — | CHECK (new_level IN ('advisory','out-of-service')) | Must differ from prior_level |
+| changed_at | DATETIME2 | NO | — | DEFAULT GETDATE() | |
+| reason | NVARCHAR(MAX) | YES | — | — | Optional note |
+| created_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp (BR12) |
+| updated_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp (BR12) |
+
+**Foreign keys:**
+
+| Column | References | On Delete | On Update |
+|--------|-----------|-----------|-----------|
+| maintenance_id | maintenance.maintenance_id | CASCADE | NO ACTION |
+| changed_by | users.user_id | NO ACTION | NO ACTION |
+
+---
+
+### booking_advisory_acknowledgement
+
+**Status:** 🔓 P2 (new — Task 09, Area 1)
+**Maps from entity:** Booking_Advisory_Acknowledgement
+**Primary key:** ack_id (surrogate)
+
+**Columns:**
+
+| Column | Type | Nullable | Key | Constraint / Default | Notes |
+|--------|------|----------|-----|---------------------|-------|
+| ack_id | INT | NO | PK | IDENTITY(1,1) | |
+| booking_id | INT | NO | UQ, FK | FK → bookings.booking_id | R15; UQ (booking_id, maintenance_id) = one ack per (booking, advisory) |
+| maintenance_id | INT | NO | UQ, FK | FK → maintenance.maintenance_id | R14; the advisory notified |
+| acknowledged_at | DATETIME2 | NO | — | DEFAULT GETDATE() | |
+| acknowledged_by | INT | NO | FK | FK → users.user_id | Normally the requester |
+| created_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp (BR12) |
+| updated_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp (BR12) |
+
+**Foreign keys:**
+
+| Column | References | On Delete | On Update |
+|--------|-----------|-----------|-----------|
+| booking_id | bookings.booking_id | CASCADE | NO ACTION |
+| maintenance_id | maintenance.maintenance_id | CASCADE | NO ACTION |
+| acknowledged_by | users.user_id | NO ACTION | NO ACTION |
 
 ---
 
@@ -323,6 +386,13 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | idx_maintenance_reporter_id | maintenance | reporter_id | Non-clustered |
 | idx_maintenance_assigned_staff_id | maintenance | assigned_staff_id | Non-clustered |
 | idx_maintenance_status | maintenance | status | Non-clustered |
+| PK_maintenance_impact_history | maintenance_impact_history | history_id | Clustered |
+| idx_maintenance_impact_history_maintenance | maintenance_impact_history | maintenance_id | Non-clustered |
+| idx_maintenance_impact_history_changed_by | maintenance_impact_history | changed_by | Non-clustered |
+| PK_booking_advisory_acknowledgement | booking_advisory_acknowledgement | ack_id | Clustered |
+| UQ_booking_advisory_ack_booking_maintenance | booking_advisory_acknowledgement | booking_id, maintenance_id | Unique non-clustered |
+| idx_booking_advisory_ack_maintenance | booking_advisory_acknowledgement | maintenance_id | Non-clustered |
+| idx_booking_advisory_ack_acknowledged_by | booking_advisory_acknowledgement | acknowledged_by | Non-clustered |
 
 ---
 
@@ -333,7 +403,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | BR1 | No overlapping approved bookings | `uq_bookings_active_overlap` (filtered unique index) + `trg_bookings_prevent_overlap` (interval overlap trigger) | Database | ✅ Enforced |
 | BR2 | Unavailable spaces cannot be approved | `trg_booking_approvals_check_space` trigger on `booking_approvals` INSERT when `decision='approved'` | Database | ✅ Enforced |
 | BR3 | Expected participants ≤ space capacity | `trg_bookings_check_capacity` trigger | Database | ✅ Enforced |
-| BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` trigger | Database | ✅ Enforced |
+| BR4 | Maintenance blocks booking | `trg_bookings_check_maintenance` trigger — **re-scoped (Task 09, Area 1):** blocks only where `impact_level='out-of-service'` overlaps; advisory overlaps allowed | Database | ✅ Enforced (Phase 2 update) |
 | BR5 | Maintenance assigned staff tracking | FK `assigned_staff_id` → `users(user_id)` with ON DELETE SET NULL | Database | ✅ Enforced |
 | BR6 | Decision recording (approver, time, decision) | `trg_booking_approvals_decision` trigger | Database | ✅ Enforced |
 | BR7 | Rejection requires reason | `trg_booking_approvals_rejection` trigger | Database | ✅ Enforced |
@@ -349,6 +419,12 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | BR17 | Assigned maintenance staff must be facility staff | `trg_maintenance_check_assignee_role` trigger | Database | ✅ Enforced |
 | BR18 | Cancellation validity and space cleanup | `trg_bookings_cancellation` trigger | Database | ✅ Enforced |
 | BR19 | Maintenance completion restores space status | `trg_maintenance_completion_space_status` trigger | Database | ✅ Enforced |
+| NR1 | Maintenance impact levels (`advisory`\|`out-of-service`) | `maintenance.impact_level` CHECK + DEFAULT 'out-of-service' | Database | ✅ Enforced (Task 09) |
+| NR2 | Advisory acknowledgement recorded with booking | `booking_advisory_acknowledgement` table + insert trigger | Database | ✅ Enforced (Task 09) |
+| NR3 | Impact-level escalation/downgrade history | `maintenance_impact_history` + trigger on `maintenance.impact_level` change | Database | ✅ Enforced (Task 09) |
+| NR4 | Affected approved bookings on escalation | Derived query (report #4, Area 3) from `booking_advisory_acknowledgement` ↔ `maintenance` | Query | ✅ (Area 3) |
+| NR5 | Instant (auto) booking for eligible space types | `booking_approvals.approval_source` (`'instant'`) + reserved system user `-1`; eligible types `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | Database + app | ✅ Enforced (Task 09 design; triggers Task 10) |
+| NR6 | No-overlap invariant holds under concurrency (both pathways) | Enforcement mechanism designed in Task 11 around `uq_bookings_active_overlap` + `trg_bookings_prevent_overlap` | Database (Task 11) | 🔄 Task 11 |
 
 **Note:** See `outputs/03-logical-design-G05.md` §7 for trigger implementation details.
 
@@ -367,4 +443,4 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ---
 
-*Last updated: 2026-08-02 — Phase 2 kickoff. Project extended to 16 tasks (08–16); schema unfrozen for the affected tables (`maintenance`, `bookings`) pending the Task 09 re-design and Task 10 migration.*
+*Last updated: 2026-08-03 — Task 09 (Areas 2–3): added `booking_approvals.approval_source`, reserved system user `-1`, NR5/NR6; Area 3 reporting confirmed no-schema-change. Area 1 additions (`impact_level`, `maintenance_impact_history`, `booking_advisory_acknowledgement`) included. Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*

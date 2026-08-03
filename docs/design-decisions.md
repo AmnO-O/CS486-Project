@@ -565,10 +565,88 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
+### Decision: Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes
+
+**Task:** 9 (Updated ERD + Logical Design)
+**Date:** 2026-08-03
+
+**Problem:** Phase 2 (per `docs/project_phase2_description.md` §1.1) refines maintenance into two impact levels — `advisory` (space still usable) and `out-of-service` (space unusable) — with a space able to hold several concurrent active maintenance records of different levels. Phase 1 treated *every* active maintenance as a block, encoded through the single `spaces.current_status` flag. Two problems follow:
+- The single `current_status` conflates **availability** and **occupancy**, which are no longer mutually exclusive (a space can be occupied — `in_use` — while carrying an advisory). A scalar flag cannot represent both.
+- Phase 1 only refreshed `current_status` on maintenance *completion* (via `trg_maintenance_completion_space_status`); there was no handler to set/refresh it on maintenance INSERT/UPDATE, so the flag could go stale and contradict the true maintenance state.
+
+**Options considered:**
+- Option X: Split `spaces` into two orthogonal flags (`availability_status` + `occupancy_status`) — pros: clean, no conflation; cons: larger schema change, more trigger surface.
+- Option Y: Change blocking semantics so `spaces.current_status` is *derived* from maintenance, and recompute it on every maintenance INSERT/UPDATE/resolve — pros: `spaces` schema unchanged, single source of truth in `maintenance`, minimal schema churn; cons: the flag is still a cached hint, so room-finder/overlap correctness must never trust the flag alone.
+
+**Decision:** We chose Option Y, refined:
+- **`spaces` schema unchanged** — no new columns, no split status flags.
+- **Blocking correctness is enforced at booking/approval time by time-overlap against `maintenance` where `impact_level = 'out-of-service'`**, never by `spaces.current_status`. `trg_bookings_check_maintenance` and `trg_booking_approvals_check_space` must be re-filtered to `out-of-service` only. `advisory` overlaps are allowed but require the acknowledgment record.
+- **`current_status` is a display/filter hint only.** Its value is **recomputed by a trigger on `maintenance` INSERT / UPDATE / resolve** from the combined-state priority rule:
+  1. `retired` (manual, permanent) — highest precedence.
+  2. `temporarily_closed` (manual) — overrides everything below except `retired`.
+  3. `under_maintenance` — iff there is an active `out-of-service` maintenance whose period covers *now*.
+  4. `in_use` — iff there is a live `booking_sessions` row (checked in).
+  5. `available` — fallback (bookable, not occupied).
+  - `advisory` maintenance never sets `under_maintenance`; a space under advisory-only maintenance is `available`. Recompute must respect the retained `booking_sessions` occupancy and the manual `retired`/`temporarily_closed` overrides.
+
+**Impact:** Maintenance triggers are reworked so blocking is level-aware and time-overlap-based; `spaces.current_status` refresh logic mirrors the existing `NOT EXISTS` multi-ticket completion guard. Room-finder and report #4 must derive correctness from `maintenance`/`bookings` overlap, not from the flag.
+
+**Requirement reference:** Phase 2 `docs/project_phase2_description.md` §1.1; Task 08 (C1, BR2, BR4, U5).
+
+---
+
+### Decision: Phase 2 — instant booking pathway: `approval_source` column + reserved system user; concurrency enforcement deferred to Task 11
+
+**Task:** 9 (Updated ERD + Logical Design)
+**Date:** 2026-08-03
+
+**Problem:** Phase 2 §1.2 (C2 / NR5) lets eligible space types be **auto-approved at
+submission** (instant booking) while other requests keep the staff workflow, and NR6
+requires the no-overlap invariant (BR1) to hold across both pathways under concurrency.
+Phase 1's `booking_approvals.approver_id` is NOT NULL (BR6) and the approver must be
+`facility_staff`/`facility_manager` (BR15) — an auto-approval has no real staff approver.
+
+**Options considered:**
+- Option A: Make `approver_id` nullable only for instant approvals, with trigger
+  exceptions — pros: no fake user; cons: breaks BR6/BR15 without adding exceptions to
+  every approval trigger; null identity on auto-approvals.
+- Option B: Reserve a **system user row** (`user_id = -1`, role `facility_manager`,
+  email `system@campus.edu`) as the instant approver, and record the origin in a new
+  `booking_approvals.approval_source` column — pros: `approver_id` stays NOT NULL,
+  BR6/BR15 intact, self-documenting pathway, no new table; cons: a documented special
+  row that reports must exclude from real-user counts.
+
+**Decision:** We chose Option B:
+- `booking_approvals.approval_source VARCHAR(50) NOT NULL DEFAULT 'staff'` with
+  `CHECK (approval_source IN ('instant','staff'))`. `'instant'` = auto-approval at
+  submission; `'staff'` = existing workflow (default preserves Phase 1 semantics).
+- Reserved system user `user_id = -1` (`System Booking Service`, `role='facility_manager'`,
+  `account_status='active'`), seeded via `SET IDENTITY_INSERT` in the Task 10 migration.
+  Instant approvals insert `booking_approvals(approver_id = -1, approval_source = 'instant',
+  decision = 'approved')`; BR6/BR15/BR7 remain satisfied unchanged.
+- **Instant-booking eligibility** = `space_type IN ('classroom','computer_lab','project_lab',
+  'meeting_room')` (U1); auto-approval test = eligibility ∧ requester `account_status='active'`
+  ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed
+  booking (BR1) ∧ no overlapping `out-of-service` maintenance (BR4). The test is business
+  logic reusing existing BR1/BR3/BR4 enforcement; it adds no schema.
+- **Concurrency enforcement (NR6) is deferred to Task 11** — the no-overlap invariant is
+  unchanged, and making it concurrency-safe introduces no ERD/logical schema in Task 09.
+
+**Impact:** `booking_approvals` gains `approval_source`; `users` gains a documented
+reserved seed row (data, no column change). `bookings` schema is unchanged. Reports must
+exclude `user_id = -1` from real-user aggregations. Task 11 designs the serialization
+mechanism; Task 10 implements the DDL/migration.
+
+**Requirement reference:** Phase 2 `docs/project_phase2_description.md` §1.2; Task 08 (C2, NR5, NR6, U1).
+
+---
+
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---|
+| 2026-08-03 | Phase 2 — instant booking pathway: `booking_approvals.approval_source` + reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 concurrency enforcement deferred to Task 11 | Agent | Task 09 |
+| 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |
 | 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
 | 2026-06-18 | Split `bookings` into `bookings` + `booking_approvals` + `booking_sessions` (SRP refactor) | Agent | Post-Task 5 refactor |
 | 2026-06-18 | Added `updated_at` auto-stamp triggers (6 tables) — `AFTER UPDATE` keeps timestamps current beyond the initial INSERT | Agent | Task 05 DDL |

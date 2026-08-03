@@ -75,6 +75,10 @@ _(Populate from `outputs/01` §Relationships; confirm cardinalities in Task 2.)_
 | R9 | Users → Maintenance (assigned staff) | 1:N | Maintenance partial (assignee may be set later) | outputs/01 §6.2 |
 | R10 | Bookings → Booking_Approvals | 1:0..1 | Booking_Approvals total (each decision belongs to exactly one booking) | outputs/01 §5 |
 | R11 | Bookings → Booking_Sessions | 1:0..1 | Booking_Sessions total (each session belongs to exactly one booking) | outputs/01 §4.3 |
+| R12 | Maintenance → Maintenance_Impact_History | 1:N | Maintenance_Impact_History total (each level change belongs to exactly one maintenance) | outputs/08 C1/NR3 |
+| R13 | Users → Maintenance_Impact_History (recorder) | 1:N | Maintenance_Impact_History total (each change is recorded by exactly one user) | outputs/08 C1/NR3 |
+| R14 | Maintenance → Booking_Advisory_Acknowledgement | 1:N | Booking_Advisory_Acknowledgement total (each ack refers to exactly one maintenance) | outputs/08 C1/NR2 |
+| R15 | Bookings → Booking_Advisory_Acknowledgement | 1:N | Booking_Advisory_Acknowledgement total (each ack is attached to exactly one booking) | outputs/08 C1/NR2 |
 
 ---
 
@@ -118,11 +122,11 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 | Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
 |---|---|---|---|---|---|
-| user_id | INT | NO | PK | — | IDENTITY(1,1) |
-| email | NVARCHAR(255) | NO | UQ | UNIQUE | Business key (A1) |
+| user_id | INT | NO | PK | — | IDENTITY(1,1); reserved row `user_id = -1` = System Booking Service (instant approver, Phase 2 NR5) |
+| email | NVARCHAR(255) | NO | UQ | UNIQUE | Business key (A1); system row uses `system@campus.edu` |
 | full_name | NVARCHAR(255) | NO | — | — | Full name |
 | phone_number | NVARCHAR(50) | YES | — | — | Optional (A7) |
-| role | VARCHAR(50) | NO | — | `CHECK IN ('student','lecturer','teaching_assistant','facility_staff','department_admin','facility_manager')` | |
+| role | VARCHAR(50) | NO | — | `CHECK IN ('student','lecturer','teaching_assistant','facility_staff','department_admin','facility_manager')` | system row: `facility_manager` (satisfies BR15) |
 | department_id | INT | NO | FK | `FK → departments.department_id` | |
 | account_status | VARCHAR(50) | NO | — | `CHECK IN ('active','inactive','suspended')` | DEFAULT 'active' |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
@@ -242,7 +246,8 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 |---|---|---|---|---|---|
 | approval_id | INT | NO | PK | — | IDENTITY(1,1) |
 | booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | One decision per booking |
-| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager — enforced via trigger (BR15) |
+| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager — enforced via trigger (BR15); system user `-1` for instant approvals |
+| approval_source | VARCHAR(50) | NO | — | `CHECK IN ('instant','staff')` | DEFAULT 'staff' (Phase 2, NR5); 'instant' = auto-approved at submission by system user |
 | decision_time | DATETIME2 | NO | — | — | |
 | decision | VARCHAR(50) | NO | — | `CHECK IN ('approved','rejected')` | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Required when decision = 'rejected' (BR7) |
@@ -300,6 +305,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | start_time | DATETIME2 | NO | — | — | When reported |
 | completion_time | DATETIME2 | YES | — | — | When resolved |
 | status | VARCHAR(50) | NO | — | `CHECK IN ('open','in_progress','resolved')` | DEFAULT 'open' |
+| impact_level | VARCHAR(50) | NO | — | `CHECK IN ('advisory','out-of-service')` | DEFAULT 'out-of-service' (Phase 2, NR1); default preserves Phase 1 blocking for legacy rows |
 | result_note | NVARCHAR(MAX) | YES | — | — | Resolution summary |
 | is_deleted | BIT | NO | — | — | DEFAULT 0 (A4, soft delete) |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
@@ -307,10 +313,61 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 ---
 
+### Maintenance_Impact_History
+
+**Description:** Audit log of impact-level escalations/downgrades applied to an open maintenance record.
+**Maps to table:** `maintenance_impact_history`
+**Source:** outputs/08 C1 / NR3 (Phase 2, Task 09)
+
+**Candidate keys:**
+- `history_id` (surrogate, PK)
+
+**Attributes:**
+
+| Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
+|---|---|---|---|---|---|
+| history_id | INT | NO | PK | — | IDENTITY(1,1) |
+| maintenance_id | INT | NO | FK | `FK → maintenance.maintenance_id` | Changed record (R12) |
+| changed_by | INT | NO | FK | `FK → users.user_id` | Who changed the level (R13) |
+| prior_level | VARCHAR(50) | NO | — | `CHECK IN ('advisory','out-of-service')` | |
+| new_level | VARCHAR(50) | NO | — | `CHECK IN ('advisory','out-of-service')` | Must differ from prior_level |
+| changed_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
+| reason | NVARCHAR(MAX) | YES | — | — | Optional escalation/downgrade note |
+| created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+| updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+
+---
+
+### Booking_Advisory_Acknowledgement
+
+**Description:** Records that the requester of a booking was notified of (and acknowledged) an active advisory maintenance on the space.
+**Maps to table:** `booking_advisory_acknowledgement`
+**Source:** outputs/08 C1 / NR2 (Phase 2, Task 09)
+
+**Candidate keys:**
+- `ack_id` (surrogate, PK)
+- `(booking_id, maintenance_id)` (business, UNIQUE) — one acknowledgement per (booking, advisory)
+
+**Attributes:**
+
+| Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
+|---|---|---|---|---|---|
+| ack_id | INT | NO | PK | — | IDENTITY(1,1) |
+| booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | Booked request (R15) |
+| maintenance_id | INT | NO | FK, UQ | `FK → maintenance.maintenance_id` | Advisory notified (R14) |
+| acknowledged_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
+| acknowledged_by | INT | NO | FK | `FK → users.user_id` | Normally the requester |
+| created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+| updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+
+---
+
 ## Revision log
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-08-03 | Task 09 (Areas 2–3): added `booking_approvals.approval_source` ('instant'\|'staff'); documented reserved system user `user_id = -1` (System Booking Service, instant approver); Area 3 reporting confirmed as no-schema-change (derived queries) | Phase 2 C2 (NR5/NR6) / C3 |
+| 2026-08-03 | Task 09 (Area 1): added `maintenance.impact_level`; added entities Maintenance_Impact_History (R12, R13) and Booking_Advisory_Acknowledgement (R14, R15) | Phase 2 C1 / NR1–NR4 |
 | 2026-08-02 | 🔓 Unfroze for Phase 2 re-design — project extended to 16 tasks (08–16); added Phase 2 status banner. Affected entities (Maintenance, Bookings) to be updated in Task 09 | Phase 2 kickoff (`docs/project_phase2_description.md`) |
 | 2026-07-01 | Finalized and locked all 9 entities — added audit columns to Booking_Approvals and Booking_Sessions | Task 03 regeneration — logical design finalization |
 | 2026-06-18 | Split Bookings into Bookings + Booking_Approvals + Booking_Sessions per SRP | Architectural refactor based on new_proposed_erd.md |

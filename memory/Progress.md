@@ -25,7 +25,7 @@ description; all are ⬜ until their task runs.
 | Task | Deliverable | Output | Status | Depends on |
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
-| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ⬜ | Task 08 |
+| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved | Task 08 |
 | Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ⬜ | Task 09 |
 | Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
@@ -61,7 +61,8 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
-| 2026-08-02 | Task 08 done — 3 changes (C1 maintenance impact levels, C2 concurrent/instant booking, C3 reporting), 4 affected entities, 4 concurrency conflicts (K1–K4) identified for Task 11 | `outputs/08-requirement-change-analysis-G05.md`; open items in §6 (U1–U5) feed Task 09 |
+| 2026-08-03 | Task 09 approved — updated ERD + logical design (Areas 1–3) | Post-Task 09 handshake |
+| 2026-08-03 | Instant-booking pathway: `booking_approvals.approval_source` + reserved system user `-1`; eligibility `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4); NR6 enforcement deferred to Task 11 | Phase 2 C2 / NR5–NR6 |
 | 2026-08-02 | Phase 2 kickoff — project extended to 16 tasks (08–16); schema unfrozen for affected tables (`maintenance`, `bookings`); Option-B evolve-in-place | `docs/project_phase2_description.md`, design-decisions Phase-2 decision |
 | 2026-06-15 | Building/floor as free-text VARCHAR fields | No query requirement for separate building/floor tables |
 | 2026-06-15 | Rejection reason as separate column | BR7 requires storing rejection reason |
@@ -104,11 +105,11 @@ unresolved question (see AGENTS.md)._
 
 | # | Question | Resolved before | Resolution | Date |
 |---|---|---|---|---|
-| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ⬜ pending | — |
-| U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ⬜ pending | — |
+| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligible `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | 2026-08-03 |
+| U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ✅ New table `booking_advisory_acknowledgement` (one row per (booking, advisory)) | 2026-08-03 |
 | U3 | Escalation → pending vs only approved | Task 11 | ⬜ pending | — |
 | U4 | "Semester" reporting window definition | Task 16 | ⬜ pending | — |
-| U5 | Space-status derivation from maintenance levels | Task 09 | ⬜ pending | — |
+| U5 | Space-status derivation from maintenance levels | Task 09 | ✅ `spaces` unchanged; `current_status` recomputed on maintenance INSERT/UPDATE/resolve via priority rule | 2026-08-03 |
 
 ---
 
