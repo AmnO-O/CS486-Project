@@ -213,8 +213,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 |--------|------|----------|-----|---------------------|-------|
 | approval_id | INT | NO | PK | IDENTITY(1,1) | |
 | booking_id | INT | NO | UQ, FK | FK → bookings.booking_id | R10; UNIQUE enforces 1:0..1 |
-| approver_id | INT | NO | FK | FK → users.user_id | R3; trigger-level: must be facility_staff/facility_manager (BR15); system user -1 for instant approvals |
-| approval_source | VARCHAR(50) | NO | — | CHECK (approval_source IN ('instant','staff')), DEFAULT 'staff' | Phase 2 NR5; 'instant' = auto-approved at submission by system user -1 |
+| approver_id | INT | NO | FK | FK → users.user_id | R3; trigger-level: must be facility_staff/facility_manager (BR15); system user -1 for instant approvals; instant/staff origin derived via `approver_id = -1` (NR5) — no stored origin column (would add a non-key FD and break 3NF) |
 | decision_time | DATETIME2 | NO | — | — | |
 | decision | VARCHAR(50) | NO | — | CHECK (decision IN ('approved','rejected')) | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Trigger-level: required when decision='rejected' (BR7) |
@@ -423,7 +422,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | NR2 | Advisory acknowledgement recorded with booking | `booking_advisory_acknowledgement` table + insert trigger | Database | ✅ Enforced (Task 09) |
 | NR3 | Impact-level escalation/downgrade history | `maintenance_impact_history` + trigger on `maintenance.impact_level` change | Database | ✅ Enforced (Task 09) |
 | NR4 | Affected approved bookings on escalation | Derived query (report #4, Area 3) from `booking_advisory_acknowledgement` ↔ `maintenance` | Query | ✅ (Area 3) |
-| NR5 | Instant (auto) booking for eligible space types | `booking_approvals.approval_source` (`'instant'`) + reserved system user `-1`; eligible types `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | Database + app | ✅ Enforced (Task 09 design; triggers Task 10) |
+| NR5 | Instant (auto) booking for eligible space types | reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (`CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END`); eligible types `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | Database + app | ✅ Enforced (Task 09 design; triggers Task 10) |
 | NR6 | No-overlap invariant holds under concurrency (both pathways) | Enforcement mechanism designed in Task 11 around `uq_bookings_active_overlap` + `trg_bookings_prevent_overlap` | Database (Task 11) | 🔄 Task 11 |
 
 **Note:** See `outputs/03-logical-design-G05.md` §7 for trigger implementation details.
@@ -443,4 +442,4 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ---
 
-*Last updated: 2026-08-03 — Task 09 (Areas 2–3): added `booking_approvals.approval_source`, reserved system user `-1`, NR5/NR6; Area 3 reporting confirmed no-schema-change. Area 1 additions (`impact_level`, `maintenance_impact_history`, `booking_advisory_acknowledgement`) included. Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*
+*Last updated: 2026-08-03 — Task 09 (Areas 2–3): reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (no stored origin column — keeps 3NF); NR5/NR6; Area 3 reporting confirmed no-schema-change. Area 1 additions (`impact_level`, `maintenance_impact_history`, `booking_advisory_acknowledgement`) included. Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*

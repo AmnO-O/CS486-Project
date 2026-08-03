@@ -18,7 +18,7 @@ affected tables `maintenance` and `bookings`, Option B).
 | Area | Phase 1 baseline | Phase 2 design |
 |---|---|---|
 | **1 — Maintenance impact levels** | every active maintenance blocks booking | `maintenance.impact_level` (`advisory` \| `out-of-service`); only `out-of-service` blocks an overlapping booking; escalation/downgrade logged; advisory acknowledgement recorded |
-| **2 — Concurrent/instant booking** | booking approval is staff-only, recorded in `booking_approvals` | eligible space types may be auto-approved at submission; `booking_approvals.approval_source` records the origin; a reserved system user acts as the instant approver |
+| **2 — Concurrent/instant booking** | booking approval is staff-only, recorded in `booking_approvals` | eligible space types may be auto-approved at submission; the origin (instant vs staff) is **derived** from the reserved system approver (`approver_id = -1`) — no stored origin column |
 | **3 — Analytical reporting** | staff-view reports (BR14) | four new reports; all answerable as queries over the existing + Area-1 schema — **no schema change required** |
 
 Task 09 designs **ERD and logical schema only**. The migration scripts (Task 10), the
@@ -44,6 +44,9 @@ erDiagram
         string status
         string impact_level
         string result_note
+        bit is_deleted
+        datetime created_at
+        datetime updated_at
     }
 
     Maintenance_Impact_History {
@@ -53,6 +56,9 @@ erDiagram
         string prior_level
         string new_level
         datetime changed_at
+        string reason
+        datetime created_at
+        datetime updated_at
     }
 
     Booking_Advisory_Acknowledgement {
@@ -61,6 +67,8 @@ erDiagram
         int maintenance_id
         datetime acknowledged_at
         int acknowledged_by
+        datetime created_at
+        datetime updated_at
     }
 
     Maintenance ||--o{ Maintenance_Impact_History : "has_level_changes"
@@ -68,6 +76,11 @@ erDiagram
     Maintenance ||--o{ Booking_Advisory_Acknowledgement : "notified_by"
     Bookings ||--o{ Booking_Advisory_Acknowledgement : "acknowledges"
 ```
+
+> Attribute-level consistency: the excerpts above list **every column of the logical
+> tables in §A.2**, including the audit columns (`created_at`, `updated_at`) and the
+> soft-delete flag (`is_deleted`), so the ERD excerpt matches the table definitions
+> column-for-column.
 
 Relationship notes (new / changed only):
 
@@ -127,12 +140,19 @@ a space at booking time.
 | Column | Type | Nullable | PK / UQ | FK Reference | Default | Notes |
 |--------|------|----------|---------|-------------|---------|-------|
 | ack_id | INT | NO | PK | — | IDENTITY(1,1) | |
-| booking_id | INT | NO | UQ | bookings(booking_id) | — | UQ with maintenance_id = one ack per (booking, advisory) |
-| maintenance_id | INT | NO | UQ | maintenance(maintenance_id) | — | the advisory the requester was informed about |
+| booking_id | INT | NO | UQ | bookings(booking_id) | — | Part of composite UQ (booking_id, maintenance_id) — see note below |
+| maintenance_id | INT | NO | UQ | maintenance(maintenance_id) | — | Part of composite UQ (booking_id, maintenance_id) — the advisory the requester was informed about |
 | acknowledged_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | when the requester confirmed |
 | acknowledged_by | INT | NO | — | users(user_id) | — | normally the requester; FK → users |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | BR12 |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | BR12 |
+
+**Composite unique key:** `UQ (booking_id, maintenance_id)` is **one** constraint over
+both columns, not two independent unique columns. A booking may be affected by several
+advisories (one row per advisory), and one advisory may affect several bookings (one row
+per booking) — so **neither column is unique on its own; only the pair is**. The
+constraint enforces **at most one acknowledgement per (booking, advisory) pair**: the
+same booking cannot acknowledge the same advisory twice.
 
 **Enforcement:** at booking INSERT/UPDATE, if any active `advisory` maintenance overlaps
 the requested period, the booking is allowed and one acknowledgement row must be
@@ -183,8 +203,12 @@ erDiagram
         int requester_id
         datetime requested_start_time
         datetime requested_end_time
+        string purpose
         int expected_participants
         string status
+        bit is_deleted
+        datetime created_at
+        datetime updated_at
     }
 
     Booking_Approvals {
@@ -193,34 +217,53 @@ erDiagram
         int approver_id
         datetime decision_time
         string decision
-        string approval_source
         string rejection_reason
+        string decision_note
+        datetime created_at
+        datetime updated_at
     }
 
     Users {
         int user_id PK
         string email
+        string full_name
+        string phone_number
         string role
+        int department_id
         string account_status
+        datetime created_at
+        datetime updated_at
     }
 
     Bookings ||--o| Booking_Approvals : "decided_by"
     Users ||--o{ Booking_Approvals : "approves"
 ```
 
-> The instant/staff pathway is represented **as an attribute** (`approval_source`) on the
-> existing `Booking_Approvals` relationship — no new entity or relationship is needed.
-> The instant approver is a **reserved system user row** in `Users` (user_id = -1), so
-> the approver FK (R3, BR15) is satisfied unchanged.
+> Attribute-level consistency: the excerpts above list every column of the logical
+> tables in §B.2, including audit columns (`created_at`, `updated_at`) and the
+> soft-delete flag (`is_deleted`), matching the table definitions column-for-column.
+
+> The instant/staff pathway is **derived, not stored**: an approval is `instant` iff
+> `approver_id = -1` (the reserved system user), otherwise `staff`. No new attribute,
+> entity, or relationship is needed — a stored origin column was rejected to keep
+> `booking_approvals` 3NF/BCNF (storing it would add a non-key FD
+> `approver_id → origin` and violate 3NF; see §5). The instant approver is a
+> **reserved system user row** in `Users` (user_id = -1), so the approver FK
+> (R3, BR15) is satisfied unchanged.
 
 ### B.2 Logical tables
 
-#### B.2.1 `booking_approvals` (changed — add `approval_source`)
+#### B.2.1 `booking_approvals` (no column change — origin derived)
 
-| Column | Type | Nullable | PK / UQ | FK Reference | Default | Notes |
-|--------|------|----------|---------|-------------|---------|-------|
-| … *(all Phase 1 columns unchanged)* | | | | | | |
-| **approval_source** | VARCHAR(50) | NO | — | — | `'staff'` | NEW (NR5). CHECK IN ('instant','staff'). `'instant'` = auto-approval at submission by the system user; `'staff'` = existing staff workflow. Default keeps Phase 1 staff-approval semantics. |
+**No schema change.** The instant/staff origin is **not stored** as a column. It is
+derived from the reserved system approver:
+
+- A **stored origin column** was **rejected**: it would introduce the functional
+  dependency `approver_id → origin` (instant ⟺ approver_id = -1). Because
+  `approver_id` is not a superkey and `origin` is not prime, that FD would
+  break 3NF (see §5).
+- **Derived instead:** `CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END` in
+  queries and reports (NR5). All existing `booking_approvals` columns are unchanged.
 
 **Constraint / behavior notes:**
 - `approver_id` stays **NOT NULL**; BR6 (`trg_booking_approvals_decision`) and BR15
@@ -248,7 +291,8 @@ Task 10 migration via `SET IDENTITY_INSERT`):
 
 This row is documented in `docs/schema-registry.md` as a special record; it must be
 excluded from any "real user" reports. The instant approval flow inserts
-`booking_approvals(approver_id = -1, approval_source = 'instant', decision = 'approved')`.
+`booking_approvals(approver_id = -1, decision = 'approved')`; the pathway is derived
+as `CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END` (§B.2.1).
 
 ### B.3 No-schema-change statement (concurrency enforcement)
 
@@ -286,14 +330,16 @@ schema plus the Area-1 additions. No support entity or table is required:
 | Relation | 1NF | 2NF | 3NF | Evidence |
 |---|---|---|---|---|
 | `maintenance` | ✅ atomic, no repeating groups | ✅ single-column PK | ✅ no transitive dependency | `impact_level` is a direct property of `maintenance_id`; no non-key column depends on another non-key column |
-| `maintenance_impact_history` | ✅ atomic | ✅ single-column PK `history_id` | ✅ no transitive dependency | `maintenance_id`, `changed_by`, `prior_level`, `new_level`, `changed_at` all depend only on `history_id` |
-| `booking_advisory_acknowledgement` | ✅ atomic | ✅ single-column PK `ack_id` | ✅ no transitive dependency | `booking_id`, `maintenance_id`, `acknowledged_at`, `acknowledged_by` depend only on `ack_id`; UQ (booking_id, maintenance_id) is an alternate key, not a partial dependency |
-| `booking_approvals` | ✅ atomic | ✅ single-column PK `approval_id` | ✅ no transitive dependency | `approval_source` is a direct property of the decision row (`approval_id`); no functional dependency `approval_id → non-key → other non-key`; UQ `booking_id` is an alternate key |
+| `maintenance_impact_history` | ✅ atomic | ✅ single-column PK `history_id` | ✅ no transitive dependency | `maintenance_id`, `changed_by`, `prior_level`, `new_level`, `changed_at`, `reason`, `created_at`, `updated_at` all depend only on `history_id` |
+| `booking_advisory_acknowledgement` | ✅ atomic | ✅ single-column PK `ack_id` | ✅ no transitive dependency | `booking_id`, `maintenance_id`, `acknowledged_at`, `acknowledged_by`, `created_at`, `updated_at` depend only on `ack_id`; UQ (booking_id, maintenance_id) is an alternate key, not a partial dependency |
+| `booking_approvals` | ✅ atomic | ✅ single-column PK `approval_id` | ✅ no transitive dependency | every column depends only on the PK `approval_id` and the alternate key `booking_id`; no FD `approval_id → non-key → other non-key`; the instant/staff origin is **derived from `approver_id = -1`**, not stored, so no non-key FD (e.g. `approver_id → origin`) exists; UQ `booking_id` is an alternate key |
 | `users` | ✅ atomic | ✅ single-column PK `user_id` | ✅ no transitive dependency | unchanged from Phase 1; the reserved system row does not alter the relation's FDs |
 
 All affected relations satisfy at least 3NF. No functional dependencies beyond
 key → each non-key attribute were identified; no multi-valued attributes; no
-composite-key partial dependencies (single-column surrogate PKs).
+partial dependencies on any candidate key (the two new tables use single-column
+surrogate PKs; their composite unique keys are alternate keys whose full pairs
+determine every attribute, so no proper-subset dependency exists).
 
 ---
 
@@ -306,7 +352,7 @@ composite-key partial dependencies (single-column surrogate PKs).
 | **BR2** | Unavailable spaces cannot be approved (read `spaces.current_status`) | Availability is decided by `out-of-service` maintenance overlap; `current_status` is only a hint | none (spaces unchanged) | `trg_booking_approvals_check_space` re-sourced — Task 10/11 |
 | **BR4** | Any unresolved maintenance blocks booking | Only `impact_level='out-of-service'` blocks; advisory overlaps allowed but require acknowledgement | `maintenance.impact_level` (A.2.1) + ack table (A.2.3) | `trg_bookings_check_maintenance` re-filtered — Task 10 |
 | **BR19** | Maintenance completion restores space to `available` | Completion feeds the impact-aware recompute; advisory completion never touched `under_maintenance` | none | recompute trigger (A.3) — Task 10 |
-| **BR1** | No overlapping approved bookings | Same invariant, now also enforced for auto-approved (instant) bookings | `booking_approvals.approval_source` (B.2.1) records the path | concurrency-safe enforcement — Task 11 |
+| **BR1** | No overlapping approved bookings | Same invariant, now also enforced for auto-approved (instant) bookings | the origin is derived from `approver_id = -1` (B.2.1) | concurrency-safe enforcement — Task 11 |
 | **BR14** | Staff view reports | New reporting set (4 reports) | none | query + indexes — Tasks 15/16 |
 | **BR6/BR7/BR15** | Approver metadata / role rules | Instant path satisfies them via the reserved system user | reserved `users` row (B.2.2) | none |
 
@@ -319,7 +365,7 @@ composite-key partial dependencies (single-column surrogate PKs).
 | D3 | Advisory awareness not modeled | new `booking_advisory_acknowledgement` | Added table | NR2 — must record that the requester was informed of active advisories |
 | D4 | `spaces.current_status` a stale hint, set only on completion | recomputed on maintenance INSERT/UPDATE/resolve via priority rule | Behavior change | U5 / `docs/design-decisions.md` — flag must stay consistent with maintenance state; advisory must not set `under_maintenance` |
 | D5 | Escalation notification not addressed | no `escalation_notification` table | Decided out of scope | NR4 is report #4 (Area 3), derivable from acknowledgement + maintenance overlap |
-| D6 | Approval origin not recorded | `booking_approvals.approval_source` (`'instant'` \| `'staff'`) | Added column | NR5 — must distinguish auto-approval from staff approval |
+| D6 | Approval origin not recorded | derived `approver_id = -1` ⇒ `'instant'`, else `'staff'` (no stored column) | No column added — derived attribute | NR5 — distinguishes auto-approval from staff approval; a stored origin column was rejected because `approver_id → origin` (non-key → non-prime) would break 3NF (§5) |
 | D7 | No approver for auto-approval | reserved system user `user_id = -1` (`role='facility_manager'`) | Added seed row (data) | keeps `approver_id NOT NULL` and BR6/BR15 intact |
 | D8 | Reporting needs (C3) | no support table added | No schema change | reports are derived queries (§4) |
 
@@ -363,5 +409,7 @@ Carried forward (not in Task 09 scope): **U3** (escalation → pending vs only a
 
 | Version | Date | Change |
 |---|---|---|
-| 2.0 (all) | 2026-08-03 | Full regeneration covering all three areas: Area 1 (maintenance impact levels, `maintenance_impact_history`, `booking_advisory_acknowledgement`, `current_status` recompute); Area 2 (`booking_approvals.approval_source`, reserved system user `-1`, instant eligibility/test, concurrency enforcement deferred to Task 11); Area 3 (no schema change — derived queries). |
+| 2.2 (Area 2) | 2026-08-03 | Revision: the instant/staff origin is **derived** from `approver_id = -1` (no stored origin column; a stored one would add the non-key FD `approver_id → origin` and break 3NF). ERD excerpt (§B.1), §B.2.1 (no-column-change statement), §B.2.2, §5, §6.1, §6.2 updated. |
+| 2.1 (all) | 2026-08-03 | Revision: ERD excerpts in §A.1 and §B.1 made attribute-consistent with the logical tables (audit columns `created_at`/`updated_at` and `is_deleted` shown); §A.2.3 composite UQ (booking_id, maintenance_id) wording clarified with an explicit explanation; §5 evidence rows completed and the no-partial-dependency reasoning corrected for the composite alternate keys. |
+| 2.0 (all) | 2026-08-03 | Full regeneration covering all three areas: Area 1 (maintenance impact levels, `maintenance_impact_history`, `booking_advisory_acknowledgement`, `current_status` recompute); Area 2 (instant/staff origin derived from the reserved system user `-1`, instant eligibility/test, concurrency enforcement deferred to Task 11); Area 3 (no schema change — derived queries). |
 | 1.0 (Area 1) | 2026-08-03 | Created output with Area 1 only (`--req 1`): maintenance impact levels, `maintenance_impact_history`, `booking_advisory_acknowledgement`, `current_status` recompute. Areas 2/3 pending scoped runs. |

@@ -21,9 +21,10 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - Task 09 output: `outputs/09-updated-erd-and-logical-design-G05.md` ✅ Approved.
   Areas 1–3 designed (schema-only): `maintenance.impact_level` +
   `maintenance_impact_history` + `booking_advisory_acknowledgement` (Area 1);
-  `booking_approvals.approval_source` + reserved system user `-1` for instant booking,
-  eligibility/test locked, concurrency enforcement deferred to Task 11 (Area 2);
-  reporting = no-schema-change (Area 3). U1/U2/U5 resolved; U3→Task 11, U4→Task 16.
+  instant/staff origin derived from the reserved system user `-1` (`approver_id = -1`,
+  no stored origin column — keeps 3NF) for instant booking, eligibility/test locked,
+  concurrency enforcement deferred to Task 11 (Area 2); reporting = no-schema-change
+  (Area 3). U1/U2/U5 resolved; U3→Task 11, U4→Task 16.
 
 ## Verification summary (Phase 1 dependency for Phase 2)
 - SCHEMA FREEZE approved (Task 04), DDL `outputs/05-db-definition-G05.sql`.
@@ -35,6 +36,6 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 ## Next steps
 1. Proceed to **Task 10** — schema migration (`outputs/10-schema-migration-G05.sql`):
    DDL delta on the Phase 1 baseline implementing the Task 09 design (impact_level,
-   two new tables, `approval_source`, system user `-1` seed) + migration of legacy rows.
+   two new tables, system user `-1` seed) + migration of legacy rows.
 2. Then Task 11 — concurrency design (deferred from Task 09: NR6 enforcement, U3).
 3. Continue the dependency chain 10 → 11 → … → 16 per `memory/Progress.md`.

@@ -246,8 +246,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 |---|---|---|---|---|---|
 | approval_id | INT | NO | PK | — | IDENTITY(1,1) |
 | booking_id | INT | NO | FK, UQ | `FK → bookings.booking_id` | One decision per booking |
-| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager — enforced via trigger (BR15); system user `-1` for instant approvals |
-| approval_source | VARCHAR(50) | NO | — | `CHECK IN ('instant','staff')` | DEFAULT 'staff' (Phase 2, NR5); 'instant' = auto-approved at submission by system user |
+| approver_id | INT | NO | FK | `FK → users.user_id` | Must be facility_staff/facility_manager — enforced via trigger (BR15); system user `-1` for instant approvals; instant/staff origin derived from `approver_id = -1` (NR5) |
 | decision_time | DATETIME2 | NO | — | — | |
 | decision | VARCHAR(50) | NO | — | `CHECK IN ('approved','rejected')` | |
 | rejection_reason | NVARCHAR(MAX) | YES | — | — | Required when decision = 'rejected' (BR7) |
@@ -366,7 +365,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 | Date | Change | Reason |
 |---|---|---|
-| 2026-08-03 | Task 09 (Areas 2–3): added `booking_approvals.approval_source` ('instant'\|'staff'); documented reserved system user `user_id = -1` (System Booking Service, instant approver); Area 3 reporting confirmed as no-schema-change (derived queries) | Phase 2 C2 (NR5/NR6) / C3 |
+| 2026-08-03 | Task 09 (Areas 2–3): documented reserved system user `user_id = -1` (System Booking Service, instant approver); instant/staff origin derived from `approver_id = -1` (no stored origin column — keeps 3NF); Area 3 reporting confirmed as no-schema-change (derived queries) | Phase 2 C2 (NR5/NR6) / C3 |
 | 2026-08-03 | Task 09 (Area 1): added `maintenance.impact_level`; added entities Maintenance_Impact_History (R12, R13) and Booking_Advisory_Acknowledgement (R14, R15) | Phase 2 C1 / NR1–NR4 |
 | 2026-08-02 | 🔓 Unfroze for Phase 2 re-design — project extended to 16 tasks (08–16); added Phase 2 status banner. Affected entities (Maintenance, Bookings) to be updated in Task 09 | Phase 2 kickoff (`docs/project_phase2_description.md`) |
 | 2026-07-01 | Finalized and locked all 9 entities — added audit columns to Booking_Approvals and Booking_Sessions | Task 03 regeneration — logical design finalization |

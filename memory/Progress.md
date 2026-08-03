@@ -62,7 +62,7 @@ Do NOT generate DDL or sample data before this gate.
 | Date | Decision | Reason |
 |---|---|---|
 | 2026-08-03 | Task 09 approved — updated ERD + logical design (Areas 1–3) | Post-Task 09 handshake |
-| 2026-08-03 | Instant-booking pathway: `booking_approvals.approval_source` + reserved system user `-1`; eligibility `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4); NR6 enforcement deferred to Task 11 | Phase 2 C2 / NR5–NR6 |
+| 2026-08-03 | Instant-booking pathway: origin **derived** from reserved system user `-1` (no stored origin column — keeps 3NF); eligibility `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4); NR6 enforcement deferred to Task 11 | Phase 2 C2 / NR5–NR6 |
 | 2026-08-02 | Phase 2 kickoff — project extended to 16 tasks (08–16); schema unfrozen for affected tables (`maintenance`, `bookings`); Option-B evolve-in-place | `docs/project_phase2_description.md`, design-decisions Phase-2 decision |
 | 2026-06-15 | Building/floor as free-text VARCHAR fields | No query requirement for separate building/floor tables |
 | 2026-06-15 | Rejection reason as separate column | BR7 requires storing rejection reason |

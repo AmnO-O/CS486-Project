@@ -595,7 +595,7 @@ _(To be populated during Tasks 1–4.)_
 
 ---
 
-### Decision: Phase 2 — instant booking pathway: `approval_source` column + reserved system user; concurrency enforcement deferred to Task 11
+### Decision: Phase 2 — instant booking pathway: derived origin + reserved system user; concurrency enforcement deferred to Task 11
 
 **Task:** 9 (Updated ERD + Logical Design)
 **Date:** 2026-08-03
@@ -605,25 +605,32 @@ submission** (instant booking) while other requests keep the staff workflow, and
 requires the no-overlap invariant (BR1) to hold across both pathways under concurrency.
 Phase 1's `booking_approvals.approver_id` is NOT NULL (BR6) and the approver must be
 `facility_staff`/`facility_manager` (BR15) — an auto-approval has no real staff approver.
+NR5 also requires distinguishing an instant (auto) approval from a staff approval.
 
 **Options considered:**
 - Option A: Make `approver_id` nullable only for instant approvals, with trigger
   exceptions — pros: no fake user; cons: breaks BR6/BR15 without adding exceptions to
   every approval trigger; null identity on auto-approvals.
 - Option B: Reserve a **system user row** (`user_id = -1`, role `facility_manager`,
-  email `system@campus.edu`) as the instant approver, and record the origin in a new
-  `booking_approvals.approval_source` column — pros: `approver_id` stays NOT NULL,
-  BR6/BR15 intact, self-documenting pathway, no new table; cons: a documented special
-  row that reports must exclude from real-user counts.
+  email `system@campus.edu`) as the instant approver — pros: `approver_id` stays NOT
+  NULL, BR6/BR15 intact, no new table; cons: a documented special row that reports must
+  exclude from real-user counts. A **stored origin column** on `booking_approvals` was
+  considered but **rejected**: it would add the functional dependency
+  `approver_id → origin` (instant ⟺ approver_id = -1). Since `approver_id` is not a
+  superkey and `origin` is not prime, that FD violates 3NF (project goal: minimum 3NF).
+  Because the reserved user `-1` is *the* instant approver, the origin is fully
+  derivable, so no column is needed.
+- Option C: Keep a stored origin column but document it as an accepted denormalization —
+  cons: contradicts the 3NF goal; leaves redundant state that can drift from `approver_id`.
 
-**Decision:** We chose Option B:
-- `booking_approvals.approval_source VARCHAR(50) NOT NULL DEFAULT 'staff'` with
-  `CHECK (approval_source IN ('instant','staff'))`. `'instant'` = auto-approval at
-  submission; `'staff'` = existing workflow (default preserves Phase 1 semantics).
+**Decision:** We chose Option B **without a stored origin column**:
+- **Derived origin (NR5):** `CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END`
+  in queries and reports. `booking_approvals` gains **no** new column; every FD in the
+  relation keeps a superkey on the left (`approval_id`, `booking_id`), so it is 3NF/BCNF.
 - Reserved system user `user_id = -1` (`System Booking Service`, `role='facility_manager'`,
   `account_status='active'`), seeded via `SET IDENTITY_INSERT` in the Task 10 migration.
-  Instant approvals insert `booking_approvals(approver_id = -1, approval_source = 'instant',
-  decision = 'approved')`; BR6/BR15/BR7 remain satisfied unchanged.
+  Instant approvals insert `booking_approvals(approver_id = -1, decision = 'approved')`;
+  BR6/BR15/BR7 remain satisfied unchanged.
 - **Instant-booking eligibility** = `space_type IN ('classroom','computer_lab','project_lab',
   'meeting_room')` (U1); auto-approval test = eligibility ∧ requester `account_status='active'`
   ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed
@@ -632,12 +639,12 @@ Phase 1's `booking_approvals.approver_id` is NOT NULL (BR6) and the approver mus
 - **Concurrency enforcement (NR6) is deferred to Task 11** — the no-overlap invariant is
   unchanged, and making it concurrency-safe introduces no ERD/logical schema in Task 09.
 
-**Impact:** `booking_approvals` gains `approval_source`; `users` gains a documented
-reserved seed row (data, no column change). `bookings` schema is unchanged. Reports must
-exclude `user_id = -1` from real-user aggregations. Task 11 designs the serialization
-mechanism; Task 10 implements the DDL/migration.
+**Impact:** `booking_approvals` schema is unchanged from Phase 1; `users` gains a
+documented reserved seed row (data, no column change). `bookings` schema is unchanged.
+Reports must exclude `user_id = -1` from real-user aggregations. Task 11 designs the
+serialization mechanism; Task 10 implements the DDL/migration and seeds the system user.
 
-**Requirement reference:** Phase 2 `docs/project_phase2_description.md` §1.2; Task 08 (C2, NR5, NR6, U1).
+**Requirement reference:** Phase 2 `docs/project_phase2_description.md` §1.2; Task 08 (C2, NR5, NR6, U1); project goal "normalized to at least 3NF".
 
 ---
 
@@ -645,7 +652,7 @@ mechanism; Task 10 implements the DDL/migration.
 
 | Date | Change | By | Task |
 |---|---|---|---|
-| 2026-08-03 | Phase 2 — instant booking pathway: `booking_approvals.approval_source` + reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 concurrency enforcement deferred to Task 11 | Agent | Task 09 |
+| 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
 | 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |
 | 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
 | 2026-06-18 | Split `bookings` into `bookings` + `booking_approvals` + `booking_sessions` (SRP refactor) | Agent | Post-Task 5 refactor |

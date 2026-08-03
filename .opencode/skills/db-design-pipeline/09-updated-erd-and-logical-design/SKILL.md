@@ -123,9 +123,12 @@ Task 09 covers three Phase 2 change areas. Each is a **numbered section** in the
      recompute trigger's algorithm here beyond what the schema requires.
 3. **Section B — Area 2: Concurrent/instant booking & approval**
    - ERD excerpt for the booking and approval origin/pathway (instant vs staff).
-   - Logical tables for booking and approval — schema only: the booking-origin
-     attribute (`approval_source`), the approver identity model (e.g., the reserved
-     system user as a documented seed row), any supporting indexes/constraints.
+   - Logical tables for booking and approval — schema only: the booking-origin is
+     **derived** from the reserved system approver (`approver_id = -1`, `CASE WHEN
+     approver_id = -1 THEN 'instant' ELSE 'staff' END`) — do **not** add a stored
+     origin column (it would add the non-key FD `approver_id → origin` and break 3NF);
+     the approver identity model is the reserved system user as a documented seed row;
+     any supporting indexes/constraints.
    - The locking / serialization mechanism of the no-overlap rule is **not** designed
      here (Tasks 11–13); only schema objects that later tasks rely on may appear.
    - If instant booking causes no schema change, write the no-schema-change statement.
