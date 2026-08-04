@@ -26,7 +26,7 @@ description; all are ⬜ until their task runs.
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
 | Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved | Task 08 |
-| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ⬜ | Task 09 |
+| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ✅ Approved (2026-08-04) | Task 09 |
 | Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
@@ -61,6 +61,9 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-08-04 | Task 10 approved — Phase 2 schema migration (delta on Phase 1 baseline) + rollback script, compiled & verified on a scratch DB | Post-Task 10 handshake |
+| 2026-08-04 | `changed_by` audit mechanism = `SESSION_CONTEXT(N'current_user_id')` via `sys.sp_set_session_context` (not `CONTEXT_INFO()` byte packing); fallback to reserved system user `-1`; session-scoped → app layer must set/clear per unit of work (connection-pooling leak risk, handoff to Task 11/12) | Reviewer feedback — SQL Server 2016+ recommended mechanism |
+| 2026-08-04 | `trg_maintenance_recompute_space_status` guarded to status-relevant columns: `IF UPDATE(status) OR UPDATE(impact_level) OR UPDATE(start_time) OR UPDATE(completion_time) OR UPDATE(is_deleted)` — skips no-op updates; `is_deleted` required so soft-delete still recomputes | Reviewer feedback — avoid wasted recompute round-trips without regression |
 | 2026-08-03 | Task 09 approved — updated ERD + logical design (Areas 1–3) | Post-Task 09 handshake |
 | 2026-08-03 | Instant-booking pathway: origin **derived** from reserved system user `-1` (no stored origin column — keeps 3NF); eligibility `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4); NR6 enforcement deferred to Task 11 | Phase 2 C2 / NR5–NR6 |
 | 2026-08-02 | Phase 2 kickoff — project extended to 16 tasks (08–16); schema unfrozen for affected tables (`maintenance`, `bookings`); Option-B evolve-in-place | `docs/project_phase2_description.md`, design-decisions Phase-2 decision |

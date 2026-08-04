@@ -5,7 +5,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 
 ## Current phase
 **Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-03**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-03; Task 10 ✅ 2026-08-04**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -25,6 +25,17 @@ for the affected tables (Option B, `docs/design-decisions.md`).
   no stored origin column — keeps 3NF) for instant booking, eligibility/test locked,
   concurrency enforcement deferred to Task 11 (Area 2); reporting = no-schema-change
   (Area 3). U1/U2/U5 resolved; U3→Task 11, U4→Task 16.
+- Task 10 output: `outputs/10-schema-migration-G05.sql` + companion rollback
+  `outputs/10-schema-migration-G05-rollback.sql` ✅ Approved 2026-08-04.
+  Data-preserving delta: `maintenance.impact_level` (DF+CK, backfills legacy rows to
+  `out-of-service`), new tables `maintenance_impact_history` +
+  `booking_advisory_acknowledgement` (composite UQ), 4 new indexes, reserved system
+  approver `user_id = -1` seed, one-time `current_status` refresh, 7 triggers
+  (2 replaced: BR4/BR2+NR2 gate; 5 new: ack correspondence, impact history,
+  recompute with `UPDATE()` guard incl. `is_deleted`, 2× updated_at). Compiled on a
+  scratch DB: migration + idempotent re-run + rollback all exit 0; post-rollback counts
+  == baseline. Trajectories under `logs/trajectory/task10/`; compile logs under
+  `logs/eval/task10/`.
 
 ## Verification summary (Phase 1 dependency for Phase 2)
 - SCHEMA FREEZE approved (Task 04), DDL `outputs/05-db-definition-G05.sql`.
@@ -34,8 +45,14 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. Proceed to **Task 10** — schema migration (`outputs/10-schema-migration-G05.sql`):
-   DDL delta on the Phase 1 baseline implementing the Task 09 design (impact_level,
-   two new tables, system user `-1` seed) + migration of legacy rows.
-2. Then Task 11 — concurrency design (deferred from Task 09: NR6 enforcement, U3).
-3. Continue the dependency chain 10 → 11 → … → 16 per `memory/Progress.md`.
+1. Proceed to **Task 11** — concurrency design (`outputs/11-concurrency-design-G05.md`):
+   NR6 no-overlap enforcement across instant + staff pathways under concurrency; resolve
+   **U3 (escalation → pending vs only approved)** before generating. The application
+   layer contract from Task 10 applies: `changed_by` flows via
+   `SESSION_CONTEXT(N'current_user_id')` — the app MUST set it before each unit of work
+   and clear it (set NULL) after (session-scoped, not transaction-scoped;
+   connection-pooling reuse can leak a stale user id). Trg-generated approvals must
+   degrade to the reserved system user `-1`.
+2. Then Task 12 — concurrency implementation, then 13 → 14 → 15/16 per `memory/Progress.md`.
+3. Task 14 (data generator) depends on Task 10's migrated schema (`impact_level`, new
+   tables, system user `-1`).

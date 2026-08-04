@@ -272,6 +272,74 @@ project convention and document the mapping in a SQL comment.
 
 ---
 
+## Implementation Notes (verified during scratch-DB compile)
+
+Validated patterns and T-SQL facts learned from compiling this task. Where a
+choice exists, both options are listed with when-to-use guidance — prefer the
+recommended option unless the target files justify the alternative.
+
+### Audit-context mechanism for `changed_by` (e.g. `trg_maintenance_impact_history`)
+
+| Option | When to use |
+|---|---|
+| `SESSION_CONTEXT(N'current_user_id')`, set via `EXEC sys.sp_set_session_context` (recommended) | SQL Server 2016+ (this project targets 2019+). Named key, no byte packing; `TRY_CAST(... AS INT)` returns NULL when unset/invalid → clean fallback to the reserved user `-1`. |
+| `CONTEXT_INFO()` binary (pack/unpack `CONVERT(INT, SUBSTRING(@ctx,1,4))`) | Only if a consumer already depends on it or SESSION_CONTEXT is unavailable. Manual byte packing and big-endian assumptions are error-prone. |
+
+Caveat for **both**: the mechanism is session-scoped, not transaction-scoped.
+With connection pooling a reused connection may carry a stale context into
+another user's work. Add a handoff note in the SQL header: the application
+layer must set the key before each unit of work and clear it (set NULL)
+afterwards; the trigger must still degrade safely (fallback row) when no
+context is set.
+
+### Recompute-trigger guard (e.g. `trg_maintenance_recompute_space_status`)
+
+An `AFTER INSERT, UPDATE` recompute trigger may skip work when only irrelevant
+columns changed:
+
+- Guard on every column the trigger body reads. For the current registry that
+  is `IF UPDATE(status) OR UPDATE(impact_level) OR UPDATE(start_time) OR UPDATE(completion_time) OR UPDATE(is_deleted)`.
+- `is_deleted` is easy to forget but required — soft-deleting a ticket must
+  still recompute.
+- `UPDATE()` returns TRUE on INSERT (every column counts as updated), so the
+  guard never suppresses the INSERT path.
+- If the trigger recomputes from **other** tables (e.g. live sessions), a
+  column guard is not sufficient — keep the guard only when the trigger reads
+  the table's own columns.
+
+### SQL Server batch-compile gotcha
+
+`ALTER TABLE ... ADD <column>` followed by `ADD CONSTRAINT CHECK` in the same
+batch fails to compile (`Msg 207 Invalid column name`). Write the constraints
+inline in the single ADD statement:
+
+```sql
+ALTER TABLE dbo.<table> ADD <column> <type> NOT NULL
+    CONSTRAINT DF_<table>_<column> DEFAULT (...)
+    CONSTRAINT CK_<table>_<rule> CHECK (...);
+```
+
+### Smoke-test isolation under XACT_ABORT
+
+Phase 1-style triggers abort the whole transaction with `ROLLBACK TRANSACTION`.
+Under `SET XACT_ABORT ON` an expected-error sub-test inside a shared smoke
+transaction also kills the happy-path checks. Run each expected-error sub-test
+in its own `BEGIN TRANSACTION`/`ROLLBACK` pair with TRY/CATCH, and keep the
+happy-path checks in one rolled-back transaction of their own.
+
+### Idempotency re-run behavior
+
+A preflight that hard-stops (`THROW`) when Phase 2 objects already exist makes
+the mandated re-run (compile step e) fail by design. Instead:
+
+- Preflight prints a WARNING and enters "re-run mode": additive steps guarded
+  and skipped, triggers dropped + recreated.
+- Every new/replaced trigger still needs a guarded `DROP` in the drop section
+  (`IF OBJECT_ID(N'dbo.<trigger>', N'TR') IS NOT NULL DROP TRIGGER ...`),
+  otherwise the re-run dies on `Msg 2714` (object already exists).
+
+---
+
 ## Output Structure
 
 Generate the SQL in this order:
