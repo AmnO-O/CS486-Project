@@ -3,7 +3,7 @@
 **Group:** G05
 **Course:** CS486 — Introduction to Database System
 **Phase:** 2 · **Task:** 09
-**Date:** 2026-08-03
+**Date:** 2026-08-04
 
 ---
 
@@ -331,15 +331,17 @@ schema plus the Area-1 additions. No support entity or table is required:
 |---|---|---|---|---|
 | `maintenance` | ✅ atomic, no repeating groups | ✅ single-column PK | ✅ no transitive dependency | `impact_level` is a direct property of `maintenance_id`; no non-key column depends on another non-key column |
 | `maintenance_impact_history` | ✅ atomic | ✅ single-column PK `history_id` | ✅ no transitive dependency | `maintenance_id`, `changed_by`, `prior_level`, `new_level`, `changed_at`, `reason`, `created_at`, `updated_at` all depend only on `history_id` |
-| `booking_advisory_acknowledgement` | ✅ atomic | ✅ single-column PK `ack_id` | ✅ no transitive dependency | `booking_id`, `maintenance_id`, `acknowledged_at`, `acknowledged_by`, `created_at`, `updated_at` depend only on `ack_id`; UQ (booking_id, maintenance_id) is an alternate key, not a partial dependency |
-| `booking_approvals` | ✅ atomic | ✅ single-column PK `approval_id` | ✅ no transitive dependency | every column depends only on the PK `approval_id` and the alternate key `booking_id`; no FD `approval_id → non-key → other non-key`; the instant/staff origin is **derived from `approver_id = -1`**, not stored, so no non-key FD (e.g. `approver_id → origin`) exists; UQ `booking_id` is an alternate key |
+| `booking_advisory_acknowledgement` | ✅ atomic | ✅ single-column PK `ack_id` | ✅ no transitive dependency | `booking_id`, `maintenance_id`, `acknowledged_at`, `acknowledged_by`, `created_at`, `updated_at` depend only on `ack_id`; the composite UQ (booking_id, maintenance_id) is a **full** alternate key — neither proper subset (`booking_id` alone, `maintenance_id` alone) determines any other column, so no partial dependency on any candidate key exists |
+| `booking_approvals` | ✅ atomic | ✅ single-column PK `approval_id` | ✅ no transitive dependency | every column depends only on the candidate keys `approval_id` and `booking_id`; no non-key attribute depends on another non-key attribute (no transitive dependency); the instant/staff origin is **derived from `approver_id = -1`**, not stored, so no non-key FD (e.g. `approver_id → origin`) exists |
 | `users` | ✅ atomic | ✅ single-column PK `user_id` | ✅ no transitive dependency | unchanged from Phase 1; the reserved system row does not alter the relation's FDs |
 
 All affected relations satisfy at least 3NF. No functional dependencies beyond
-key → each non-key attribute were identified; no multi-valued attributes; no
-partial dependencies on any candidate key (the two new tables use single-column
-surrogate PKs; their composite unique keys are alternate keys whose full pairs
-determine every attribute, so no proper-subset dependency exists).
+candidate-key determinants → non-key attributes were identified; no multi-valued
+attributes; no partial dependencies on any candidate key. The two new tables use
+single-column surrogate PKs; only `booking_advisory_acknowledgement` carries a
+composite unique key — its full pair (booking_id, maintenance_id) determines every
+attribute (via `ack_id`), so no proper-subset dependency exists
+(`maintenance_impact_history` has no composite unique key).
 
 ---
 
@@ -409,6 +411,7 @@ Carried forward (not in Task 09 scope): **U3** (escalation → pending vs only a
 
 | Version | Date | Change |
 |---|---|---|
+| 2.3 (all) | 2026-08-04 | Review fix (§5 wording only, no design change): 3NF evidence rows corrected for precision — removed the garbled `approval_id → non-key → other non-key` notation (`booking_approvals` now states "no non-key attribute depends on another non-key attribute"); the `booking_advisory_acknowledgement` row now states in 2NF-precise terms that the composite UQ is a **full** alternate key with no proper-subset dependency; the closing paragraph now states that **only** `booking_advisory_acknowledgement` carries the composite unique key (`maintenance_impact_history` has none). |
 | 2.2 (Area 2) | 2026-08-03 | Revision: the instant/staff origin is **derived** from `approver_id = -1` (no stored origin column; a stored one would add the non-key FD `approver_id → origin` and break 3NF). ERD excerpt (§B.1), §B.2.1 (no-column-change statement), §B.2.2, §5, §6.1, §6.2 updated. |
 | 2.1 (all) | 2026-08-03 | Revision: ERD excerpts in §A.1 and §B.1 made attribute-consistent with the logical tables (audit columns `created_at`/`updated_at` and `is_deleted` shown); §A.2.3 composite UQ (booking_id, maintenance_id) wording clarified with an explicit explanation; §5 evidence rows completed and the no-partial-dependency reasoning corrected for the composite alternate keys. |
 | 2.0 (all) | 2026-08-03 | Full regeneration covering all three areas: Area 1 (maintenance impact levels, `maintenance_impact_history`, `booking_advisory_acknowledgement`, `current_status` recompute); Area 2 (instant/staff origin derived from the reserved system user `-1`, instant eligibility/test, concurrency enforcement deferred to Task 11); Area 3 (no schema change — derived queries). |

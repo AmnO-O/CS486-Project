@@ -172,7 +172,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ### bookings
 
-**Status:** 🔒 locked
+**Status:** 🔓 P2 — unfrozen (Task 09: no column change; advisory acknowledgement lives in the new child table `booking_advisory_acknowledgement`)
 **Maps from entity:** Bookings
 **Primary key:** booking_id (surrogate)
 
@@ -262,7 +262,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ### maintenance
 
-**Status:** 🔒 locked
+**Status:** 🔓 P2 — unfrozen (Task 09: `impact_level` added)
 **Maps from entity:** Maintenance
 **Primary key:** maintenance_id (surrogate)
 
@@ -442,4 +442,4 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ---
 
-*Last updated: 2026-08-03 — Task 09 (Areas 2–3): reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (no stored origin column — keeps 3NF); NR5/NR6; Area 3 reporting confirmed no-schema-change. Area 1 additions (`impact_level`, `maintenance_impact_history`, `booking_advisory_acknowledgement`) included. Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*
+*Last updated: 2026-08-03 — Task 09 (Areas 2–3): reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (no stored origin column — keeps 3NF); NR5/NR6; Area 3 reporting confirmed no-schema-change. Area 1 additions (`impact_level`, `maintenance_impact_history`, `booking_advisory_acknowledgement`) included. Per-table status markers for `bookings`/`maintenance` aligned to the 🔓 P2 inventory markers (review fix). Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*
