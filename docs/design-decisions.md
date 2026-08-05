@@ -724,10 +724,37 @@ Task 08 K1–K4; Task 09 B.3; `outputs/11-concurrency-design-G05.md`.
 
 ---
 
+### Decision: K5 — maintenance-ticket creation is a locked write path (4th entry point)
+
+**Task:** 12 (Concurrency Implementation — K5 gap closure, retro)
+**Date:** 2026-08-05
+
+**Problem:** All three Task 11 entry points acquire the per-space critical section `space_booking:<space_id>`, but creating a NEW maintenance ticket (`INSERT INTO dbo.maintenance`) goes through no entry point and no applock. Because `impact_level` is `NOT NULL DEFAULT 'out-of-service'` (Task 09 A.3 backfill semantics, migration L165), ANY raw INSERT — even one omitting the column — creates a blocking ticket. A ticket creation racing an in-flight booking confirmation is the K3 shape (escalation vs in-flight booking) entered through an unlocked door: under READ COMMITTED the booking-side BR4 pre-check may miss the uncommitted ticket, then commit an approved booking overlapping an out-of-service ticket — a BR4/NR6 violation.
+
+**Options considered:**
+- Option A: Document as out-of-contract DML (Task 11 §7 escape hatch) — leaves the race open; ticket creation is not a bypass but the ONLY legitimate path, so the escape hatch does not apply.
+- Option B: Trigger gating raw out-of-service INSERTs (SESSION_CONTEXT) — schema change (new trigger = Task 10 retro) and, per Task 11's own option-E analysis, triggers cannot serialize two READ COMMITTED writers; insufficient by construction.
+- Option C: 4th entry point `usp_maintenance_report` acquiring the SAME applock when the ticket starts at out-of-service — closes the race exactly like K3/K4: the booking side's post-lock re-check sees the committed ticket; the ticket side serializes with concurrent confirmations.
+
+**Decision:** We chose **Option C** — `dbo.usp_maintenance_report` (new, additive object; **no schema change**):
+- Parameters: `@space_id`, `@reporter_id`, `@problem_description`, `@start_time`, `@impact_level` (DEFAULT `'advisory'`), `@maintenance_id`/`@result_code`/`@message` OUTPUT.
+- Acquires `space_booking:<space_id>` (Exclusive, Transaction owner, 5 s) **only** when `@impact_level = 'out-of-service'` — advisory creation needs no lock (advisory blocks nothing, mirroring the escalation/downgrade logic).
+- Does **not** reject when overlapping confirmed bookings exist: per U3/NR4 existing bookings are kept and listed in report #4 (Task 16 reads `maintenance` generally).
+- **No new result codes** — reuse `0` / `51005` / `51006` / `51011` (identical semantics to the other entry points).
+- Lock is acquired purely for serialization; the BR4 rejection stays on the booking side's post-lock re-check.
+- The proc always passes `impact_level` explicitly (avoids the column DEFAULT `'out-of-service'` trap at the entry point).
+
+**Impact:** Task 08's conflict inventory gains **K5** (retro — the creation path was never listed as a separate scenario, K3 only covered escalation of existing tickets); Task 11 gains §9.4 plus K5 references in §4.2/§7/§8.5/§11.1; Task 12 implements the proc + smoke S7; Task 13 gains scenario T9 (ticket creation vs instant submit/approve).
+
+**Requirement reference:** BR4, NR6, NR4/U3; Task 08 K1–K5; Task 11 §9.4; `docs/project_phase2_description.md` §1.1/§1.2.
+
+---
+
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---|
+| 2026-08-05 | Task 12 rev 1 — K5 gap closed: new 4th entry point `usp_maintenance_report` (applock `space_booking:<space_id>` only when the ticket starts at `out-of-service`; no new result codes; no schema change); Task 08 inventory gains K5 (maintenance-ticket creation race); Task 11 gains §9.4 + K5 rows in §4.2/§7/§8.5/§11.1; Task 13 gains T9 | Agent | Task 12 |
 | 2026-08-05 | Task 11 rev 1.2 — instant path gains procedure-level BR2 check (`51010 SPACE-CLOSED`, new code; 51002 stays exclusive to BR4 so Task 13 can distinguish the two rejection causes); §8.1 shape code splits -1/-2 → 51005 vs -3 → 51006 | Agent | Task 11 |
 | 2026-08-05 | Task 11 rev 1.1 — escalation/downgrade workflow adds authoritative post-lock re-read (status active ∧ impact_level differs, else 51009 + rollback), mirroring the §9.2 double-check pattern; closes the concurrent-escalation no-op race where the loser returned SUCCESS instead of 51009; Task 13 gains scenario T5b | Agent | Task 11 |
 | 2026-08-04 | Task 11 — U3 resolved: escalation affects only already-approved bookings (pending stay pending, become unapprovable at approval time); selected strategy = per-space transaction-owned `sp_getapplock` critical section shared by instant/staff/escalation paths, post-lock invariant re-check, READ COMMITTED, 5 s lock timeout, retry on 51005/51006 only, error codes 51001–51009; no schema change | Agent | Task 11 |

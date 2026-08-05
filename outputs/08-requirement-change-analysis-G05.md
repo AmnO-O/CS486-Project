@@ -104,8 +104,9 @@ concurrency can break correctness. Possible conflicts:
 | K2 | **Distinct pathway overlap (instant vs staff)** | An instant-booking submission and a staff approval decision target the same space/period concurrently; each path checks availability independently and both approve. | **BR1 / NR6** — the two pathways can both produce an "approved" outcome for the same overlap. |
 | K3 | **Escalation vs in-flight booking** | An advisory is escalated to `out-of-service` while a booking that overlaps the period is being placed/approved; the booking may be confirmed based on a stale "advisory only" view. | **BR4 / NR4** — an approved booking overlaps `out-of-service` maintenance it should have been blocked by. |
 | K4 | **State read during transition** | A room-finder or availability read at a non-isolated level observes the table before/after a concurrent change, showing a space as free when a competing booking has just been approved (or maintenance escalated). | **BR1 / NR6 / NR4** — a booking, approval decision, or room-finder result relies on a stale "free"/"advisory" reading. |
+| K5 | **Maintenance-ticket creation vs in-flight booking** | A NEW maintenance ticket is created directly as `out-of-service` (or with the column default, which is `out-of-service`) on a space while a booking overlapping its period is being placed/approved; the ticket INSERT takes no shared lock, so the booking's BR4 pre-check may run against a stale "no maintenance" view and commit an approved booking over the new blocking ticket. | **BR4 / NR6** — an approved booking overlaps `out-of-service` maintenance it should have been blocked by; same failure shape as K3, entered through the unguarded ticket-creation INSERT path. |
 
-> All of K1–K4 stem from a **check-then-act on the same space overlap without
+> All of K1–K5 stem from a **check-then-act on the same space overlap without
 > atomicity/serialization between the check and the write**. They do not, by
 > themselves, dictate a particular mechanism; the Task 11 concurrency design selects
 > the approach.

@@ -253,8 +253,11 @@ database:
 
 - Verify required procedures exist.
 - Verify procedure metadata or parameters if feasible.
-- Exercise at least one simple success path and one deterministic rejection path in
-  transactions that roll back.
+- Exercise at least one simple success path and one deterministic rejection path.
+  Do **not** wrap entry-point calls in an outer transaction when the entry points own
+  their own transaction and `ROLLBACK` on failure paths — the nested rollback rolls
+  back the caller too (Engineering Note N3). Call entry points standalone and
+  explicitly delete the created rows so nothing persists.
 - Verify no confirmed booking overlaps exist after smoke checks.
 
 Do not create Task 13 two-session scripts here. Do not leave smoke-test rows persisted.
@@ -272,6 +275,72 @@ Do not create Task 13 two-session scripts here. Do not leave smoke-test rows per
   failure. Map values according to the current Task 11 contract.
 - If using `SESSION_CONTEXT`, remember it is session-scoped. Clear it on every exit
   path unless Task 11 explicitly assigns that responsibility to the caller.
+
+## SQL Server Engineering Notes (proven during execution)
+
+These notes are engine-level and stay valid regardless of which tables, columns,
+procedures, or lock resources the current sources define.
+
+**N1 — `EXEC @rc = <proc> <arg>` cannot take expressions as arguments.**
+Passing a computed argument inline (e.g. `@Resource = N'prefix:' + CONVERT(NVARCHAR(16), @id)`)
+to `sys.sp_getapplock` (or any procedure) through the `EXEC @return_var = proc` form
+fails to compile with `Incorrect syntax near '+'`. Build the argument into a local
+variable first (`SET @resource = N'prefix:' + CONVERT(...)`) and pass the variable.
+
+**N2 — Bare `THROW;` (rethrow) directly after a compound `BEGIN ... END` statement in a
+`CATCH` block is a parse error.**
+`THROW;` immediately following a `BEGIN ... END` block (even with a `RETURN` inside
+that block) raises `Msg 102, Incorrect syntax near 'THROW'`, while the identical
+pattern with a simple (block-less) statement before it compiles. Fix: wrap the rethrow
+so it is not a bare statement after a compound block — e.g. `ELSE BEGIN THROW; END`.
+Useful isolation technique: compile minimal repro procedures (successive simplifications)
+on the scratch database until the failing construct is pinned, and rule out file
+encoding by compiling an ASCII-stripped copy before assuming the parser is at fault.
+
+**N3 — A procedure that `ROLLBACK`s on failure rolls back the caller's outer
+transaction too (SQL 266 trap).**
+`ROLLBACK TRANSACTION` in a nested call decrements the transaction count to zero,
+so calling such an entry point inside a smoke-test wrapper transaction produces
+`Msg 266: Transaction count after EXECUTE indicates a mismatching number of BEGIN and
+COMMIT statements`. Options: (a) call entry points standalone (each owns its
+transaction) and clean up created rows explicitly — the project pattern; or (b) use
+`SAVE TRANSACTION` inside the caller — but note that rolling back to a savepoint does
+**not** release a `@LockOwner = 'Transaction'` application lock, so (b) changes lock
+release semantics and must not be used on failure paths that rely on the applock.
+
+**N4 — Parser error line numbers are relative to the batch start, not the file.**
+`Procedure X, Line N` counts from the start of the batch that contains the statement
+(the segment after the preceding `GO`), not from file line 1. When mapping to the
+source file, subtract the offset of the batch's first line. To get clean numbers,
+extract the failing batch (plus the `SET QUOTED_IDENTIFIER`/`ANSI_NULLS` preamble)
+into a standalone `.sql` file and compile it alone.
+
+**N5 — Signature checks must count OUTPUT parameters too.**
+`SELECT COUNT(*) FROM sys.parameters WHERE object_id = ...` counts every parameter,
+including `OUTPUT` ones. When a design lists inputs and outputs separately, the
+expected total is the sum — verify the arithmetic before hardcoding a count into a
+smoke check; an off-by-one here fails at runtime, not at compile time.
+
+**N6 — Never rely on a column DEFAULT for business-meaningful values.**
+A `NOT NULL` column with a DEFAULT (e.g. a blocking/restrictive default value) means
+a raw `INSERT` omitting the column silently picks the default. Entry points that must
+control such a value should always pass it explicitly in the INSERT column list, and
+default the corresponding parameter to the safe value. Check `DEFAULT` definitions in
+the migration/DDL sources before assuming what an omitted column becomes.
+
+**N7 — Audit/history triggers may be `AFTER UPDATE` only.**
+Before asserting audit behavior for a new write path, verify the trigger's timing
+(`AFTER INSERT` / `AFTER UPDATE` / both) in the current sources. An `AFTER UPDATE`
+history trigger produces **no** row on INSERT through a new entry point — if the
+design requires creation to be audited, that audit must be explicit in the procedure
+or a trigger change must be negotiated upstream (do not silently create triggers).
+
+**N8 — Idempotency re-run is the proof of `CREATE OR ALTER`.**
+After the first successful compile, re-run the full script on the same database: the
+procedures must refresh and the smoke checks must pass again with no duplicate
+objects. Note that piping sqlcmd output through truncating commands (e.g.
+`Select-Object -First N`) can close the stdout pipe early and surface a misleading
+exit code — read the full output or run without truncation before judging success.
 
 ## Compile and Verify
 
@@ -317,7 +386,8 @@ Before finalizing, verify:
 - No schema drift was introduced.
 - Existing Task 10 triggers remain untouched unless Task 11 explicitly required a
   trigger change.
-- Smoke checks are safe and rollback test rows.
+- Smoke checks are safe: call entry points standalone (per N3) and remove created
+  test rows so nothing persists.
 - Compile/static verification log exists.
 - Trajectory file exists before any completion summary.
 

@@ -5,8 +5,7 @@ description: Run Task 12 - Phase 2 concurrency implementation for the Campus Spa
 Command: generate-concurrency-implementation
 
 Description:
-Run the `db-design-pipeline:12-concurrency-implementation` skill to generate
-`outputs/12-concurrency-implementation-G05.sql`, a SQL Server implementation of the
+Run the `db-design-pipeline:12-concurrency-implementation` skill to generate a SQL Server implementation of the
 approved Task 11 concurrency design.
 
 Task 12 is an implementation task. It translates the current approved concurrency
