@@ -265,6 +265,58 @@ trigger/index enforcement as defense-in-depth. This is a recommendation, not a
 hardcoded answer; choose a different strategy if the current files make it better and
 justify the tradeoff.
 
+## Review-Driven Design Rules
+
+These rules are general, technical lessons learned from review rounds. They stay
+valid when project files change — apply them to whatever workflows, rules, and codes
+the current sources define. Do not read them as hardcoded project facts.
+
+### R1 — Post-lock authoritative re-check in EVERY write workflow
+
+A pre-lock read is a **fast-path only**: it resolves the lock resource key and allows
+an early exit, but it is never authoritative. Every write workflow that can confirm or
+invalidate an interval must **re-read its target row(s) after acquiring the critical
+section** and re-run the checks immediately before writing, returning the deterministic
+no-op/conflict outcome there.
+
+- Apply the double-check to **all** workflows, not just the primary one — the
+  maintenance escalation/downgrade workflow is the one that is typically forgotten.
+- Typical miss: two concurrent no-op operations on the same row both pass the pre-lock
+  fast-path; the loser then writes unchanged values and returns SUCCESS instead of the
+  documented no-op code. Data is unharmed only if an existing trigger/guard filters the
+  change — the design must not rely on that for the return-code contract.
+
+### R2 — Gate-coverage parity across workflows
+
+Cross-check **every invariant and business rule against every workflow** that could
+violate it. A rule enforced in one pathway is not automatically enforced in another
+pathway. Concretely:
+
+- List the checks each workflow performs, side by side, and diff them.
+- If a gap traces back to an upstream source (e.g., an eligibility test defined in an
+  earlier task that omitted an availability gate), **document the trace in the
+  workflow** but fix the gap in the Task 11 procedure-level design — never edit
+  upstream outputs or registries to make the design easier.
+- Prefer early procedure-level rejection over "let the trigger roll back later": the
+  latter wastes DML and surfaces raw trigger messages instead of deterministic codes.
+
+### R3 — One result code per rejection cause
+
+Result codes must be **1:1 with distinguishable rejection causes**. Never overload a
+code across different business rules: if two causes are semantically distinct (e.g.,
+an overlapping maintenance ticket vs. a manual space closure), they need distinct
+codes, because the Task 13 test handoff asserts on codes, not on free text. Call the
+distinction out explicitly where the codes are defined.
+
+### R4 — Shape fragments must match the contract exactly
+
+T-SQL shape fragments and workflow pseudocode are copy-paste starting points for
+Task 12. They must not contradict the contract tables (timeout/deadlock/error rows).
+If a mechanism returns distinguishable outcomes (e.g., `sys.sp_getapplock` return
+values), the fragment must map **each** value to its documented code — do not collapse
+distinct outcomes into one line unless the contract does the same. If a fragment is a
+deliberate simplification, mark it as such in the fragment itself.
+
 ## Output Format
 
 Generate `outputs/11-concurrency-design-G{{group}}.md` with these sections:
@@ -341,6 +393,10 @@ Use these notes when evaluating options, but verify them against the current fil
 - `sys.sp_getapplock` can serialize by logical resource, commonly one resource per
   `space_id`, without changing the schema. It is coarse-grained but easy to reason
   about and test.
+- `sys.sp_getapplock` returns distinguishable negative codes — typically timeout (-1),
+  cancelled (-2), and deadlock victim (-3). Map each return value to its documented
+  outcome separately in the contract tables AND in any acquisition fragment; collapsing
+  them into a single code is a review defect even when the note says "shape only".
 - Application locks must be acquired inside the same transaction that performs the final
   invariant check and write. Releasing the lock before the write is not sufficient.
 - If the current implementation uses `SESSION_CONTEXT`, remember it is session-scoped,
@@ -364,6 +420,15 @@ Before finalizing the Task 11 output, verify:
   still present.
 - `docs/design-decisions.md` contains appended Task 11 decisions, or the run stopped
   before making those decisions.
+- **R1:** every write workflow that can confirm or invalidate an interval performs an
+  authoritative re-check after entering the critical section and before writing — no
+  single-check workflow remains (escalation/downgrade included).
+- **R2:** every invariant/business rule that a workflow can violate is checked in THAT
+  workflow (gate parity); gaps traced upstream are fixed here, not in upstream outputs.
+- **R3:** result codes are 1:1 with rejection causes; no code is overloaded across
+  business rules.
+- **R4:** shape fragments and pseudocode agree with the timeout/deadlock/error contract
+  tables (e.g., each applock return value mapped to its own code).
 
 ## Static Verification
 

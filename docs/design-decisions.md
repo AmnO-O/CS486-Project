@@ -648,10 +648,89 @@ serialization mechanism; Task 10 implements the DDL/migration and seeds the syst
 
 ---
 
+### Decision: U3 — escalation to out-of-service affects only already-approved bookings
+
+**Task:** 11 (Concurrency Design)
+**Date:** 2026-08-04
+
+**Problem:** Task 08 U3 asked whether an advisory → `out-of-service` escalation also
+affects **pending** booking requests overlapping the maintenance period, or only
+already-approved bookings (which NR4 requires to be identified for staff contact).
+
+**Options considered:**
+- Option A: Only approved bookings — escalation performs **no booking DML**; pending
+  bookings stay `pending` and any later approval attempt fails the existing
+  out-of-service gate (`trg_booking_approvals_check_space`, deterministic `51002`).
+- Option B: Also auto-cancel overlapping pending bookings via a maintenance-side
+  trigger — raises questions about who records the cancellation and why.
+- Option C: Also auto-reject overlapping pending bookings with a fixed reason —
+  interacts with BR7 (rejection requires reason) and approval metadata.
+
+**Decision:** We chose **Option A**. It matches the Phase 2 wording of NR4 exactly
+("already-approved bookings … must be identified"), is consistent with the recorded
+BR2 decision (availability is checked at approval time, not request time), and adds
+no new trigger or schema — the existing approval gate is the single enforcement
+point. NR4's affected-booking report (#4) covers approved bookings only.
+
+**Impact:** Task 11 workflow 9.3 (escalation/downgrade) does not mutate bookings;
+Task 13 adds a regression scenario proving pending bookings stay `pending` and are
+rejected with `51002` at approval time; Task 16 report #4 is unaffected.
+
+**Requirement reference:** Phase 2 `docs/project_phase2_description.md` §1.1 (NR4);
+Task 08 U3; `outputs/09` §7 (carried forward).
+
+---
+
+### Decision: Task 11 — per-space transaction-owned `sp_getapplock` critical section for NR6
+
+**Task:** 11 (Concurrency Design)
+**Date:** 2026-08-04
+
+**Problem:** NR6 requires that two approved bookings never overlap on the same space,
+across both the instant and the staff approval pathway, even under concurrency (Task
+08 conflicts K1–K4). The Phase 1 enforcement (`trg_bookings_prevent_overlap` +
+`uq_bookings_active_overlap`) is check-then-act without serialization and cannot
+prevent two concurrent writers from both passing before either commits.
+
+**Options considered:**
+- A: `SERIALIZABLE` + key-range locks on the overlap indexes — correct only if every
+  writer's interval predicates lock the same ranges; high proof burden, plan-sensitive.
+- B: `UPDLOCK, HOLDLOCK` range reads — same "every writer must be perfect" burden,
+  escalation path easy to miss (K3 resurfaces).
+- C: Transaction-owned `sys.sp_getapplock` per space (`space_booking:<space_id>`)
+  shared by all write paths — coarse but deterministic, zero schema change.
+- D: Optimistic concurrency with version columns — requires schema the approved
+  Task 09 design explicitly excluded (no-schema-change for NR6 enforcement).
+- E: Trigger-only (baseline) — insufficient by construction.
+
+**Decision:** We chose **Option C**: every write path that can confirm or invalidate a
+booking interval on a space (instant booking, staff approval, maintenance
+escalation/downgrade) acquires an exclusive, transaction-owned application lock on
+`space_booking:<space_id>` **before** its overlap reads, then re-checks the invariants
+(BR1 confirmed-overlap, BR4 out-of-service overlap, NR2 ack completeness, BR2 manual
+overrides, BR3 capacity) inside the critical section, immediately before the write.
+Existing triggers and the filtered unique index are retained as defense-in-depth.
+Isolation stays READ COMMITTED; lock timeout 5 s; deterministic result codes
+51001–51009; retry only on `51005`/`51006`. **No schema change** — consistent with
+Task 09 §B.3.
+
+**Impact:** Task 12 implements `usp_booking_instant_submit`, `usp_booking_approve`,
+`usp_maintenance_set_impact_level` as the only write entry points; Task 13
+demonstrates winner/loser outcomes (T1–T8). Application must set/clear
+`SESSION_CONTEXT(N'current_user_id')` per unit of work.
+
+**Requirement reference:** Phase 2 `docs/project_phase2_description.md` §1.2 (NR6);
+Task 08 K1–K4; Task 09 B.3; `outputs/11-concurrency-design-G05.md`.
+
+---
+
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---|
+| 2026-08-05 | Task 11 rev 1.2 — instant path gains procedure-level BR2 check (`51010 SPACE-CLOSED`, new code; 51002 stays exclusive to BR4 so Task 13 can distinguish the two rejection causes); §8.1 shape code splits -1/-2 → 51005 vs -3 → 51006 | Agent | Task 11 |
+| 2026-08-05 | Task 11 rev 1.1 — escalation/downgrade workflow adds authoritative post-lock re-read (status active ∧ impact_level differs, else 51009 + rollback), mirroring the §9.2 double-check pattern; closes the concurrent-escalation no-op race where the loser returned SUCCESS instead of 51009; Task 13 gains scenario T5b | Agent | Task 11 |
+| 2026-08-04 | Task 11 — U3 resolved: escalation affects only already-approved bookings (pending stay pending, become unapprovable at approval time); selected strategy = per-space transaction-owned `sp_getapplock` critical section shared by instant/staff/escalation paths, post-lock invariant re-check, READ COMMITTED, 5 s lock timeout, retry on 51005/51006 only, error codes 51001–51009; no schema change | Agent | Task 11 |
 | 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
 | 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |
 | 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
