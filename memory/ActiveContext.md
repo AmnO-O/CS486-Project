@@ -5,7 +5,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 
 ## Current phase
 **Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-03; Task 10 ✅ 2026-08-04**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-03; Task 10 ✅ 2026-08-04; Task 11 ✅ 2026-08-05**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -36,6 +36,20 @@ for the affected tables (Option B, `docs/design-decisions.md`).
   scratch DB: migration + idempotent re-run + rollback all exit 0; post-rollback counts
   == baseline. Trajectories under `logs/trajectory/task10/`; compile logs under
   `logs/eval/task10/`.
+- Task 11 output: `outputs/11-concurrency-design-G05.md` ✅ Approved 2026-08-05.
+  Selected: **per-space transaction-owned `sys.sp_getapplock`** critical section
+  (`space_booking:<space_id>`) shared by instant booking, staff approval, and
+  maintenance escalation/downgrade, with post-lock authoritative re-checks
+  (BR1/BR2/BR3/BR4/NR2); READ COMMITTED, 5 s lock timeout, retry only on
+  `51005`/`51006`, deterministic codes `51001–51010`; existing triggers +
+  `uq_bookings_active_overlap` kept as defense-in-depth; **no schema change**.
+  U3 resolved: escalation affects only already-approved bookings (pending stay
+  pending, unapprovable at approval time). Handoff: 3 entry-point procedures for
+  Task 12 (`usp_booking_instant_submit`, `usp_booking_approve`,
+  `usp_maintenance_set_impact_level`); Task 13 scenarios T1–T9. Revisions 1.1/1.2
+  (post-lock re-read in escalation → `51009`; BR2 check `51010 SPACE-CLOSED` in
+  instant path; applock return split). Trajectories under `logs/trajectory/task11/`;
+  eval logs under `logs/eval/task11/`.
 
 ## Verification summary (Phase 1 dependency for Phase 2)
 - SCHEMA FREEZE approved (Task 04), DDL `outputs/05-db-definition-G05.sql`.
@@ -45,14 +59,13 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. Proceed to **Task 11** — concurrency design (`outputs/11-concurrency-design-G05.md`):
-   NR6 no-overlap enforcement across instant + staff pathways under concurrency; resolve
-   **U3 (escalation → pending vs only approved)** before generating. The application
-   layer contract from Task 10 applies: `changed_by` flows via
-   `SESSION_CONTEXT(N'current_user_id')` — the app MUST set it before each unit of work
-   and clear it (set NULL) after (session-scoped, not transaction-scoped;
-   connection-pooling reuse can leak a stale user id). Trg-generated approvals must
-   degrade to the reserved system user `-1`.
-2. Then Task 12 — concurrency implementation, then 13 → 14 → 15/16 per `memory/Progress.md`.
+1. Proceed to **Task 12** — concurrency implementation (`outputs/12-concurrency-implementation-G05.sql`):
+   implement the three entry points per `outputs/11-concurrency-design-G05.md` §11 —
+   `usp_booking_instant_submit`, `usp_booking_approve`, `usp_maintenance_set_impact_level`
+   (fast-path read → `sp_getapplock 'space_booking:<space_id>'` Exclusive/Transaction/5000
+   → authoritative post-lock re-checks → write → COMMIT; `SET XACT_ABORT ON`; result codes
+   `51001–51010`; `SESSION_CONTEXT(N'current_user_id')` set/cleared per unit of work with
+   fallback to `-1`; **no trigger changes, no schema changes**).
+2. Then Task 13 — concurrency tests (scenarios T1–T9), then 14 → 15/16 per `memory/Progress.md`.
 3. Task 14 (data generator) depends on Task 10's migrated schema (`impact_level`, new
    tables, system user `-1`).
