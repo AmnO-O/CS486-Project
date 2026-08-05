@@ -407,10 +407,53 @@ Carried forward (not in Task 09 scope): **U3** (escalation → pending vs only a
 
 ---
 
-## 9. Revision Log
+## 9. Final ERD Overview (nodes only)
+
+The complete Phase 2 end-state ERD at a glance. Entities are shown as **nodes only**
+(no attributes) — the same style as "Diagram 1 — Overview (nodes only)" in
+`outputs/02-erd-design-G05.md`. The **Phase 2 new** entities are `Maintenance_Impact_History`
+(NR3) and `Booking_Advisory_Acknowledgement` (NR2); all other entities are the
+unchanged Phase 1 baseline. Relationship lines match the Phase 1 naming (R1–R11) plus
+the four new Phase 2 relationships from §A.1.
+
+```mermaid
+erDiagram
+    Departments
+    Users
+    Spaces
+    Facilities
+    Space_Facilities
+    Bookings
+    Booking_Approvals
+    Booking_Sessions
+    Maintenance
+    Maintenance_Impact_History
+    Booking_Advisory_Acknowledgement
+
+    Departments ||--o{ Users : "belongs_to"
+    Users ||--o{ Bookings : "requests"
+    Users ||--o{ Booking_Approvals : "approves"
+    Users ||--o{ Booking_Sessions : "checks_in"
+    Spaces ||--o{ Bookings : "booked_for"
+    Spaces ||--o{ Space_Facilities : "contains"
+    Facilities ||--o{ Space_Facilities : "assigned_to"
+    Spaces ||--o{ Maintenance : "requires_maintenance"
+    Users ||--o{ Maintenance : "reports"
+    Users |o--o{ Maintenance : "assigned_to"
+    Bookings ||--o| Booking_Approvals : "is_reviewed_in"
+    Bookings ||--o| Booking_Sessions : "is_executed_as"
+    Maintenance ||--o{ Maintenance_Impact_History : "has_level_changes"
+    Users ||--o{ Maintenance_Impact_History : "records"
+    Maintenance ||--o{ Booking_Advisory_Acknowledgement : "notified_by"
+    Bookings ||--o{ Booking_Advisory_Acknowledgement : "acknowledges"
+```
+---
+
+## 10. Revision Log
 
 | Version | Date | Change |
 |---|---|---|
+| 2.4 (all) | 2026-08-05 | Added §9 "Final ERD Overview (nodes only)" — full Phase 2 end-state ERD (11 entities, 16 relationships) in the Task 02 "Diagram 1" style for quick orientation; no design change (diagram only). Revision log renumbered to §10. |
 | 2.3 (all) | 2026-08-04 | Review fix (§5 wording only, no design change): 3NF evidence rows corrected for precision — removed the garbled `approval_id → non-key → other non-key` notation (`booking_approvals` now states "no non-key attribute depends on another non-key attribute"); the `booking_advisory_acknowledgement` row now states in 2NF-precise terms that the composite UQ is a **full** alternate key with no proper-subset dependency; the closing paragraph now states that **only** `booking_advisory_acknowledgement` carries the composite unique key (`maintenance_impact_history` has none). |
 | 2.2 (Area 2) | 2026-08-03 | Revision: the instant/staff origin is **derived** from `approver_id = -1` (no stored origin column; a stored one would add the non-key FD `approver_id → origin` and break 3NF). ERD excerpt (§B.1), §B.2.1 (no-column-change statement), §B.2.2, §5, §6.1, §6.2 updated. |
 | 2.1 (all) | 2026-08-03 | Revision: ERD excerpts in §A.1 and §B.1 made attribute-consistent with the logical tables (audit columns `created_at`/`updated_at` and `is_deleted` shown); §A.2.3 composite UQ (booking_id, maintenance_id) wording clarified with an explicit explanation; §5 evidence rows completed and the no-partial-dependency reasoning corrected for the composite alternate keys. |
