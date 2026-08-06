@@ -13,14 +13,14 @@ description: >
 
 ## Goal
 
-Produce a reviewer-ready Markdown design document that explains how the system will
+Produce a Markdown Concurrency Design Report that explains how the system will
 prevent concurrency anomalies in Phase 2, especially the NR6 invariant:
 
 > Two approved bookings must never use the same space during overlapping time
 > periods, regardless of whether they are created through instant booking or staff
 > approval, even when users and staff operate concurrently.
 
-Task 11 is a design handoff. It must be precise enough for Task 12 to implement and
+Task 11 is a design guidance. It must be precise enough for Task 12 to implement and
 Task 13 to test, but it must not contain full runnable implementation or test scripts.
 
 ## Adaptive Source Rule
@@ -92,8 +92,11 @@ report it.
 ## Output
 
 - `outputs/11-concurrency-design-G{{group}}.md`
-- `docs/design-decisions.md` - append Task 11 key decisions made during this run,
-  especially resolved Task 11 open questions and the selected concurrency strategy.
+- `docs/design-decisions.md` - append Task 11 KEY design decisions ONLY when a
+  decision is actually made during this run (resolved Task 11 open questions,
+  selected concurrency strategy). Never append revision-log, audit, or
+  bookkeeping rows for regeneration/formatting runs — a run that makes no
+  decision appends nothing.
 - `logs/eval/task11/YYYY-MM-DD-HHmm-11-concurrency-design-check.log`
 - `logs/trajectory/task11/YYYY-MM-DD-HHmm-trajectory.md`
 
@@ -113,12 +116,7 @@ Before writing the Task 11 output, verify:
   is resolved in memory or has a final decision from the user in the current turn.
 - `docs/design-decisions.md` does not conflict with the selected strategy or with any
   resolved open-question answer.
-
-Current known example: U3 asks whether escalation to out-of-service affects pending
-requests or only already-approved bookings. If U3 or any successor Task 11 question is
-still pending and no current-turn decision exists, stop and ask for the decision before
-generating the output. Do not silently decide.
-
+  
 Do not update `memory/Progress.md` or `memory/ActiveContext.md` after generation. The
 user must approve first, per `AGENTS.md`.
 
@@ -131,10 +129,6 @@ the conflict instead of quietly editing the registries.
 
 Task 11 must design:
 
-- How instant booking and staff approval check availability and write approval state
-  atomically.
-- How maintenance escalation or downgrade interacts with in-flight booking and approval
-  work for the same space/time.
 - How the design prevents every concurrency conflict found in the current Task 08
   output.
 - Which SQL Server concurrency mechanism will be used and why.
@@ -321,57 +315,62 @@ deliberate simplification, mark it as such in the fragment itself.
 
 Generate `outputs/11-concurrency-design-G{{group}}.md` with these sections:
 
-1. **Overview**
-   - task scope;
-   - dependencies read;
-   - what Task 11 does and does not implement.
-2. **Gate and Source Check**
-   - upstream approval status;
-   - relevant open questions and whether each is resolved;
-   - any source conflicts found.
-3. **Resolved Task 11 Ambiguities**
-   - question;
-   - final decision;
-   - rationale;
-   - downstream impact on Tasks 12, 13, and any affected reporting task.
-4. **Concurrency Problem Statement**
-   - restate NR6 and affected business rules;
-   - list current Task 08 conflicts in concise form.
-5. **Current Database Contract**
-   - relevant current tables, statuses, triggers/procedures, indexes, system rows, and
-     application-layer handoff notes;
-   - what existing enforcement remains as defense-in-depth.
-6. **Candidate Strategies**
-   - comparison table with tradeoffs.
-7. **Selected Design**
-   - chosen strategy;
-   - why it fits SQL Server and this schema;
-   - why rejected options are weaker for this project.
-8. **Transaction and Locking Design**
-   - lock resource or lock-read policy;
-   - acquisition order;
-   - isolation level;
-   - timeout behavior;
-   - deadlock/retry rules;
-   - deterministic error contract.
-9. **Workflow Designs**
-   - instant booking;
-   - staff approval;
-   - maintenance escalation/downgrade;
-   - room-finder/availability read.
-10. **Conflict Coverage Matrix**
-    - each current Task 08 conflict mapped to prevention mechanism and residual risk.
-11. **Task 12 Implementation Handoff**
-    - procedures/triggers or application entry points to implement;
-    - required inputs/outputs;
-    - error messages/result codes;
-    - application responsibilities, including session context if still current.
-12. **Task 13 Test Handoff**
-    - concurrent-session scenarios that must be demonstrated;
-    - expected winner/loser outcomes;
-    - retry/deadlock/timeout cases.
-13. **Assumptions, Risks, and Out of Scope**
-14. **Revision Log**
+1. Overview
+  - Short about task scope.
+
+2. Concurrency Identification
+  - list each current Task 08 conflict with ID, name, and description;
+  - for each, state which workflow(s) can violate it and how the design prevents it.
+
+3. Resolved Design Ambiguities & Decisions
+  - question;
+  - final decision;
+  - rationale;
+  - downstream impact on Tasks 12, 13, and any affected reporting task.
+
+4. Current Database Baseline & Contract
+  - relevant tables, statuses, system user (user_id = -1), and schema baseline;
+  - secondary defense-in-depth enforcement (filtered unique indexes, triggers).
+
+5. Evaluation of Candidate Concurrency Strategies
+  - strategy comparison table and tradeoffs (SERIALIZABLE vs UPDLOCK vs sp_getapplock vs Optimistic);
+  - rationale for selection;
+  - why rejected options are unsuitable for SQL Server 2019+.
+
+6. Transaction and Locking Architecture
+  - lock resource scope (`space_booking:<space_id>`) and acquisition order;
+  - isolation level and timeout behavior;
+  - exact return code mapping for sp_getapplock;
+  - deterministic 1:1 error contract for rejection causes.
+
+7. Workflow Designs & Double-Check Specifications
+  - instant booking submission.
+  - staff approval workflow.
+  - maintenance escalation/downgrade workflow.
+  - room-finder / availability read path.
+
+8. Conflict Coverage Matrix
+  - map each Task 08 conflict ID to its exact prevention mechanism;
+  - proof of 100% conflict resolution and residual risk analysis.
+
+9. Task 12 Implementation Guidance (Dev Handoff)
+  - required stored procedures (`usp_[workflow]`);
+  - inputs, outputs, and deterministic result codes;
+  - application-layer responsibilities. 
+
+10. Task 13 Test Guidance (QA Plan)
+  - concurrent two-session test scenarios (Winner vs. Loser verification);
+  - expected assertions and deterministic error code returns;
+  - deadlock, timeout, and retry edge cases.
+
+11. System Assumptions, Risks, and Boundaries
+   - technical prerequisites (SQL Server 2019+, RCSI enabled);
+   - performance risks on hotspot spaces and mitigations;
+   - explicit out-of-scope boundaries.
+   
+12. Revision Log
+   - date, author, and summary of changes.
+
 
 Use concise tables where they improve comparison. Trace each design choice back to a
 requirement, Task 08 conflict, Task 09 design, Task 10 contract, registry entry, or
@@ -418,8 +417,9 @@ Before finalizing the Task 11 output, verify:
 - No runnable Task 12 implementation or Task 13 scripts are included.
 - Current application handoff contracts, such as `SESSION_CONTEXT`, are referenced if
   still present.
-- `docs/design-decisions.md` contains appended Task 11 decisions, or the run stopped
-  before making those decisions.
+- `docs/design-decisions.md` contains the appended Task 11 key design decisions
+  IF a decision was made this run; runs making no decision (regeneration,
+  revision, formatting) must leave it untouched.
 - **R1:** every write workflow that can confirm or invalidate an interval performs an
   authoritative re-check after entering the critical section and before writing — no
   single-check workflow remains (escalation/downgrade included).
@@ -444,7 +444,9 @@ The log should check:
 - no full implementation SQL script is embedded;
 - all source files used are listed or referenced;
 - no unresolved Task 11 gate remains;
-- no prior outputs or registries were modified except the allowed decision-log append.
+- no prior outputs or registries were modified, except a key-design-decision
+  append to `docs/design-decisions.md` when a decision was actually made this
+  run (revision/audit rows are never appended).
 
 ## Trajectory and Completion
 

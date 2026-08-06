@@ -753,12 +753,8 @@ Task 08 K1–K4; Task 09 B.3; `outputs/11-concurrency-design-G05.md`.
 ## Revision log
 
 | Date | Change | By | Task |
-|---|---|---|---|
-| 2026-08-05 | Task 12 rev 1 — K5 gap closed: new 4th entry point `usp_maintenance_report` (applock `space_booking:<space_id>` only when the ticket starts at `out-of-service`; no new result codes; no schema change); Task 08 inventory gains K5 (maintenance-ticket creation race); Task 11 gains §9.4 + K5 rows in §4.2/§7/§8.5/§11.1; Task 13 gains T9 | Agent | Task 12 |
-| 2026-08-05 | Task 11 rev 1.2 — instant path gains procedure-level BR2 check (`51010 SPACE-CLOSED`, new code; 51002 stays exclusive to BR4 so Task 13 can distinguish the two rejection causes); §8.1 shape code splits -1/-2 → 51005 vs -3 → 51006 | Agent | Task 11 |
-| 2026-08-05 | Task 11 rev 1.1 — escalation/downgrade workflow adds authoritative post-lock re-read (status active ∧ impact_level differs, else 51009 + rollback), mirroring the §9.2 double-check pattern; closes the concurrent-escalation no-op race where the loser returned SUCCESS instead of 51009; Task 13 gains scenario T5b | Agent | Task 11 |
-| 2026-08-04 | Task 11 — U3 resolved: escalation affects only already-approved bookings (pending stay pending, become unapprovable at approval time); selected strategy = per-space transaction-owned `sp_getapplock` critical section shared by instant/staff/escalation paths, post-lock invariant re-check, READ COMMITTED, 5 s lock timeout, retry on 51005/51006 only, error codes 51001–51009; no schema change | Agent | Task 11 |
-| 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
+|---|---|---|---| 
+2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
 | 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |
 | 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
 | 2026-06-18 | Split `bookings` into `bookings` + `booking_approvals` + `booking_sessions` (SRP refactor) | Agent | Post-Task 5 refactor |

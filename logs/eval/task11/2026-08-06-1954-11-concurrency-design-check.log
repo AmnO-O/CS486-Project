@@ -1,0 +1,93 @@
+Task 11 — Static Verification Log (regeneration run, --mode overwrite)
+======================================================================
+File     : logs/eval/task11/2026-08-06-1954-11-concurrency-design-check.log
+Task     : 11 — Concurrency Design
+Group    : G05
+Run mode : overwrite
+Date     : 2026-08-06
+Status   : PASS (all checks)
+
+Sources re-read this run
+------------------------
+- .opencode/skills/db-design-pipeline/SKILL.md (reading order + registry protocol)
+- .opencode/skills/db-design-pipeline/11-concurrency-design/SKILL.md (task skill)
+- docs/README.md, docs/templates/README.md
+- .opencode/skills/evaluations/trajectory-recording.md + templates/trajectory-template.md
+- memory/MEMORY.md, memory/Progress.md, memory/ActiveContext.md
+- docs/design-decisions.md, docs/tech-stack.md
+- docs/entity-registry.md, docs/schema-registry.md (grep cross-checks)
+- docs/project_phase2_description.md
+- outputs/08-requirement-change-analysis-G05.md (K1-K5 inventory)
+- outputs/09-updated-erd-and-logical-design-G05.md (approved Phase 2 design)
+- outputs/10-schema-migration-G05.sql + 10-schema-migration-G05-rollback.sql (contract)
+- outputs/11-concurrency-design-G05.md (prior approved rev 1.3 — coherence baseline)
+
+Checks
+------
+[PASS] output file exists and is non-empty
+       outputs/11-concurrency-design-G05.md (14 sections, ~630 lines)
+[PASS] required sections present: 1 Overview, 2 Concurrency Identification
+       (§4 Conflict Statement), 3 Resolved Ambiguities, 4 Current Database
+       Baseline & Contract, 5 Candidate Strategies, 6 Transaction & Locking
+       Architecture, 7 Workflow Designs, 8 Conflict Coverage Matrix,
+       9 Task 12 Handoff, 10 Task 13 Handoff, 11 Assumptions/Risks/Boundaries,
+       12 Revision Log  (section numbering per current file: §1..§14)
+[PASS] no full implementation SQL script embedded — only shape fragments
+       (§8.1 canonical applock acquisition) and workflow pseudocode (§9.1-§9.4),
+       explicitly marked as shapes for Task 12
+[PASS] all source files used are listed in §1.2 (Dependencies read)
+[PASS] no unresolved Task 11 gate remains:
+       - Task 08/09/10 approved (memory/Progress.md)
+       - U3 resolved (2026-08-05, only approved bookings; carried unchanged)
+       - U4 belongs to Task 16 (not a Task 11 gate)
+       - run is an explicit regeneration of an already-approved output
+[PASS] all Task 08 conflicts addressed: K1, K2, K3, K4, K5 (matrix §10)
+       — shared per-space critical section + post-lock re-check closes K1/K2/K3/K5,
+       read classification closes K4
+[PASS] instant and staff approval share one strategy (same applock resource, §7.1)
+[PASS] maintenance escalation/downgrade included (§9.3) with authoritative
+       post-lock re-read (R1); ticket creation included (§9.4)
+[PASS] no contradiction with the derived instant-origin model (approver_id = -1,
+       no stored origin column)
+[PASS] no new schema added (no tables/columns/indexes/triggers; only the additive
+       entry-point procedure usp_maintenance_report is designed for Task 12)
+[PASS] R2 gate parity: BR1/BR3/BR4/NR2/BR2 checked in each write workflow
+       (§9.1 instant, §9.2 staff, §9.3 escalation); no rule enforced in one path
+       but missing in another
+[PASS] R3 1:1 result codes: 51001-51010 one code per rejection cause; 51002
+       (BR4 maintenance block) distinct from 51010 (BR2 manual override); no
+       overloading
+[PASS] R4 shape fragments match contract: applock return values split
+       -1/-2 -> 51005 vs -3 -> 51006 in §8.1, §8.4, §8.5, §11.1 — no collapsed
+       mapping
+[PASS] SESSION_CONTEXT(N'current_user_id') handoff referenced (§5.6, §11.3)
+[PASS] design-decisions.md contains the Task 11 decisions: U3 resolution,
+       selected strategy, and K5 entry point were already recorded
+       (2026-08-04/2026-08-05). This run appended NO new entry (user
+       directive: only key design decisions are logged there; regeneration
+       and formatting changes are not decisions) — no duplicate entries
+[PASS] no prior outputs or registries modified: outputs/11-concurrency-
+       design-G05.md regenerated; docs/design-decisions.md NOT appended —
+       only key design decisions are logged there and this run made none;
+       entity/schema registries untouched
+[PASS] Task 13 receives concrete concurrent-session scenarios: T1-T10
+       (T5b, T9, T10 included), deterministic code assertions, invariant audit
+
+No SQL compile step: Task 11 is a Markdown design document by definition.
+Verification performed by source re-read + cross-checks against
+docs/design-decisions.md and docs/schema-registry.md.
+
+REVISION 1.5 (2026-08-06-2007)
+-------------------------------
+[PASS] §1 Overview compressed to a short scope paragraph per reviewer
+       request (removed §1.1 scope block + §1.2 dependencies table).
+       Section 1 heading preserved; all other sections (2-14) unchanged.
+[PASS] internal cross-references unaffected (no in-document refs to the
+       removed §1.1/§1.2 headings — the §1.1-§1.3 citations in §3 are
+       references to docs/project_phase2_description.md).
+[PASS] output re-verified: 14 sections present, file non-empty.
+[PASS] revision-log row 1.5 added to the output's own revision log;
+       docs/design-decisions.md left unchanged (no key design decision —
+       user directive: only key decisions go there; the two audit-only rows
+       appended earlier in this session were removed)
+
