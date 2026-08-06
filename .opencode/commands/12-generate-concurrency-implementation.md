@@ -32,7 +32,10 @@ Arguments:
 
 Prompt:
   Generate the Task 12 concurrency implementation for the Phase 2 extension of
-  the Campus Space Management System, group {{group}}.
+  the Campus Space Management System, group {{group}}, implementing exactly the
+  entry points listed in the Task 11 implementation handoff (that is the
+  `--max_concurrency` count chosen at Task 11; do not invent additional entry
+  points, and do not drop any listed one).
 
   Required reading:
   - Follow `AGENTS.md`, `docs/README.md`, and the main `db-design-pipeline`
@@ -85,6 +88,9 @@ Prompt:
 Notes:
   - Stop before writing SQL if Task 11 is not approved in `memory/Progress.md`, even
     if `outputs/11-concurrency-design-G{{group}}.md` exists.
+  - The entry-point count is NOT a Task 12 parameter: it is taken from the approved
+    Task 11 handoff (Task 11's `--max_concurrency`). If the handoff entry-point list
+    is missing or ambiguous, stop and report the gap.
   - The skill must adapt to current files: procedure names, result codes, selected
     lock mechanism, and handoff requirements come from the latest approved Task 11
     design, not from this command file.
