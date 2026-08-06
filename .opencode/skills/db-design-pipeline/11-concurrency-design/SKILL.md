@@ -46,7 +46,7 @@ other, stop and report the exact conflict — never silently pick a convenient o
 
 - `{{group}}` — group id; default `G05`.
 - `{{max_concurrency}}` — number of critical-section entry points the design covers;
-  default `3`. Valid values: `4` (instant submit, staff approval, maintenance
+  default `4`. Valid values: `4` (instant submit, staff approval, maintenance
   escalation/downgrade, maintenance ticket creation), `3` (instant submit, staff
   approval, escalation/downgrade; ticket creation out-of-scope), `2` (instant submit,
   staff approval; escalation/downgrade also out-of-scope).
@@ -55,6 +55,17 @@ Output must cover **exactly** `{{max_concurrency}}` entry points in the workflow
 list and the Task 12 handoff. Conflicts whose prevention depends on a dropped entry
 point must be declared **out-of-scope with residual risk** in the matrix — never
 silently omitted.
+
+**Scope discipline (do not re-open recorded closures).** A scope reduction is only
+permitted if nothing recorded already requires the dropped path. Before lowering
+`{{max_concurrency}}`, check `docs/design-decisions.md` for a decision on that entry
+point (e.g., the recorded K5 decision promotes maintenance-ticket creation to a 4th
+locked entry point). If a recorded decision already covers it, do NOT reduce scope and
+re-ship the hole: either keep the consolidation in scope (default `4`) or surface the
+conflict and obtain an explicit user decision, then record the supersede in
+`docs/design-decisions.md`. Never present a **cheaply fixable hole** (a gap closed by
+one small procedure that reuses a lock the other paths already use) as a designed
+residual risk — that is scope-shaving, not a trade-off.
 
 ## Task Gates (before writing)
 
@@ -103,23 +114,93 @@ existing triggers/indexes that enforce overlap and maintenance rules, session-co
 audit contract, Task 08 conflict IDs, and Task 11 open-question decisions. Design
 from this snapshot; say explicitly when a detail is absent.
 
-## Working Rules (R1–R4)
+## Design Principles (P1–P4)
 
-- **R1 — Post-lock re-check in EVERY write workflow.** Pre-lock reads are fast-path
+> **Naming:** the labels below are **P1–P4** (design principles), not R#-numbers,
+> because R# is already the relationship-ID namespace in the Phase 1 registry and is
+> reused in the Task 08/09 documents (R1 = Spaces→Maintenance, R3 =
+> Users→Booking_Approvals, R5, R10, …). Never use a bare R# label in Task 11 output
+> for anything other than a relationship reference.
+
+- **P1 — Post-lock re-check in EVERY write workflow.** Pre-lock reads are fast-path
   only. Every workflow that confirms/invalidates an interval must re-read its target
   row(s) inside the critical section and re-run checks immediately before writing,
   then return the deterministic no-op/conflict code. Applied to all workflows,
   including maintenance escalation/downgrade (typically forgotten).
-- **R2 — Gate-coverage parity.** List each workflow's checks side by side and diff.
+- **P2 — Gate-coverage parity.** List each workflow's checks side by side and diff.
    If a gap traces to an upstream task, document the trace but fix it in the
   procedure-level design here — never edit upstream outputs/registries. Prefer
   early deterministic procedure rejection over relying on a trigger to roll back.
-- **R3 — One result code per rejection cause.** Codes are 1:1 with distinguishable
-  causes; never overload a code across business rules (Task 13 asserts on codes).
-- **R4 — Shape fragments match the contract exactly.** Any pseudocode must agree with
+- **P3 — One result code per cause-family; shared buckets must be explicit.** Codes
+  are 1:1 with distinguishable **cause families**; business-rejection gates never
+  share a code (Task 13 asserts on codes; e.g. an overlap must map to `51003`, never
+  to the same code as capacity or a missing ack). A generic context/validation code
+  (e.g. `51001` = row-not-found / wrong-state / invalid-input) is permitted ONLY if
+  the doc explicitly labels it a *bucket* in the error-contract table and itemizes
+  the causes it carries per workflow. Never write the strong claim "each code names
+  ONE cause" (or "never overloaded") unless the workflow step tables actually show
+  a distinct code for every distinct cause — otherwise soften to "cause-family" or
+  split the code.
+- **P4 — Shape fragments match the contract exactly.** Any pseudocode must agree with
   the timeout/deadlock/error tables. For `sp_getapplock`, map EACH return value to its
   own code (-1→timeout, -2→cancelled, -3→deadlock victim). Mark deliberate
   simplifications as such.
+- **P5 — Lock granularity is argued, not assumed.** Disclosing a coarse-granularity
+  risk with mitigations is not enough — justify the granularity choice itself
+  relative to the narrower alternative. When the lock key could plausibly be finer
+  (e.g., per-space vs per-space+day), the doc must explicitly state why the coarser
+  key was selected (usually correctness/simplicity: multi-day intervals would require
+  acquiring a *set* of day-keys with ordering rules and cross-midnight pitfalls) and
+  quantify acceptability against the expected volume (e.g., Task 14 scale: ≥100k
+  bookings over 3 academic years ⇒ tens of writes/day per busy space, sub-ms critical
+  sections vs a 5 s timeout). If a finer key would be more correct or the volume
+  argument does not hold, the coarser choice is a design flaw — say so and pick the
+  better key instead of papering over it.
+
+## Hardness Gates (output-quality, ENFORCED by scan before finishing)
+
+The generated document is a design deliverable, not a transcript of how it was made.
+Every gate below is verified by scanning the finished file with Select-String
+(ripgrep), and the scan lines + results are recorded in the eval log:
+
+- **G1 — Canonical 1..12 structure.** The `## N.` headings must be exactly `1..12`,
+  each ONCE, in order — no duplicates (e.g., two `## 4.`), no gaps, no stray tokens
+  between headings. Re-run this scan after EVERY rewrite; full-file rewrites drift
+  numbering easily.
+- **G2 — No run-machinery / CLI / agent language.** Forbidden tokens in the
+  deliverable: CLI flags (`--create`, `--mode`, `--max_concurrency`), "user-ratified",
+  "this turn", "regeneration"/"overwrite" used as a run attribute, "Agent"/"agent
+  negotiation", timestamp/UUID run identifiers. Decisions are written as decisions,
+  not as an execution narrative.
+- **G3 — Citations = deliverable set only.** The deliverable cites ONLY deliverable
+  files: `outputs/05-*`, `outputs/08-*`, `outputs/09-*`, `outputs/10-*` (+ phase-2
+  description only if quoting a requirement). NEVER cite `docs/design-decisions.md`,
+  `docs/schema-registry.md`, or `docs/entity-registry.md` as authoritative inside the
+  deliverable — fold the needed facts inline or attribute them to the approved output
+  they came from. Scan for `docs/` references and fail on any.
+- **G4 — Headings inside tables/cells are consistent** — every cross-reference
+  (§N, section N, step N) points at a heading/row that actually exists in the file;
+  check both directions.
+- **G5 — Error-code claim vs. actual workflow mapping.** Crosscheck the §6.3
+  error-contract table against the per-workflow step tables (§7): every code a
+  workflow returns must appear in the contract with its cause-family; and the
+  strength of the doc's claim must match reality (see P3). If a code is returned for
+  multiple causes, the doc must label it a bucket — never let an absolute claim
+  ("each code names ONE cause") coexist with a code used for several distinct causes.
+- **G6 — Conflict→test completeness for concurrency matrix.** Every conflict in the
+  matrix (§8, K1–K5) must map to at least one Task 13 scenario. Additionally cover the
+  **same-path homogeneous pairings** (instant-vs-instant, staff-vs-staff,
+  escalation-vs-escalation) or explicitly explain why a pairing is redundant with an
+  existing scenario — do not silently leave only the cross-path cases. A strict
+  reviewer will notice asymmetric coverage (e.g., a missing staff-vs-staff scenario
+  when instant-vs-instant is present).
+- **G7 — Granularity trade-off is argued in the doc.** Scan §5/§6/§11 for the
+  coarse-vs-narrow lock-key discussion: the resource-key choice must state WHY the
+  chosen granularity (vs the narrower alternative) and must ground acceptability in
+  the expected volume from the repo (e.g., Task 14 ≥100k bookings over 3 years). If
+  §11 discloses a contention risk but §6 never argues the key choice, the gate fails.
+  Also cross-check that no overclaim exists: if the volume math does not support the
+  coarser key, the doc must not wave it away.
 
 ## Candidate Strategies (evaluate ≥3, then select)
 
@@ -146,6 +227,13 @@ predicates lock identical ranges — easy to get wrong across paths;
 be acquired inside the same transaction as the final check+write; release-before-
 write is invalid; the app must set/clear `SESSION_CONTEXT` per working set
 (session-scoped, not transaction-scoped).
+When picking the applock **resource key**, weigh granularity explicitly (P5/G7):
+a per-space key is simplest and correct, but if a narrower key is plausible
+(per-space+day), argue why the coarser one was kept — and bind that argument to the
+expected volume found in the repo (e.g., Task 14 ≥100k bookings over 3 academic
+years ⇒ tens of writes/day per busy space, sub-ms critical sections vs a 5 s
+timeout). State the finer key as a monitoring-driven tuning lever, not a silent
+omission.
 
 ## Workflows to Cover (by `--max_concurrency`)
 
@@ -182,7 +270,7 @@ Write `outputs/11-concurrency-design-G{{group}}.md` with these sections:
    rationale, rejection justifications.
 6. **6. Transaction and Locking Architecture** — lock resource scope +
    acquisition order; isolation level + timeout; exact `sp_getapplock` return→code
-   mapping; 1:1 error contract (R3).
+   mapping; 1:1 error contract (P3).
 7. **7. Workflow Designs & Double-Check Specifications** — the entry points per
    `{{max_concurrency}}`, the out-of-contract listed with residual risk,
    room-finder read path.
@@ -191,8 +279,10 @@ Write `outputs/11-concurrency-design-G{{group}}.md` with these sections:
 9. **9. Task 12 Implementation Guidance** — the `{{max_concurrency}}` entry points
    (instant + staff always; escalation if >=3; ticket creation if =4), inputs/return
    codes, application-layer responsibilities.
-10. **10. Task 13 Test Guidance** — concurrent two-session scripts (Winner/Loser),
-    expected assertions + deterministic codes, deadlock/timeout/retry edge cases.
+10. **10. Task 13 Test Guidance** — concurrent two-session scripts (Winner/Loser)
+    for every matrix conflict INCLUDING the homogeneous same-path pairings (e.g.
+    staff-vs-staff, instant-vs-instant) or an explicit redundancy note;
+    deterministic assertions + codes, deadlock/timeout/retry edge cases.
 11. **11. System Assumptions, Risks, and Boundaries** — requirements (SQL Server
     2019+, RCSI), hotspot-space performance risk, explicit out-of-scope boundaries.
 12. **12. Revision Log** — date, author, summary of changes.
@@ -206,10 +296,23 @@ Write `outputs/11-concurrency-design-G{{group}}.md` with these sections:
   ticket creation when =4.
 - No contradiction with the instant-approval origin model; no new schema outside
   approved sources.
-- R1 (all write workflows do a post-lock re-check), R2 (gate parity), R3 (1:1 codes),
-  R4 (fragments match contract).
+- P1 (all write workflows do a post-lock re-check), P2 (gate parity), P3 (cause-family
+  codes, no overclaim), P4 (fragments match contract), P5 (lock granularity argued,
+  quantified against expected volume).
 - `docs/design-decisions.md` appended ONLY if a decision was made this run.
 - No runnable Task 12/13 scripts in the output.
+- Hardness gates executed and logged: G1 (scan `## N.` headings = 1..12 unique),
+  G2 (token scan for run-machinery/CLI/agent language), G3 (citation scan: no
+  `docs/` references), G4 (cross-references all resolve), G7 (granularity argument +
+  volume grounding present in §5/§6/§11).
+- Error-code gates: G5 (claims cross-checked — no "one cause per code" overclaim;
+  shared buckets explicitly labeled), P3 (codes are cause-family 1:1; retries only on
+  the designated codes).
+- Conflict→test mapping: G6 (every K-conflict has an explicit T-scenario; same-path
+  homogeneous pairings — instant-vs-instant, staff-vs-staff — present or their
+  redundancy explained).
+- One canonical `docs/design-decisions.md` entry per topic: if a prior entry is
+  superseded this run, it was replaced (not appended beside the stale claim).
 
 ## Static Verification
 
@@ -217,7 +320,11 @@ Task 11 has no SQL compile step. Write `logs/eval/task11/YYYY-MM-DD-HHmm-...-che
 covering: output exists and non-empty; required sections present; no full SQL
 scripts embedded; sources listed; gates resolved; entry-point count ==
 `{{max_concurrency}}`; dropped entry points declared; no upstream files modified
-except a key-decision append to `docs/design-decisions.md`.
+except a key-decision append to `docs/design-decisions.md`. Include the G1/G2/G3/G4
+scan outcomes (headings list, forbidden-token scan, `docs/` reference scan, and the
+cross-reference spot checks), the G5/G6 checks (error-code claim vs workflow code,
+conflict→test trace), and the G7 result (granularity rationale + volume grounding
+present or absent).
 
 ## Trajectory and Completion
 
@@ -234,3 +341,14 @@ with `X` = `11`.
 - Overwrite (default): re-read sources, replace the whole Task 11 output.
 - Revise: re-read sources, compare with the existing output, overwrite coherently.
 - Never patch isolated paragraphs while leaving stale decisions elsewhere.
+- **Reconcile sibling artifacts in the same run as any revision.** After rewriting
+  the output, immediately reconcile everything that recorded the OLD state so the
+  repo never carries two versions of the truth:
+  - `docs/design-decisions.md` — replace the superseded decision entry (one canonical
+    entry per topic; no revision-log/audit rows for the regeneration itself).
+  - Prior `logs/eval/task11/*` and `logs/trajectory/task11/*` for this task — mark
+    them superseded (do not silently delete) and write new `YYYY-MM-DD-HHmm` files for
+    the current run; the trajectory sets `revision_of` (and the superseded file gains a
+    `superseded_by`).
+- Gate G1 heading scan must be re-run after every rewrite pass (numbering drifts most
+  often on rewrites, not first drafts).
