@@ -23,7 +23,7 @@ submission**, **staff approval**, **maintenance escalation/downgrade**, and
 because it is the legitimate way a blocking (`out-of-service`) maintenance record is
 born, and leaving it outside the critical section would leave a hole in the same
 BR4/NR6 invariant the rest of the design protects. The availability/room-finder read
-path is treated as an advisory hint (§6.5). This document is design-only: it hands a
+path is treated as an advisory hint (§7.5). This document is design-only: it hands a
 precise contract to Task 12 (implementation) and Task 13 (tests) but contains no
 runnable implementation or test script.
 
@@ -47,11 +47,11 @@ serialization between the check and the write**.
 
 > **Scope note.** All four write workflows — including **K5, maintenance-ticket
 > creation** — are covered by this design. The design closes K5 by making ticket
-> creation a locked entry point that shares the per-space critical section (§6.4)
+> creation a locked entry point that shares the per-space critical section (§6.1)
 > whenever the ticket starts at the blocking impact level. Only a raw,
 > out-of-contract `INSERT INTO dbo.maintenance` that bypasses the entry point
 > reintroduces the window; that non-contractual access is documented as an
-> application-boundary risk (§7.2, §10), not silently shipped as an approved
+> application-boundary risk (§7.4 boundary, §11), not silently shipped as an approved
 > workflow.
 
 ### 2.2 How the design prevents each conflict
@@ -70,7 +70,7 @@ confirmation steps — a read result is only ever a hint.
 | # | Question | Decision | Rationale | Effect on Tasks 12 / 13 / reporting |
 |---|---|---|---|---|
 | D1 | Does escalation to `out-of-service` also affect **pending** requests, or only already-approved bookings? | **Only already-approved bookings.** Escalation performs **no booking DML**. Pending bookings stay `pending`; any later approval attempt fails the out-of-service gate with deterministic code `51002`. | Matches the Phase 2 wording of NR4 ("already-approved bookings … must be identified"); consistent with BR2 as designed in Task 09 (availability is checked at approval time, so a pending request is only evaluated when it is decided); no additional trigger or schema is needed. | Task 12: `usp_maintenance_set_impact_level` mutates no booking row. Task 13: regression scenario proving pending bookings stay `pending` and are rejected with `51002` at approval time. Report #4 (Task 16) covers approved bookings only. |
-| S1 | Which write paths must be within the critical section? | **Four**: instant booking submission, staff approval, maintenance escalation/downgrade, and maintenance-ticket creation. | The Phase 2 requirement frames the no-overlap guarantee as unconditional (§1.2), and ticket creation is the entry point through which a blocking (`out-of-service`) record is legitimately born. Leaving it outside the lock would preserve K5, a BR4/NR6 violation of the same shape the other three paths guard against, while the fix is a single procedure reusing the same lock (§6.4). | Task 12 implements four procedures. Task 13 adds a K5 scenario (T9). Report #4 is unaffected (derived query). |
+| S1 | Which write paths must be within the critical section? | **Four**: instant booking submission, staff approval, maintenance escalation/downgrade, and maintenance-ticket creation. | The Phase 2 requirement (NR6) frames the no-overlap guarantee as unconditional, and ticket creation is the entry point through which a blocking (`out-of-service`) record is legitimately born. Leaving it outside the lock would preserve K5, a BR4/NR6 violation of the same shape the other three paths guard against, while the fix is a single procedure reusing the same lock (§6.1). | Task 12 implements four procedures. Task 13 adds a K5 scenario (T9). Report #4 is unaffected (derived query). |
 | K4 | How are read-only availability / room-finder reads treated? | **Advisory hints only.** Reads never serialize and never confirm a booking; the confirmation paths re-check under the lock. | A point-in-time read can be stale by definition; a hint cannot break NR6 as long as final confirmation re-checks. | Task 12: confirmation procs re-read all predicates post-lock. Task 13: no assertion that a simultaneous read is "fresh" — only that it cannot confirm a booking. |
 | AUD | Audit mechanism for `changed_by` on maintenance level changes | `sys.sp_set_session_context N'current_user_id', <id>` at the start of every unit of work; clear (set NULL) at the end. Fallback = reserved system approver `-1`. | Follows the Task 10 handoff (`SESSION_CONTEXT` adopted for `trg_maintenance_impact_history`); session-scoped, so the app must set/clear per unit. | Task 12 entry points set/clear the context. Task 13 asserts history-row `changed_by` attribution with and without context. |
 
@@ -95,7 +95,7 @@ Schema facts below come from the frozen Phase 1 DDL
   `CHECK (impact_level IN ('advisory','out-of-service'))` (Task 10). The default
   preserves Phase 1 blocking semantics for legacy rows and also means any
   ticket-creation statement that omits the column produces a blocking ticket —
-  hence the ticket-entry procedure always passes the level explicitly (§6.4).
+  hence the ticket-entry procedure always passes the level explicitly (§7.4).
 - **out-of-service** blocks any overlapping booking; **advisory** permits the booking
   provided the requester acknowledges it (one row per overlapping advisory).
 - `trg_bookings_check_maintenance` (replaced) blocks overlapping active
@@ -365,7 +365,7 @@ inside the critical section (K4).
 
 All five conflicts from Task 08 are covered. The only remaining risk is
 **non-contractual raw DML** (bypassing the four procedures), which is a documented
-application-governance boundary (§7.4 boundary, §10) — not a sanctioned workflow.
+application-governance boundary (§7.4 boundary, §11) — not a sanctioned workflow.
 
 ---
 
