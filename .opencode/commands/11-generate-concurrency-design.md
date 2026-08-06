@@ -22,6 +22,7 @@ generate-concurrency-design
 generate-concurrency-design --group G05
 generate-concurrency-design --group G05 --mode overwrite
 generate-concurrency-design --group G05 --mode revise
+generate-concurrency-design --group G05 --max_concurrency 4
 ```
 
 Arguments:
@@ -31,10 +32,23 @@ Arguments:
                     - revise: re-read all current sources, compare with the
                       existing Task 11 output, then rewrite it coherently
                     Default: overwrite.
+  --max_concurrency <n>
+                    Maximum number of critical-section entry points the Task 11
+                    design covers (2|3|4). Passed to the skill as
+                    `--max_concurrency {{max_concurrency}}`.
+                    - 4: all entry points — instant booking submit, staff approval,
+                      maintenance escalation/downgrade, maintenance ticket creation.
+                    - 3 (default): instant booking submit, staff approval,
+                      maintenance escalation/downgrade. Maintenance ticket creation
+                      is documented as out-of-scope residual risk.
+                    - 2: instant booking submit and staff approval only. Maintenance
+                      escalation/downgrade is also out-of-scope.
+                    Default: 3.
 
 Prompt:
   Generate the Task 11 concurrency design for the Phase 2 extension of the Campus
-  Space Management System, group {{group}}.
+  Space Management System, group {{group}}, covering at most
+  {{max_concurrency}} critical-section entry points.
 
   Required reading:
   - Follow `AGENTS.md`, `docs/README.md`, and the main
