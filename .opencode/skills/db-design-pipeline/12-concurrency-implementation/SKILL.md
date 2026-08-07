@@ -13,407 +13,219 @@ description: >
 
 ## Goal
 
-Produce a reviewer-ready, executable SQL Server script that implements the current
-approved Task 11 concurrency design.
-
-Task 12 translates design into T-SQL. It must produce database entry points that
-make booking confirmation and maintenance impact-level changes concurrency-safe. It
-must be precise enough for Task 13 to run concurrent-session tests, but it must not
-create those tests.
+Produce a reviewer-ready, executable SQL Server script implementing the approved
+Task 11 concurrency design: database entry points that make booking confirmation and
+maintenance impact-level changes concurrency-safe. Precise enough for Task 13 to run
+concurrent-session tests, but it must not create those tests.
 
 ## Adaptive Source Rule
 
-This skill must stay useful when project files change. Do not hardcode procedure
-names, result codes, lock resources, trigger names, or selected strategy unless the
-current approved sources still define them.
+Re-read the current repo every run. Do not hardcode procedure names, result codes,
+lock resources, trigger names, or the selected strategy unless the current approved
+sources still define them.
 
-When generating the output:
+Read, in order: `memory/Progress.md` (gates), `memory/ActiveContext.md` (handoff),
+`outputs/11-concurrency-design-G{{group}}.md` (selected strategy, entry points,
+result codes, workflow steps — the implementation contract), registries + Task 10
+migration (tables/columns/indexes/triggers). If sources contradict each other, stop
+and report the exact conflict.
 
-- Extract task status and gates from `memory/Progress.md`.
-- Extract active handoff notes from `memory/ActiveContext.md`.
-- Extract the selected strategy, entry points, result codes, workflow steps, and
-  non-negotiables from the current approved Task 11 output.
-- Extract current tables, columns, indexes, triggers, and business-rule coverage
-  from the registries and Task 10 migration.
-- Treat examples in this skill as implementation patterns, not as replacement source
-  material.
+Priority on conflict: `docs/design-decisions.md` > memory > Task 11 output > Task 10
+migration > registries > Task 09 > Task 08 > phase-2 description > `docs/tech-stack.md`.
 
-If the current files contradict one another, stop and report the exact conflict.
+## Parameters
 
-## Inputs and Source Priority
+- `{{group}}` — group id; default `G05`.
+- Entry-point count is NOT a Task 12 parameter — it comes from the Task 11 handoff
+  (Task 11's `--max_concurrency`). Implement exactly the listed entry points: every
+  one, none extra. If the handoff entry-point list is missing or ambiguous, stop and
+  report the gap.
 
-Follow the global reading order in `.opencode/skills/db-design-pipeline/SKILL.md` and
-`docs/README.md`, then read the task-specific sources below.
+## Task Gates (before writing SQL)
 
-1. `docs/project_phase2_description.md` - authoritative Phase 2 requirement source.
-2. `outputs/10-schema-migration-G{{group}}.sql` and
-   `outputs/10-schema-migration-G{{group}}-rollback.sql` - migrated schema and
-   trigger contract.
-3. `outputs/11-concurrency-design-G{{group}}.md` - approved Task 11 design, entry
-   point list, workflow steps, result codes, and Task 13 handoff.
-4. Existing `outputs/12-concurrency-implementation-G{{group}}.sql` only in
-   `--mode revise`.
+- Tasks 08–11 approved in `memory/Progress.md`; Task 12 is next (unless explicit
+  revise). **If the Task 11 output exists but memory still marks Task 11
+  unapproved, stop and report the gate — never implement from an unapproved design.**
+- No open question assigned to Task 12 is pending.
+- `outputs/11-concurrency-design-G{{group}}.md` exists and contains a Task 12
+  implementation handoff; `docs/design-decisions.md` does not contradict it.
+- Do NOT update memory files (user approves first) and do NOT modify registries or
+  prior task outputs.
 
-Use `--group` if supplied; default to `G05`.
+## Outputs
 
-When sources conflict, use this priority:
-
-1. `docs/design-decisions.md` for recorded decisions.
-2. `memory/Progress.md` for approval gates.
-3. `memory/ActiveContext.md` for current handoff details.
-4. `outputs/11-concurrency-design-G{{group}}.md` for Task 12 implementation contract.
-5. `outputs/10-schema-migration-G{{group}}.sql` for implemented database objects.
-6. `docs/schema-registry.md` for relational objects and business-rule coverage.
-7. `docs/entity-registry.md` for conceptual relationships and attributes.
-8. `outputs/09-updated-erd-and-logical-design-G{{group}}.md` for schema rationale.
-9. `outputs/08-requirement-change-analysis-G{{group}}.md` for conflict context.
-10. `docs/project_phase2_description.md` and `req/business-requirement.md` for
-    requirement wording.
-11. `docs/tech-stack.md` for SQL Server syntax and naming.
-
-Do not edit higher-priority sources to fit the implementation. If a mismatch blocks
-generation, stop and report it.
-
-## Output
-
-- `outputs/12-concurrency-implementation-G{{group}}.sql`
+- `outputs/12-concurrency-implementation-G{{group}}.sql` — SQL only; SQL comments for
+  short explanations, no Markdown prose inside.
+- `docs/design-decisions.md` — append ONLY when Task 12 introduces a key
+  implementation decision not already recorded.
 - `logs/eval/task12/YYYY-MM-DD-HHmm-12-concurrency-compile.log`
 - `logs/trajectory/task12/YYYY-MM-DD-HHmm-trajectory.md`
-- `docs/design-decisions.md` only when Task 12 introduces a key implementation
-  decision not already recorded.
-
-The output is SQL only. Use SQL comments for short explanations. Do not include
-Markdown prose inside the SQL file.
-
-## Task Gates
-
-Before writing SQL, verify:
-
-- Tasks 08, 09, 10, and 11 are approved in `memory/Progress.md`.
-- Task 12 is the next unstarted Phase 2 task, unless this is explicit `--mode revise`.
-- No open question assigned to Task 12 is pending in the "Known open questions
-  (Phase 2)" table.
-- `outputs/11-concurrency-design-G{{group}}.md` exists and contains a Task 12
-  implementation handoff.
-- `docs/design-decisions.md` does not conflict with the Task 11 handoff.
-
-Important: if Task 11 output exists but memory still marks Task 11 as not approved,
-stop before writing SQL and report the gate. Do not implement from an unapproved
-design.
-
-Do not update `memory/Progress.md` or `memory/ActiveContext.md` after generation.
-The user must approve first, per `AGENTS.md`.
 
 ## Implementation Scope
 
-Task 12 must implement:
+Implement:
 
-- Every database entry point named by the current approved Task 11 handoff.
-- The selected SQL Server concurrency mechanism from Task 11.
-- The Task 11 transaction boundary, lock acquisition order, isolation choice,
-  timeout/deadlock handling, retry-facing result codes, and error contract.
-- Authoritative post-lock re-checks before every write.
-- Basic non-concurrent smoke checks proving the script compiles and the procedures
-  expose expected success/error behavior.
+- every database entry point named by the Task 11 handoff;
+- the Task 11 concurrency mechanism, transaction boundary, lock acquisition order,
+  isolation choice, timeout/deadlock handling, retry-facing codes, error contract;
+- authoritative post-lock re-checks before every write;
+- basic non-concurrent smoke checks proving compile + expected success/error behavior.
 
-Task 12 must not implement:
+Do NOT implement: Task 13 two-session test scripts; Task 14 generator; Task 15 index
+tuning or plan timings; Task 16 analytical queries; any schema redesign (new
+tables/columns, stored origin column, version columns, performance indexes) unless
+the Task 11 handoff explicitly says Task 12 must add them.
 
-- Task 13 concurrent-session test scripts or folders.
-- Task 14 data generator.
-- Task 15 index tuning or execution-plan measurements.
-- Task 16 analytical queries.
-- Schema redesign, new tables, new columns, stored origin columns, version columns,
-  or performance indexes unless the current approved Task 11 design explicitly says
-  Task 12 must add them.
+## Required Extraction (run-time inventory)
 
-## Required Extraction
-
-Before writing SQL, build an internal inventory from current files:
-
-- Procedure or entry-point names, parameters, result-code outputs, and workflow steps
-  from Task 11.
-- Confirmed booking status set for BR1/NR6.
-- Current booking, approval, maintenance, advisory acknowledgement, and impact-history
-  table/column names.
-- Current instant-origin model and system approver identity.
-- Current manual-closure and maintenance-blocking rules.
-- Current advisory acknowledgement completeness rule.
-- Current trigger names and which ones are defense-in-depth only.
-- Current required indexes and constraints the procedures rely on.
-- Current session-context audit key, if any.
-
-Write the SQL from this inventory. If a required item is absent from the approved
-sources, stop and report the gap.
+From current sources: entry-point names/parameters/result codes/workflow steps
+(Task 11); confirmed booking status set (BR1/NR6); booking/approval/maintenance/
+ack/impact-history table+column names; instant-origin model + system approver;
+manual-closure and maintenance-blocking rules; ack-completeness rule; which triggers
+are defense-in-depth only; indexes/constraints the procedures rely on;
+session-context audit key. If a required item is absent from approved sources, stop
+and report the gap.
 
 ## SQL Script Requirements
 
-### Header and settings
+### Header, settings, preflight
 
-Start with SQL Server settings compatible with stored procedure creation:
+Start each batch with `SET QUOTED_IDENTIFIER ON`/`SET ANSI_NULLS ON` + `GO`. Add a
+comment header naming Task 12 + group, upstream Task 10/11 files, the selected
+strategy, and the no-schema-change promise (unless Task 11 requires otherwise).
 
-```sql
-SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_NULLS ON
-GO
-```
-
-Add a concise SQL comment header naming:
-
-- Task 12 and group.
-- Upstream Task 10 migration and Task 11 design files.
-- The selected concurrency strategy discovered from Task 11.
-- A no-schema-change promise, unless Task 11 explicitly requires otherwise.
-
-### Preflight checks
-
-Include reviewer-runnable preflight checks before procedure creation:
-
-- Required migrated tables exist.
-- Required columns exist.
-- Required triggers/indexes used as defense-in-depth exist.
-- Required system rows, such as a reserved system approver, exist when the approved
-  design depends on them.
-- Required Task 11 assumptions are visible in the schema.
-
-Use `THROW` with deterministic numbers only for preflight failures. Avoid reusing
-business result codes for script preflight unless Task 11 explicitly assigns them.
+Before creating procedures, run reviewer-runnable preflight checks (THROW with
+deterministic numbers ≥ 50000; do not reuse business result codes): required migrated
+tables/columns exist; triggers/indexes used as defense-in-depth exist; reserved system
+rows (e.g. approver `-1`) exist; Task 11 assumptions visible in the schema.
 
 ### Idempotency
 
-Use idempotent creation:
+Prefer `CREATE OR ALTER PROCEDURE dbo.<name>`; one procedure per `GO` batch; never
+drop tables/triggers/indexes/data. Re-running must refresh bodies without duplicating
+objects or changing data.
 
-- Prefer `CREATE OR ALTER PROCEDURE dbo.<procedure_name>` for procedures.
-- Keep each procedure in its own `GO` batch.
-- Do not drop tables, triggers, indexes, or existing data.
-- Re-running Task 12 must refresh procedure bodies without duplicating objects or
-  changing data.
+### Procedure shape (per entry point, unless sources require otherwise)
 
-### Stored procedure structure
+1. Validate lock-free inputs → 2. TRY/CATCH + explicit transaction → 3. acquire the
+selected lock inside the transaction → 4. map lock timeout/cancel/deadlock returns
+exactly per Task 11 → 5. re-read authoritative rows post-lock → 6. re-run all
+invariant checks before DML → 7. DML → 8. COMMIT, return success code → 9.
+deterministic business rejection: rollback + matching code → 10. unexpected error:
+rollback + rethrow or Task 11's unexpected-error code.
 
-For each Task 11 entry point, implement this shape unless current sources require a
-different one:
-
-1. Validate inputs that do not require locks.
-2. Start a TRY/CATCH block and explicit transaction.
-3. Acquire the selected lock inside the transaction.
-4. Map lock timeout/cancel/deadlock return values exactly as Task 11 defines.
-5. Re-read authoritative rows after the lock is acquired.
-6. Re-run all workflow-specific invariant checks after the lock and before DML.
-7. Perform DML.
-8. Commit and return `0` or the current success code.
-9. On deterministic business rejection, roll back and return the matching result code.
-10. On unexpected error, roll back and rethrow or return the Task 11 unexpected-error
-    code if one exists.
-
-If Task 11 selected `sys.sp_getapplock`, use `@LockOwner = 'Transaction'`, acquire it
-after `BEGIN TRANSACTION`, and do not release it manually before COMMIT/ROLLBACK.
+If Task 11 selected `sp_getapplock`: `@LockOwner = 'Transaction'`, acquire after
+`BEGIN TRANSACTION`, never release manually before COMMIT/ROLLBACK.
 
 ### Procedure-level checks
 
-Generate checks from the current Task 11 workflow. For the current project shape, this
-usually includes:
-
-- confirmed booking overlap check;
-- active out-of-service maintenance overlap check;
-- advisory acknowledgement completeness check;
-- capacity check;
-- manual closed/retired space check;
-- instant eligibility check;
-- already-decided booking check;
-- maintenance no-op and active-status checks for impact-level changes.
-
-Do not rely on triggers as the primary app-facing contract. Triggers remain
-defense-in-depth; procedures must return deterministic codes before intentionally
-attempting DML that is known to fail.
+Generate from the Task 11 workflow (project shape usually includes: confirmed
+booking overlap; active out-of-service maintenance overlap; ack completeness;
+capacity; manual closed/retired space; instant eligibility; already-decided booking;
+maintenance no-op/active-status). Triggers stay defense-in-depth only — procedures
+must return deterministic codes before intentionally attempting DML that is known to
+fail.
 
 ### Result-code contract
 
-Extract result codes from Task 11 and implement them exactly:
-
-- Each distinct rejection cause must have its own code.
-- Do not collapse lock timeout, cancellation, and deadlock if Task 11 distinguishes
-  them.
-- Output result code and message through the parameter shape Task 11 defines.
-- Task 13 will assert on codes, not free-text messages.
+Extract codes from Task 11 and implement exactly: one code per rejection cause; do
+not collapse timeout/cancellation/deadlock if Task 11 distinguishes them; return code
++ message through Task 11's parameter shape. Task 13 asserts on codes, not text.
 
 ### Session context
 
-If Task 10/11 uses `SESSION_CONTEXT(N'current_user_id')`, procedures should set it at
-the start of the unit of work when an acting user parameter exists, and clear it before
-returning. Use a TRY/CATCH pattern so cleanup happens on both success and failure.
+If Task 10/11 uses `SESSION_CONTEXT(N'current_user_id')`: set it at unit-of-work
+start when an acting-user parameter exists, clear before returning, via TRY/CATCH so
+cleanup runs on success and failure. If the design says it is solely an application
+responsibility, preserve that and document in comments.
 
-If the current design says session context is solely an application responsibility,
-preserve that contract and document it in comments instead of changing behavior.
+### Smoke checks (end of script, scratch-DB-safe, non-concurrent)
 
-### Smoke checks
-
-End the SQL file with non-concurrent smoke checks that are safe to run on a scratch
-database:
-
-- Verify required procedures exist.
-- Verify procedure metadata or parameters if feasible.
-- Exercise at least one simple success path and one deterministic rejection path.
-  Do **not** wrap entry-point calls in an outer transaction when the entry points own
-  their own transaction and `ROLLBACK` on failure paths — the nested rollback rolls
-  back the caller too (Engineering Note N3). Call entry points standalone and
-  explicitly delete the created rows so nothing persists.
-- Verify no confirmed booking overlaps exist after smoke checks.
-
-Do not create Task 13 two-session scripts here. Do not leave smoke-test rows persisted.
-
-## SQL Server Design Notes
-
-- `CREATE OR ALTER PROCEDURE` must be the first statement in its batch after settings.
-- `THROW` numbers must be 50000 or greater.
-- `XACT_ABORT ON` helps roll back on runtime errors, but expected business rejections
-  should still explicitly roll back and return deterministic output values.
-- A trigger that raises an error may abort the transaction before procedure output
-  parameters are set. Prefer procedure-level checks before DML so application-facing
-  result codes are stable.
-- `sys.sp_getapplock` returns non-negative values for success and negative values for
-  failure. Map values according to the current Task 11 contract.
-- If using `SESSION_CONTEXT`, remember it is session-scoped. Clear it on every exit
-  path unless Task 11 explicitly assigns that responsibility to the caller.
+Verify procedures exist (+ metadata/parameter counts if feasible); exercise one
+simple success path and one deterministic rejection path. **Do NOT wrap entry-point
+calls in an outer transaction** — entry points own their transactions and ROLLBACK on
+failure paths; a nested rollback rolls back the caller (N3). Call entry points
+standalone, then explicitly delete created rows so nothing persists; verify no
+confirmed booking overlaps remain. No Task 13 two-session scripts here.
 
 ## SQL Server Engineering Notes (proven during execution)
 
-These notes are engine-level and stay valid regardless of which tables, columns,
-procedures, or lock resources the current sources define.
+These stay valid regardless of which tables/columns/procedures/lock resources the
+current sources define.
 
-**N1 — `EXEC @rc = <proc> <arg>` cannot take expressions as arguments.**
-Passing a computed argument inline (e.g. `@Resource = N'prefix:' + CONVERT(NVARCHAR(16), @id)`)
-to `sys.sp_getapplock` (or any procedure) through the `EXEC @return_var = proc` form
-fails to compile with `Incorrect syntax near '+'`. Build the argument into a local
-variable first (`SET @resource = N'prefix:' + CONVERT(...)`) and pass the variable.
-
-**N2 — Bare `THROW;` (rethrow) directly after a compound `BEGIN ... END` statement in a
-`CATCH` block is a parse error.**
-`THROW;` immediately following a `BEGIN ... END` block (even with a `RETURN` inside
-that block) raises `Msg 102, Incorrect syntax near 'THROW'`, while the identical
-pattern with a simple (block-less) statement before it compiles. Fix: wrap the rethrow
-so it is not a bare statement after a compound block — e.g. `ELSE BEGIN THROW; END`.
-Useful isolation technique: compile minimal repro procedures (successive simplifications)
-on the scratch database until the failing construct is pinned, and rule out file
-encoding by compiling an ASCII-stripped copy before assuming the parser is at fault.
-
-**N3 — A procedure that `ROLLBACK`s on failure rolls back the caller's outer
-transaction too (SQL 266 trap).**
-`ROLLBACK TRANSACTION` in a nested call decrements the transaction count to zero,
-so calling such an entry point inside a smoke-test wrapper transaction produces
-`Msg 266: Transaction count after EXECUTE indicates a mismatching number of BEGIN and
-COMMIT statements`. Options: (a) call entry points standalone (each owns its
-transaction) and clean up created rows explicitly — the project pattern; or (b) use
-`SAVE TRANSACTION` inside the caller — but note that rolling back to a savepoint does
-**not** release a `@LockOwner = 'Transaction'` application lock, so (b) changes lock
-release semantics and must not be used on failure paths that rely on the applock.
-
-**N4 — Parser error line numbers are relative to the batch start, not the file.**
-`Procedure X, Line N` counts from the start of the batch that contains the statement
-(the segment after the preceding `GO`), not from file line 1. When mapping to the
-source file, subtract the offset of the batch's first line. To get clean numbers,
-extract the failing batch (plus the `SET QUOTED_IDENTIFIER`/`ANSI_NULLS` preamble)
-into a standalone `.sql` file and compile it alone.
-
-**N5 — Signature checks must count OUTPUT parameters too.**
-`SELECT COUNT(*) FROM sys.parameters WHERE object_id = ...` counts every parameter,
-including `OUTPUT` ones. When a design lists inputs and outputs separately, the
-expected total is the sum — verify the arithmetic before hardcoding a count into a
-smoke check; an off-by-one here fails at runtime, not at compile time.
-
-**N6 — Never rely on a column DEFAULT for business-meaningful values.**
-A `NOT NULL` column with a DEFAULT (e.g. a blocking/restrictive default value) means
-a raw `INSERT` omitting the column silently picks the default. Entry points that must
-control such a value should always pass it explicitly in the INSERT column list, and
-default the corresponding parameter to the safe value. Check `DEFAULT` definitions in
-the migration/DDL sources before assuming what an omitted column becomes.
-
-**N7 — Audit/history triggers may be `AFTER UPDATE` only.**
-Before asserting audit behavior for a new write path, verify the trigger's timing
-(`AFTER INSERT` / `AFTER UPDATE` / both) in the current sources. An `AFTER UPDATE`
-history trigger produces **no** row on INSERT through a new entry point — if the
-design requires creation to be audited, that audit must be explicit in the procedure
-or a trigger change must be negotiated upstream (do not silently create triggers).
-
-**N8 — Idempotency re-run is the proof of `CREATE OR ALTER`.**
-After the first successful compile, re-run the full script on the same database: the
-procedures must refresh and the smoke checks must pass again with no duplicate
-objects. Note that piping sqlcmd output through truncating commands (e.g.
-`Select-Object -First N`) can close the stdout pipe early and surface a misleading
-exit code — read the full output or run without truncation before judging success.
+- **N1 — `EXEC @rc = <proc> <arg>` cannot take expressions as arguments.** Passing a
+  computed argument inline (e.g. `N'prefix:' + CONVERT(NVARCHAR(16), @id)`) to
+  `sys.sp_getapplock` through the `EXEC @return_var = proc` form fails to compile.
+  Build the argument into a local variable first, then pass the variable.
+- **N2 — Bare `THROW;` directly after a compound `BEGIN ... END` statement in a CATCH
+  block is a parse error** (Msg 102), while the same pattern after a simple statement
+  compiles. Fix: wrap the rethrow (e.g. `ELSE BEGIN THROW; END`). To pin such errors,
+  compile minimal repro procedures on a scratch DB and rule out file encoding with an
+  ASCII-stripped copy before blaming the parser.
+- **N3 — A procedure that `ROLLBACK`s on failure rolls back the caller's outer
+  transaction too (SQL 266 trap).** Nested rollback decrements the transaction count
+  to zero → `Msg 266` on return. Options: (a) call entry points standalone and clean
+  up rows explicitly — the project pattern; (b) `SAVE TRANSACTION` — but rolling back
+  to a savepoint does NOT release a `@LockOwner = 'Transaction'` applock, so (b) must
+  not be used on failure paths that rely on the applock.
+- **N4 — Parser error line numbers are relative to the batch start, not the file.**
+  To get clean numbers, extract the failing batch (plus the settings preamble) into a
+  standalone `.sql` file and compile it alone.
+- **N5 — Signature checks must count OUTPUT parameters too.** `sys.parameters`
+  counts every parameter; verify the arithmetic before hardcoding a count into a
+  smoke check — an off-by-one fails at runtime, not compile time.
+- **N6 — Never rely on a column DEFAULT for business-meaningful values.** A raw
+  INSERT omitting the column silently picks the default. Entry points controlling
+  such a value must pass it explicitly in the INSERT column list and default the
+  parameter to the safe value.
+- **N7 — Audit/history triggers may be AFTER UPDATE only.** An AFTER-UPDATE history
+  trigger produces no row on INSERT through a new entry point; if creation must be
+  audited, do it explicitly in the procedure or negotiate a trigger change upstream
+  (do not silently create triggers).
+- **N8 — Idempotency re-run is the proof of `CREATE OR ALTER`.** Re-run the full
+  script: procedures must refresh, smoke checks pass again, no duplicate objects.
+  Do not judge success from truncated `sqlcmd` output (piping through truncating
+  commands can close the stdout pipe early and mislead the exit code).
 
 ## Compile and Verify
 
-After writing SQL, attempt verification on a scratch database when local SQL Server
-and `sqlcmd` are available. Never run Task 12 directly on a live or named baseline
-database.
+When local SQL Server + `sqlcmd` are available, verify on a scratch database only
+(never on a live/named baseline). Flow: create scratch DB → run
+`outputs/05-db-definition-G{{group}}.sql` → `outputs/06-sample-data-G{{group}}.sql`
+→ `outputs/10-schema-migration-G{{group}}.sql` → Task 12 script → re-run Task 12 for
+idempotency → review smoke-check output.
 
-Typical scratch flow:
-
-1. Create or recreate a scratch database.
-2. Run `outputs/05-db-definition-G{{group}}.sql`.
-3. Run `outputs/06-sample-data-G{{group}}.sql`.
-4. Run `outputs/10-schema-migration-G{{group}}.sql`.
-5. Run `outputs/12-concurrency-implementation-G{{group}}.sql`.
-6. Re-run Task 12 SQL to prove idempotency.
-7. Review smoke-check output.
-
-If SQL Server is unavailable, perform static checks:
-
-- Output file exists and is non-empty.
-- Header settings are present.
-- Required procedure names from Task 11 appear.
-- Each procedure uses explicit transaction handling.
-- Selected lock mechanism from Task 11 appears where required.
-- Result codes from Task 11 appear and are not merged incorrectly.
-- No `CREATE TABLE`, `ALTER TABLE`, `DROP TABLE`, `CREATE INDEX`, or trigger recreation
-  appears unless Task 11 explicitly required it.
-- No Task 13 concurrent-session scripts are generated.
-
-Record execution or static-check notes in:
-
-`logs/eval/task12/YYYY-MM-DD-HHmm-12-concurrency-compile.log`
+If SQL Server is unavailable, static checks: file exists/non-empty; settings header
+present; every Task 11 entry-point name appears; each procedure has explicit
+transaction handling; the selected lock mechanism appears where required; Task 11
+result codes appear unmerged; no `CREATE/ALTER TABLE`, `DROP`, `CREATE INDEX`, or
+trigger recreation unless Task 11 required it; no Task 13 scripts. Record notes in
+`logs/eval/task12/YYYY-MM-DD-HHmm-12-concurrency-compile.log`.
 
 ## Validation Checklist
 
-Before finalizing, verify:
-
-- Task 11 approval gate passed.
-- Every Task 11 entry point is implemented once.
-- Every write workflow has post-lock authoritative re-checks.
-- Procedures return the exact Task 11 result codes.
-- Lock handling maps timeout/cancel/deadlock exactly as Task 11 defines.
-- No schema drift was introduced.
-- Existing Task 10 triggers remain untouched unless Task 11 explicitly required a
-  trigger change.
-- Smoke checks are safe: call entry points standalone (per N3) and remove created
-  test rows so nothing persists.
-- Compile/static verification log exists.
-- Trajectory file exists before any completion summary.
+- Task 11 approval gate passed; entry-point count matches the Task 11 handoff exactly.
+- Every write workflow has a post-lock authoritative re-check.
+- Procedures return the exact Task 11 codes; lock timeout/cancel/deadlock mapped per
+  Task 11.
+- No schema drift; Task 10 triggers untouched unless Task 11 required a change.
+- Smoke checks safe: standalone calls (N3), created rows removed, nothing persists.
+- Compile/static-verification log and trajectory file exist before any completion
+  summary.
 
 ## Trajectory and Completion
 
-After writing or revising `outputs/12-concurrency-implementation-G{{group}}.sql`,
-write the trajectory file before any user-facing task-complete summary:
-
-`logs/trajectory/task12/YYYY-MM-DD-HHmm-trajectory.md`
-
-Use the evaluation trajectory template, adapting the task number to `12`.
-
-Then summarize:
-
-1. What was completed.
-2. Assumptions made.
-3. Verification performed or why verification could not run.
-4. The exact prompt from `AGENTS.md`:
+Write `logs/trajectory/task12/YYYY-MM-DD-HHmm-trajectory.md` (evaluation template,
+task number 12) BEFORE any user-facing summary. Then report: what was completed;
+assumptions; verification performed or why not; end with the AGENTS.md prompt:
 
 > _"Ready to mark Task X as ✅ and update `memory/Progress.md`? Or do you want to run revisions?"_
 
-Replace `X` with `12`.
+with `X` = `12`.
 
 ## Idempotency
 
-- Default mode: overwrite the full Task 12 output after re-reading current sources.
-- Revise mode: re-read all current sources, compare the existing Task 12 output
-  against the current Task 11 contract, then overwrite with a coherent revised script.
+- Overwrite (default): re-read sources, replace the whole Task 12 output.
+- Revise: re-read sources, compare against the current Task 11 contract, overwrite
+  coherently.
 - Never patch isolated SQL fragments while leaving stale procedure bodies elsewhere.

@@ -750,15 +750,54 @@ Task 08 K1–K4; Task 09 B.3; `outputs/11-concurrency-design-G05.md`.
 
 ---
 
+### Decision: Task 11 revision — entry-point scope = 4; K5 closed via `usp_maintenance_report`
+
+**Task:** 11 (Concurrency Design — revision, v2.0)
+**Date:** 2026-08-06
+
+**Problem:** An interim decision earlier the same day narrowed Task 11 to 3 entry
+points and declared maintenance-ticket creation out-of-scope (documented residual
+risk), contradicting the recorded K5 decision (Task 12, 2026-08-05) which promotes
+`usp_maintenance_report` to a 4th locked write path. The contradiction must be
+resolved in one direction; leaving K5 as a documented hole in the no-overlap
+invariant (NR6) — while the fix is a single procedure reusing the same per-space
+applock — was rejected in review.
+
+**Options considered:**
+- Option A: keep the 3-entry-point scope; K5 remains a declared residual risk
+  (BR4/NR6 violation window when a blocking ticket insert races an in-flight
+  confirmation under READ COMMITTED).
+- Option B: final scope of 4 entry points — ticket creation
+  (`usp_maintenance_report`) is a first-class write procedure acquiring
+  `space_booking:<space_id>` (Exclusive, Transaction owner, 5 s) **only** when the
+  ticket starts at `out-of-service`; advisory creation needs no lock (it blocks
+  nothing, it only adds an NR2 obligation); the procedure always passes
+  `@impact_level` explicitly, avoiding the column-level DEFAULT `'out-of-service'`
+  trap.
+
+**Decision:** We chose **Option B** (final). Task 11 v2.0 covers 4 entry points:
+instant submit, staff approval, escalation/downgrade, and ticket creation. K5 is
+closed in the coverage matrix and the Task 13 handoff gains scenario T9. The
+interim scope-3 choice is superseded; the recorded K5 4th-entry-point treatment
+(2026-08-05) stands. The BR4 rejection stays on the booking side's post-lock
+re-check — ticket creation never rejects overlapping bookings (U3/NR4 semantics
+unchanged).
+
+**Impact:** `outputs/11-concurrency-design-G05.md` v2.0 implements the 4-entry-point
+scope (§2.1 scope note, §6.3 result-code table, §7.4 workflow W4, §8 matrix row for
+K5, §9 handoff with 4 procedures, §10 test T9). No schema change; triggers +
+`uq_bookings_active_overlap` stay as defense-in-depth.
+
+**Requirement reference:** `docs/project_phase2_description.md` §1.2 (NR6); Task 08
+K1–K5; recorded K5 decision (2026-08-05); `outputs/11-concurrency-design-G05.md` §2/§7.4/§8/§9/§10.
+
+---
+
 ## Revision log
 
 | Date | Change | By | Task |
-|---|---|---|---|
-| 2026-08-05 | Task 12 rev 1 — K5 gap closed: new 4th entry point `usp_maintenance_report` (applock `space_booking:<space_id>` only when the ticket starts at `out-of-service`; no new result codes; no schema change); Task 08 inventory gains K5 (maintenance-ticket creation race); Task 11 gains §9.4 + K5 rows in §4.2/§7/§8.5/§11.1; Task 13 gains T9 | Agent | Task 12 |
-| 2026-08-05 | Task 11 rev 1.2 — instant path gains procedure-level BR2 check (`51010 SPACE-CLOSED`, new code; 51002 stays exclusive to BR4 so Task 13 can distinguish the two rejection causes); §8.1 shape code splits -1/-2 → 51005 vs -3 → 51006 | Agent | Task 11 |
-| 2026-08-05 | Task 11 rev 1.1 — escalation/downgrade workflow adds authoritative post-lock re-read (status active ∧ impact_level differs, else 51009 + rollback), mirroring the §9.2 double-check pattern; closes the concurrent-escalation no-op race where the loser returned SUCCESS instead of 51009; Task 13 gains scenario T5b | Agent | Task 11 |
-| 2026-08-04 | Task 11 — U3 resolved: escalation affects only already-approved bookings (pending stay pending, become unapprovable at approval time); selected strategy = per-space transaction-owned `sp_getapplock` critical section shared by instant/staff/escalation paths, post-lock invariant re-check, READ COMMITTED, 5 s lock timeout, retry on 51005/51006 only, error codes 51001–51009; no schema change | Agent | Task 11 |
-| 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
+|---|---|---|---| 
+2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
 | 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |
 | 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
 | 2026-06-18 | Split `bookings` into `bookings` + `booking_approvals` + `booking_sessions` (SRP refactor) | Agent | Post-Task 5 refactor |

@@ -1,0 +1,107 @@
+Task 11 — Static Verification Log (v2.0 revision run: entry-point scope 3 -> 4)
+================================================================================
+File     : logs/eval/task11/2026-08-06-2245-11-concurrency-design-check.log
+Task     : 11 — Concurrency Design
+Group    : G05
+Run mode : revision of v1.0 (2026-08-06-2231) — entry-point scope expanded 3 -> 4;
+           K5 closed via usp_maintenance_report; agent/tooling language removed;
+           citations restricted to the deliverable set
+Date     : 2026-08-06
+Status   : PASS (all checks)
+
+Sources re-read this run
+------------------------
+- .opencode/skills/db-design-pipeline/SKILL.md (reading order + registry protocol)
+- .opencode/skills/db-design-pipeline/11-concurrency-design/SKILL.md (task skill)
+- docs/README.md, docs/templates/README.md
+- .opencode/skills/evaluations/trajectory-recording.md + templates/trajectory-template.md
+- memory/MEMORY.md, memory/Progress.md, memory/ActiveContext.md
+- docs/design-decisions.md, docs/tech-stack.md
+- docs/entity-registry.md, docs/schema-registry.md (grep cross-checks)
+- docs/project_phase2_description.md
+- outputs/08-requirement-change-analysis-G05.md (K1-K5 inventory)
+- outputs/09-updated-erd-and-logical-design-G05.md (approved Phase 2 design)
+- outputs/10-schema-migration-G05.sql + 10-schema-migration-G05-rollback.sql (contract)
+- outputs/05-db-definition-G05.sql (Phase 1 trigger/index baseline)
+- outputs/11-concurrency-design-G05.md v1.0 (2026-08-06-2231) as revision baseline
+- .opencode/skills/evaluations/expected-files.md (Task 11 write contract)
+
+Checks
+------
+[PASS] output file exists and is non-empty
+       outputs/11-concurrency-design-G05.md (12 sections)
+[PASS] required sections present, numbered 1-12 with no duplicates:
+       1 Overview, 2 Concurrency Identification, 3 Design Decisions,
+       4 Current Database Baseline & Contract, 5 Evaluation of Candidate
+       Strategies, 6 Transaction and Locking Architecture, 7 Workflow Designs,
+       8 Conflict Coverage Matrix, 9 Task 12 Implementation Guidance,
+       10 Task 13 Test Guidance, 11 Assumptions/Risks/Boundaries,
+       12 Revision Log (verified by heading scan)
+[PASS] no full implementation SQL script embedded — only the canonical applock
+       shape fragment (section 5.3) and workflow pseudocode (sections 7.1-7.4),
+       explicitly marked as shape/contract for Task 12
+[PASS] all source files used are listed in this log
+[PASS] task gates resolved:
+       - Task 08/09/10 approved (memory/Progress.md)
+       - U3: recorded decision applied (escalation affects only already-approved
+         bookings; pending bookings stay pending, gated at approval time 51002)
+       - Entry-point scope = 4 (final, v2.0) — supersedes the interim scope-3
+         choice; the recorded K5 decision (2026-08-05) stands
+       - U4 belongs to Task 16 (not a Task 11 gate)
+[PASS] exactly 4 entry points: workflows 7.1 instant submit, 7.2 staff approval,
+       7.3 escalation/downgrade, 7.4 ticket creation == Task 12 handoff section 9
+       (usp_booking_instant_submit, usp_booking_approve,
+       usp_maintenance_set_impact_level, usp_maintenance_report)
+[PASS] all Task 08 conflicts covered in matrix section 8: K1, K2, K3, K4, K5 —
+       ticket-creation row present; no residual-risk row
+[PASS] K5 closure verified: W4 acquires the per-space lock only when the ticket
+       starts at 'out-of-service'; advisory tickets need no lock (NR2 obligation
+       only); @impact_level always passed explicitly (column DEFAULT
+       'out-of-service' trap avoided); raw non-contractual DML documented as an
+       application-governance boundary (section 7.4, section 11), not shipped as
+       an approved workflow
+[PASS] instant and staff approval share one strategy (same applock resource,
+       same final re-check set; 7.1/7.2)
+[PASS] escalation/downgrade included (7.3) with post-lock re-read and no booking
+       DML (U3); pending bookings untouched by escalation; T4 regression scenario
+       in the Task 13 handoff
+[PASS] no contradiction with the derived instant-origin model (approver_id = -1,
+       no stored origin column); instant path inserts approvals with -1 (4.3)
+[PASS] no new schema (no tables/columns/indexes/triggers; only the 4 entry-point
+       procedures are designed for Task 12)
+[PASS] R2 gate parity: BR1/BR3/BR4/NR2/BR2 checked in instant (7.1 steps 4-7) and
+       staff (7.2 step 4) paths; escalation (7.3) and ticket creation (7.4) check
+       their own invariants; no rule enforced in one path but missing in another
+[PASS] P3 cause-family result codes: 51001-51009 (51001 documented as the generic
+       request-context bucket: row-not-found / wrong-state / invalid-input share one
+       code because they share one handling; §6.3 revised); 51002 (BR4) distinct from
+       51003 (BR1), 51008 (BR2 manual override), 51009 (BR3 capacity), 51004 (NR2)
+       — business-rejection gates never share a code
+[PASS] R4 shape fragments match contract: applock return values mapped 1:1
+       (-1 -> 51005, -2 -> 51006, -3 -> 51007; -999 = programmer error THROW,
+       not a returned code); lock inside same transaction as final check+write;
+       release-before-write marked invalid (5.3, 6)
+[PASS] retry contract: only 51005/51006 retryable; 51007 restarts the unit
+[PASS] SESSION_CONTEXT(N'current_user_id') handoff referenced (3 DD4 row, 6.4,
+       7.3, 9) with clear-at-end requirement and -1 fallback
+[PASS] docs/design-decisions.md: the interim scope-3 entry (written earlier
+       2026-08-06) replaced by the final scope-4 decision (K5 closed via
+       usp_maintenance_report); no revision-log/audit rows added for the revision
+       itself
+[PASS] citation rule: the document cites only deliverable-set files
+       (outputs/05, 08, 09, 10); no reference to docs/design-decisions.md or
+       docs/schema-registry.md as authoritative (verified by scan)
+[PASS] no agent/tooling language: no '--max_concurrency', 'user-ratified',
+       'regeneration', 'overwrite', '--mode', or 'taken in this turn' tokens
+       (verified by token scan)
+[PASS] no prior outputs or registries modified: only outputs/11-concurrency-
+       design-G05.md rewritten (v2.0); entity/schema registries untouched;
+       Task 08/09/10 outputs untouched
+[PASS] Task 13 receives concrete concurrent-session scenarios: T1-T10 with
+       deterministic code assertions + invariant audit (T9 = K5 ticket creation
+       vs instant submit, both orders; T10 = staff-vs-staff concurrent approval,
+       the W2 mirror of T1 added after review)
+
+No SQL compile step: Task 11 is a Markdown design document by definition.
+Verification performed by source re-read + heading/token/citation scans of the
+deliverable.

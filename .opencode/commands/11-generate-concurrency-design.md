@@ -22,6 +22,7 @@ generate-concurrency-design
 generate-concurrency-design --group G05
 generate-concurrency-design --group G05 --mode overwrite
 generate-concurrency-design --group G05 --mode revise
+generate-concurrency-design --group G05 --max_concurrency 4
 ```
 
 Arguments:
@@ -31,10 +32,23 @@ Arguments:
                     - revise: re-read all current sources, compare with the
                       existing Task 11 output, then rewrite it coherently
                     Default: overwrite.
+  --max_concurrency <n>
+                    Maximum number of critical-section entry points the Task 11
+                    design covers (2|3|4). Passed to the skill as
+                    `--max_concurrency {{max_concurrency}}`.
+                    - 4: all entry points — instant booking submit, staff approval,
+                      maintenance escalation/downgrade, maintenance ticket creation.
+                    - 3 (default): instant booking submit, staff approval,
+                      maintenance escalation/downgrade. Maintenance ticket creation
+                      is documented as out-of-scope residual risk.
+                    - 2: instant booking submit and staff approval only. Maintenance
+                      escalation/downgrade is also out-of-scope.
+                    Default: 3.
 
 Prompt:
   Generate the Task 11 concurrency design for the Phase 2 extension of the Campus
-  Space Management System, group {{group}}.
+  Space Management System, group {{group}}, covering at most
+  {{max_concurrency}} critical-section entry points.
 
   Required reading:
   - Follow `AGENTS.md`, `docs/README.md`, and the main
@@ -58,26 +72,12 @@ Prompt:
 
   Output:
   - Write `outputs/11-concurrency-design-G{{group}}.md`.
-  - Append Task 11 key decisions to `docs/design-decisions.md` when a decision is
-    made, including resolved Task 11 open questions and the selected concurrency
-    strategy.
+  - Append Task 11 KEY design decisions to `docs/design-decisions.md` ONLY when a
+    decision is actually made (resolved Task 11 open questions, selected concurrency
+    strategy). Do NOT append revision-log, audit, or bookkeeping rows for
+    regeneration, revision, or formatting runs — those are not decisions.
   - Write a static verification log under `logs/eval/task11/`.
   - Write a trajectory file under `logs/trajectory/task11/` before reporting completion.
-
-  Include:
-  1. Scope and gate/source summary.
-  2. Resolved Task 11 open questions, especially any pending escalation behavior
-     question assigned to Task 11 in `memory/Progress.md`.
-  3. Concurrency problem statement and invariants.
-  4. Current database contract discovered from the latest approved sources.
-  5. Candidate SQL Server strategies with tradeoffs.
-  6. Selected strategy and rationale.
-  7. Transaction boundary, isolation, lock ordering, timeout, and retry design.
-  8. Workflow designs for instant booking, staff approval, maintenance escalation
-     or downgrade, and room-finder/availability reads.
-  9. Conflict coverage matrix.
-  10. Task 12 implementation handoff and Task 13 test handoff.
-  11. Assumptions, risks, out-of-scope items, and revision log.
 
   Do not:
   - implement Task 12 SQL procedures, triggers, migrations, or runnable scripts

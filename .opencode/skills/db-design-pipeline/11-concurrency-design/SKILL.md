@@ -13,462 +13,342 @@ description: >
 
 ## Goal
 
-Produce a reviewer-ready Markdown design document that explains how the system will
-prevent concurrency anomalies in Phase 2, especially the NR6 invariant:
+Produce a Markdown design that explains how the system prevents concurrency
+anomalies in Phase 2, especially the NR6 invariant:
 
 > Two approved bookings must never use the same space during overlapping time
 > periods, regardless of whether they are created through instant booking or staff
 > approval, even when users and staff operate concurrently.
 
-Task 11 is a design handoff. It must be precise enough for Task 12 to implement and
-Task 13 to test, but it must not contain full runnable implementation or test scripts.
+Task 11 is design **only**: precise enough for Task 12 to implement and Task 13 to
+test, but it must not contain full runnable implementation or test scripts.
 
 ## Adaptive Source Rule
 
-This skill must stay useful when project files change. Do not bake in object names,
-decisions, task statuses, or trigger behavior from a previous run unless the current
-files still say so.
+Re-read the current repo every run. Do not reuse object names, decisions, task
+statuses, or trigger behavior from an old run unless the current files still say so.
+Read, in order:
 
-When generating the output:
+- `memory/Progress.md` — task gates, open questions.
+- `memory/ActiveContext.md` — current handoff.
+- `outputs/08-requirement-change-analysis-G{{group}}.md` — conflict inventory.
+- `outputs/09-updated-erd-and-logical-design-G{{group}}.md` — approved schema design.
+- `outputs/10-schema-migration-G{{group}}.sql` + rollback — when Task 10 is
+  approved/current (implemented contract and audit/trigger surface).
+- Registries, `docs/design-decisions.md`, `docs/tech-stack.md`, and
+  `docs/project_phase2_description.md` — cross-check names/decisions/conventions.
 
-- Extract current task status and open questions from `memory/Progress.md`.
-- Extract the active task handoff from `memory/ActiveContext.md`.
-- Extract current entities, tables, indexes, and business-rule coverage from the
-  registries.
-- Extract conflict labels and descriptions from the current Task 08 output.
-- Extract approved schema/rationale from the current Task 09 output.
-- Extract implemented trigger/procedure/application contracts from Task 10 only if
-  Task 10 is approved or the current pipeline state says it is the upstream source.
-- Treat the examples in this skill as design patterns and checks, not as replacement
-  source material.
+Priority on conflict: `docs/design-decisions.md` > memory > Task 10 contracts >
+registries > Task 09 > Task 08 > phase-2 description. If sources contradict each
+other, stop and report the exact conflict — never silently pick a convenient one.
 
-If the current files contradict one another, stop and report the exact conflict rather
-than silently choosing a convenient interpretation.
+## Parameters
 
-## Inputs and Source-of-Truth Priority
+- `{{group}}` — group id; default `G05`.
+- `{{max_concurrency}}` — number of critical-section entry points the design covers;
+  default `4`. Valid values: `4` (instant submit, staff approval, maintenance
+  escalation/downgrade, maintenance ticket creation), `3` (instant submit, staff
+  approval, escalation/downgrade; ticket creation out-of-scope), `2` (instant submit,
+  staff approval; escalation/downgrade also out-of-scope).
 
-The global reading order in `.opencode/skills/db-design-pipeline/SKILL.md` and
-`docs/README.md` governs which project docs, memory files, and templates are read at
-session start (`AGENTS.md`, memory files, registries, `docs/design-decisions.md`,
-`docs/tech-stack.md`, `docs/templates/README.md`). Do not restate it here; only
-task-specific must-read sources are listed below:
+Output must cover **exactly** `{{max_concurrency}}` entry points in the workflows
+list and the Task 12 handoff. Conflicts whose prevention depends on a dropped entry
+point must be declared **out-of-scope with residual risk** in the matrix — never
+silently omitted.
 
-1. `docs/project_phase2_description.md` - authoritative Phase 2 source (NR6 wording).
-2. `outputs/08-requirement-change-analysis-G{{group}}.md` - current conflict inventory.
-3. `outputs/09-updated-erd-and-logical-design-G{{group}}.md` - approved Phase 2 design.
-4. `outputs/10-schema-migration-G{{group}}.sql` and
-   `outputs/10-schema-migration-G{{group}}-rollback.sql` when Task 10 is approved or
-   present as the current implemented contract.
-5. Existing `outputs/11-concurrency-design-G{{group}}.md` only in `--mode revise`.
+**Scope discipline (do not re-open recorded closures).** A scope reduction is only
+permitted if nothing recorded already requires the dropped path. Before lowering
+`{{max_concurrency}}`, check `docs/design-decisions.md` for a decision on that entry
+point (e.g., the recorded K5 decision promotes maintenance-ticket creation to a 4th
+locked entry point). If a recorded decision already covers it, do NOT reduce scope and
+re-ship the hole: either keep the consolidation in scope (default `4`) or surface the
+conflict and obtain an explicit user decision, then record the supersede in
+`docs/design-decisions.md`. Never present a **cheaply fixable hole** (a gap closed by
+one small procedure that reuses a lock the other paths already use) as a designed
+residual risk — that is scope-shaving, not a trade-off.
 
-Consult the registries, `docs/design-decisions.md`, or `docs/tech-stack.md` on demand
-when a claim needs cross-checking (names, decisions, conventions); they are read at
-session start anyway.
+## Task Gates (before writing)
 
-Use `--group` if supplied; default to `G05`.
+- Tasks 08–10 approved per `memory/Progress.md`; Task 11 is next (unless an explicit
+  revise run).
+- Every Task 11 open question is resolved in memory or has a final user decision in
+  this turn; otherwise **stop before output**.
+- The chosen strategy must not contradict `docs/design-decisions.md`.
+- Do NOT update `memory/Progress.md`/`ActiveContext.md` (wait for user approval) and
+  do NOT modify registries or prior task outputs.
 
-If any required file is missing, stop and report the exact gap. If a referenced optional
-Task 10 file is absent while the task status says Task 10 is approved, stop and report
-the mismatch.
-
-When sources conflict, use this priority:
-
-1. `docs/design-decisions.md` for recorded decisions and tradeoffs.
-2. `memory/Progress.md` for task approvals and open-question status.
-3. `memory/ActiveContext.md` for current handoff details.
-4. `outputs/10-schema-migration-G{{group}}.sql` for implemented database and application
-   contracts, when approved/current.
-5. `docs/schema-registry.md` for relational objects and business-rule coverage.
-6. `docs/entity-registry.md` for conceptual relationships and attributes.
-7. `outputs/09-updated-erd-and-logical-design-G{{group}}.md` for design rationale.
-8. `outputs/08-requirement-change-analysis-G{{group}}.md` for conflict inventory.
-9. `docs/project_phase2_description.md` and `req/business-requirement.md` for
-   requirement wording.
-10. `docs/tech-stack.md` for SQL Server syntax and naming conventions.
-
-Do not edit higher-priority sources to fit the design. If a mismatch blocks design,
-report it.
-
-## Output
+## Outputs
 
 - `outputs/11-concurrency-design-G{{group}}.md`
-- `docs/design-decisions.md` - append Task 11 key decisions made during this run,
-  especially resolved Task 11 open questions and the selected concurrency strategy.
+- `docs/design-decisions.md` — append Task 11 KEY design decisions (resolved open
+  questions, selected strategy, entry-point scope change) ONLY when a decision is
+  actually made. Never append revision/audit/log rows for regeneration, revision, or
+  formatting runs.
 - `logs/eval/task11/YYYY-MM-DD-HHmm-11-concurrency-design-check.log`
 - `logs/trajectory/task11/YYYY-MM-DD-HHmm-trajectory.md`
 
-The output is Markdown. It may include short pseudocode or tiny T-SQL fragments only
-to communicate transaction order, lock hints, error contracts, or entry-point shape.
-Do not write a complete Task 12 implementation script.
-
-## Task Gates
-
-Before writing the Task 11 output, verify:
-
-- Phase 2 tasks before Task 11 are approved according to `memory/Progress.md`, following
-  the repository's strict task order.
-- Task 11 is the next unstarted Phase 2 task, unless the current run is an explicit
-  `--mode revise` of an existing Task 11 output.
-- Every open question assigned to Task 11 in the "Known open questions (Phase 2)" table
-  is resolved in memory or has a final decision from the user in the current turn.
-- `docs/design-decisions.md` does not conflict with the selected strategy or with any
-  resolved open-question answer.
-
-Current known example: U3 asks whether escalation to out-of-service affects pending
-requests or only already-approved bookings. If U3 or any successor Task 11 question is
-still pending and no current-turn decision exists, stop and ask for the decision before
-generating the output. Do not silently decide.
-
-Do not update `memory/Progress.md` or `memory/ActiveContext.md` after generation. The
-user must approve first, per `AGENTS.md`.
-
-Do not update `docs/entity-registry.md` or `docs/schema-registry.md` for Task 11 unless
-the current approved sources already require a schema-object change. If the selected
-concurrency design requires new schema not present in the registries, stop and report
-the conflict instead of quietly editing the registries.
-
 ## Design Scope
 
-Task 11 must design:
+Design:
 
-- How instant booking and staff approval check availability and write approval state
-  atomically.
-- How maintenance escalation or downgrade interacts with in-flight booking and approval
-  work for the same space/time.
-- How the design prevents every concurrency conflict found in the current Task 08
-  output.
-- Which SQL Server concurrency mechanism will be used and why.
-- Which database entry points Task 12 should implement.
-- What the application must do around transactions, session context, retries, and
-  deterministic errors.
-- What Task 13 must demonstrate with concurrent-session tests.
+- How each Task 08 conflict is prevented, within the `{{max_concurrency}}`
+  entry-point scope (dropped conflicts → out-of-scope with residual risk).
+- The chosen SQL Server mechanism and why.
+- Exactly `{{max_concurrency}}` database entry points for Task 12.
+- Application transaction/session-context/retry/error-contract responsibilities.
+- Concrete concurrent-session scenarios for Task 13.
 
-Task 11 must not:
+Do NOT:
 
-- implement stored procedures, triggers, runnable migration SQL, or test scripts;
-- add new schema unless the current registries already require it;
-- tune performance indexes beyond naming existing indexes the design relies on;
+- implement procedures/triggers/migration SQL/test scripts;
+- add new schema beyond what current approved sources require;
+- tune performance indexes (naming existing ones the design relies on is fine);
 - write analytical queries or data-generator code;
-- patch prior outputs to remove upstream inconsistencies.
+- patch prior outputs.
 
-## Required Extraction
+## Required Extraction (run-time inventory)
 
-Before reasoning, build a short internal inventory from the current files:
+Confirmed booking statuses (BR1/NR6 set), maintenance levels distinguishing
+advisory vs out-of-service, ack table/relationship, instant-approval origin model,
+existing triggers/indexes that enforce overlap and maintenance rules, session-context
+audit contract, Task 08 conflict IDs, and Task 11 open-question decisions. Design
+from this snapshot; say explicitly when a detail is absent.
 
-- Confirmed booking statuses that count as "approved/confirmed" for BR1/NR6.
-- Current maintenance columns and values that distinguish advisory and out-of-service.
-- Current advisory acknowledgement table/relationship, if present.
-- Current approval origin model, especially whether instant approval is derived or stored.
-- Current trigger/procedure names that already enforce booking, maintenance, approval, or
-  acknowledgement rules.
-- Current indexes relevant to booking overlap and maintenance overlap checks.
-- Current application-layer contracts, such as session context keys used for audit.
-- Current Task 08 conflict IDs and descriptions.
-- Current Task 11 open questions and their decisions.
+## Design Principles (P1–P4)
 
-Write the output from that inventory. If a detail is absent, say it is absent and design
-around the absence only when the task scope allows it.
+> **Naming:** the labels below are **P1–P4** (design principles), not R#-numbers,
+> because R# is already the relationship-ID namespace in the Phase 1 registry and is
+> reused in the Task 08/09 documents (R1 = Spaces→Maintenance, R3 =
+> Users→Booking_Approvals, R5, R10, …). Never use a bare R# label in Task 11 output
+> for anything other than a relationship reference.
 
-## Required Reasoning
+- **P1 — Post-lock re-check in EVERY write workflow.** Pre-lock reads are fast-path
+  only. Every workflow that confirms/invalidates an interval must re-read its target
+  row(s) inside the critical section and re-run checks immediately before writing,
+  then return the deterministic no-op/conflict code. Applied to all workflows,
+  including maintenance escalation/downgrade (typically forgotten).
+- **P2 — Gate-coverage parity.** List each workflow's checks side by side and diff.
+   If a gap traces to an upstream task, document the trace but fix it in the
+  procedure-level design here — never edit upstream outputs/registries. Prefer
+  early deterministic procedure rejection over relying on a trigger to roll back.
+- **P3 — One result code per cause-family; shared buckets must be explicit.** Codes
+  are 1:1 with distinguishable **cause families**; business-rejection gates never
+  share a code (Task 13 asserts on codes; e.g. an overlap must map to `51003`, never
+  to the same code as capacity or a missing ack). A generic context/validation code
+  (e.g. `51001` = row-not-found / wrong-state / invalid-input) is permitted ONLY if
+  the doc explicitly labels it a *bucket* in the error-contract table and itemizes
+  the causes it carries per workflow. Never write the strong claim "each code names
+  ONE cause" (or "never overloaded") unless the workflow step tables actually show
+  a distinct code for every distinct cause — otherwise soften to "cause-family" or
+  split the code.
+- **P4 — Shape fragments match the contract exactly.** Any pseudocode must agree with
+  the timeout/deadlock/error tables. For `sp_getapplock`, map EACH return value to its
+  own code (-1→timeout, -2→cancelled, -3→deadlock victim). Mark deliberate
+  simplifications as such.
+- **P5 — Lock granularity is argued, not assumed.** Disclosing a coarse-granularity
+  risk with mitigations is not enough — justify the granularity choice itself
+  relative to the narrower alternative. When the lock key could plausibly be finer
+  (e.g., per-space vs per-space+day), the doc must explicitly state why the coarser
+  key was selected (usually correctness/simplicity: multi-day intervals would require
+  acquiring a *set* of day-keys with ordering rules and cross-midnight pitfalls) and
+  quantify acceptability against the expected volume (e.g., Task 14 scale: ≥100k
+  bookings over 3 academic years ⇒ tens of writes/day per busy space, sub-ms critical
+  sections vs a 5 s timeout). If a finer key would be more correct or the volume
+  argument does not hold, the coarser choice is a design flaw — say so and pick the
+  better key instead of papering over it.
 
-### Invariants
+## Hardness Gates (output-quality, ENFORCED by scan before finishing)
 
-State each invariant in enforceable terms, using current source wording:
+The generated document is a design deliverable, not a transcript of how it was made.
+Every gate below is verified by scanning the finished file with Select-String
+(ripgrep), and the scan lines + results are recorded in the eval log:
 
-- **BR1 / NR6:** no two non-deleted bookings for the same space may both be in the
-  confirmed-status set with overlapping requested intervals.
-- **BR4 Phase 2:** confirmation must not allow a booking that overlaps active
-  out-of-service maintenance.
-- **NR2:** confirmation may allow advisory overlap only when all required acknowledgement
-  rows exist.
-- **NR4 / Task 11 open question:** escalation behavior must follow the resolved decision
-  for pending versus approved bookings.
-- **NR5:** instant booking origin must follow the currently approved design; do not add a
-  stored origin column unless the current registries and decisions explicitly changed.
+- **G1 — Canonical 1..12 structure.** The `## N.` headings must be exactly `1..12`,
+  each ONCE, in order — no duplicates (e.g., two `## 4.`), no gaps, no stray tokens
+  between headings. Re-run this scan after EVERY rewrite; full-file rewrites drift
+  numbering easily.
+- **G2 — No run-machinery / CLI / agent language.** Forbidden tokens in the
+  deliverable: CLI flags (`--create`, `--mode`, `--max_concurrency`), "user-ratified",
+  "this turn", "regeneration"/"overwrite" used as a run attribute, "Agent"/"agent
+  negotiation", timestamp/UUID run identifiers. Decisions are written as decisions,
+  not as an execution narrative.
+- **G3 — Citations = deliverable set only.** The deliverable cites ONLY deliverable
+  files: `outputs/05-*`, `outputs/08-*`, `outputs/09-*`, `outputs/10-*` (+ phase-2
+  description only if quoting a requirement). NEVER cite `docs/design-decisions.md`,
+  `docs/schema-registry.md`, or `docs/entity-registry.md` as authoritative inside the
+  deliverable — fold the needed facts inline or attribute them to the approved output
+  they came from. Scan for `docs/` references and fail on any.
+- **G4 — Headings inside tables/cells are consistent** — every cross-reference
+  (§N, section N, step N) points at a heading/row that actually exists in the file;
+  check both directions.
+- **G5 — Error-code claim vs. actual workflow mapping.** Crosscheck the §6.3
+  error-contract table against the per-workflow step tables (§7): every code a
+  workflow returns must appear in the contract with its cause-family; and the
+  strength of the doc's claim must match reality (see P3). If a code is returned for
+  multiple causes, the doc must label it a bucket — never let an absolute claim
+  ("each code names ONE cause") coexist with a code used for several distinct causes.
+- **G6 — Conflict→test completeness for concurrency matrix.** Every conflict in the
+  matrix (§8, K1–K5) must map to at least one Task 13 scenario. Additionally cover the
+  **same-path homogeneous pairings** (instant-vs-instant, staff-vs-staff,
+  escalation-vs-escalation) or explicitly explain why a pairing is redundant with an
+  existing scenario — do not silently leave only the cross-path cases. A strict
+  reviewer will notice asymmetric coverage (e.g., a missing staff-vs-staff scenario
+  when instant-vs-instant is present).
+- **G7 — Granularity trade-off is argued in the doc.** Scan §5/§6/§11 for the
+  coarse-vs-narrow lock-key discussion: the resource-key choice must state WHY the
+  chosen granularity (vs the narrower alternative) and must ground acceptability in
+  the expected volume from the repo (e.g., Task 14 ≥100k bookings over 3 years). If
+  §11 discloses a contention risk but §6 never argues the key choice, the gate fails.
+  Also cross-check that no overclaim exists: if the volume math does not support the
+  coarser key, the doc must not wave it away.
 
-### Workflows to cover
+## Candidate Strategies (evaluate ≥3, then select)
 
-Document transaction boundaries and lock order for each workflow:
+Standard pool: (a) `SERIALIZABLE` + key-range locks; (b) `UPDLOCK, HOLDLOCK` range
+reads; (c) transaction-owned `sys.sp_getapplock` per space; (d) optimistic version
+checks (only if version columns exist/are proposed); (e) trigger-only (baseline).
+For each: anomaly prevented, residual gap, Task 12 complexity, concurrency impact,
+fit with current schema/triggers/indexes/SQL Server 2019+.
 
-1. **Instant booking submission**
-   - create or stage the booking request;
-   - check instant eligibility and availability;
-   - create required advisory acknowledgements where applicable;
-   - create the auto-approval according to the current origin model;
-   - commit or roll back as one unit.
-2. **Staff approval**
-   - lock/read the existing pending booking;
-   - re-check capacity, booking overlap, out-of-service maintenance, and advisory
-     acknowledgement completeness;
-   - insert or record the approval decision;
-   - commit or return a deterministic rejection/error.
-3. **Maintenance escalation/downgrade**
-   - lock/read the maintenance row and its affected space/time window;
-   - record impact-level history through the current audit contract;
-   - handle affected bookings according to the resolved Task 11 decision;
-   - avoid racing with simultaneous booking confirmation for the same space/time.
-4. **Room-finder / availability read**
-   - classify the query as an advisory hint or a transactionally current confirmation
-     read;
-   - if it is a pre-booking hint, state that final confirmation re-checks the invariant;
-   - if it is used inside confirmation, use the same critical section as the write path.
+Selection criteria: valid on SQL Server 2019+; every write path shares one critical
+section per space; invariant re-checked after lock acquisition, before write; keeps
+the current normalized schema; simple to implement and demonstrate.
 
-### Conflict mapping
+A common fit is a transaction-owned `sp_getapplock` resource
+`space_booking:<space_id>` with final re-checks + existing trigger/index
+defense-in-depth. This is a recommendation, not a requirement — justify the choice
+over alternatives from the current files.
 
-Map every conflict from the current Task 08 output to the selected prevention strategy.
-At minimum, the design must cover:
+SQL Server notes: range overlap is not expressible as a plain UNIQUE index
+(a filtered unique index catches exact same-start only); a check trigger alone can
+race under concurrency; `SERIALIZABLE`/`UPDLOCK` are correct only if every writer's
+predicates lock identical ranges — easy to get wrong across paths;
+`sp_getapplock` serializes by logical resource with no schema change; the lock MUST
+be acquired inside the same transaction as the final check+write; release-before-
+write is invalid; the app must set/clear `SESSION_CONTEXT` per working set
+(session-scoped, not transaction-scoped).
+When picking the applock **resource key**, weigh granularity explicitly (P5/G7):
+a per-space key is simplest and correct, but if a narrower key is plausible
+(per-space+day), argue why the coarser one was kept — and bind that argument to the
+expected volume found in the repo (e.g., Task 14 ≥100k bookings over 3 academic
+years ⇒ tens of writes/day per busy space, sub-ms critical sections vs a 5 s
+timeout). State the finer key as a monitoring-driven tuning lever, not a silent
+omission.
 
-| Conflict type | Required coverage |
-|---|---|
-| Competing booking confirmations | Two concurrent checks cannot both approve overlapping rows. |
-| Distinct pathways | Instant and staff approval share the same critical section and invariant check. |
-| Maintenance escalation race | Escalation and booking confirmation cannot observe stale advisory versus out-of-service state. |
-| Availability read race | Reads are either documented hints or use the confirmation critical section. |
+## Workflows to Cover (by `--max_concurrency`)
 
-Use the current conflict IDs and names from Task 08 when writing the final matrix.
+Document transaction boundaries + lock order for, in this order:
 
-### Candidate strategies
-
-Evaluate at least three SQL Server strategies before selecting one. Candidate pool:
-
-- `SERIALIZABLE` transactions plus key-range locks on current booking and maintenance
-  overlap indexes.
-- `UPDLOCK, HOLDLOCK` on overlap reads inside one explicit transaction.
-- `sys.sp_getapplock` with a transaction-owned resource scoped by the current space key.
-- Optimistic retry with version/timestamp checks, if such version columns exist or are
-  proposed by current sources.
-- Trigger-only enforcement from the current migration/baseline.
-
-For each candidate, state:
-
-- what anomaly it prevents;
-- what it fails to prevent or makes hard to prove;
-- implementation complexity for Task 12;
-- expected concurrency impact;
-- fit with the current schema, triggers, indexes, and SQL Server version.
-
-### Selection criteria
-
-The selected strategy must:
-
-- be valid for SQL Server 2019 or later;
-- give all write paths that can confirm or invalidate a booking interval one shared
-  critical section for the same space;
-- re-check the invariant after entering the critical section and before writing;
-- preserve the current normalized schema unless the current approved sources require
-  otherwise;
-- be simple enough to implement and demonstrate in Tasks 12 and 13.
-
-A common good fit for this project is a transaction-owned `sys.sp_getapplock` resource
-such as `space_booking:<space_id>`, combined with final re-checks and existing
-trigger/index enforcement as defense-in-depth. This is a recommendation, not a
-hardcoded answer; choose a different strategy if the current files make it better and
-justify the tradeoff.
-
-## Review-Driven Design Rules
-
-These rules are general, technical lessons learned from review rounds. They stay
-valid when project files change — apply them to whatever workflows, rules, and codes
-the current sources define. Do not read them as hardcoded project facts.
-
-### R1 — Post-lock authoritative re-check in EVERY write workflow
-
-A pre-lock read is a **fast-path only**: it resolves the lock resource key and allows
-an early exit, but it is never authoritative. Every write workflow that can confirm or
-invalidate an interval must **re-read its target row(s) after acquiring the critical
-section** and re-run the checks immediately before writing, returning the deterministic
-no-op/conflict outcome there.
-
-- Apply the double-check to **all** workflows, not just the primary one — the
-  maintenance escalation/downgrade workflow is the one that is typically forgotten.
-- Typical miss: two concurrent no-op operations on the same row both pass the pre-lock
-  fast-path; the loser then writes unchanged values and returns SUCCESS instead of the
-  documented no-op code. Data is unharmed only if an existing trigger/guard filters the
-  change — the design must not rely on that for the return-code contract.
-
-### R2 — Gate-coverage parity across workflows
-
-Cross-check **every invariant and business rule against every workflow** that could
-violate it. A rule enforced in one pathway is not automatically enforced in another
-pathway. Concretely:
-
-- List the checks each workflow performs, side by side, and diff them.
-- If a gap traces back to an upstream source (e.g., an eligibility test defined in an
-  earlier task that omitted an availability gate), **document the trace in the
-  workflow** but fix the gap in the Task 11 procedure-level design — never edit
-  upstream outputs or registries to make the design easier.
-- Prefer early procedure-level rejection over "let the trigger roll back later": the
-  latter wastes DML and surfaces raw trigger messages instead of deterministic codes.
-
-### R3 — One result code per rejection cause
-
-Result codes must be **1:1 with distinguishable rejection causes**. Never overload a
-code across different business rules: if two causes are semantically distinct (e.g.,
-an overlapping maintenance ticket vs. a manual space closure), they need distinct
-codes, because the Task 13 test handoff asserts on codes, not on free text. Call the
-distinction out explicitly where the codes are defined.
-
-### R4 — Shape fragments must match the contract exactly
-
-T-SQL shape fragments and workflow pseudocode are copy-paste starting points for
-Task 12. They must not contradict the contract tables (timeout/deadlock/error rows).
-If a mechanism returns distinguishable outcomes (e.g., `sys.sp_getapplock` return
-values), the fragment must map **each** value to its documented code — do not collapse
-distinct outcomes into one line unless the contract does the same. If a fragment is a
-deliberate simplification, mark it as such in the fragment itself.
+1. Instant booking submission — create/stage request; check eligibility +
+   availability; create required acks; create auto-approval per origin model; one
+   commit/rollback unit.
+2. Staff approval — lock/read pending booking; re-check capacity, overlap,
+   out-of-service maintenance, ack completeness; record decision or deterministic
+   rejection.
+3. Maintenance escalation/downgrade — lock/read the maintenance row + space/window;
+   record impact-level history; handle affected bookings per the resolved Task 11
+   decision; no race with concurrent confirmations. (Only when `{{max_concurrency}}` >= 3.)
+4. Maintenance ticket creation — applies only when `{{max_concurrency}}` = 4;
+   otherwise out-of-scope. (Raw `INSERT INTO dbo.maintenance` bypasses all critical
+   sections.)
+5. Room-finder/availability read — always covered (a read path, not an entry point):
+   classify as advisory hint (state that final confirmation re-checks the invariant)
+   or as a confirmation read (use the same critical section).
 
 ## Output Format
 
-Generate `outputs/11-concurrency-design-G{{group}}.md` with these sections:
+Write `outputs/11-concurrency-design-G{{group}}.md` with these sections:
 
-1. **Overview**
-   - task scope;
-   - dependencies read;
-   - what Task 11 does and does not implement.
-2. **Gate and Source Check**
-   - upstream approval status;
-   - relevant open questions and whether each is resolved;
-   - any source conflicts found.
-3. **Resolved Task 11 Ambiguities**
-   - question;
-   - final decision;
-   - rationale;
-   - downstream impact on Tasks 12, 13, and any affected reporting task.
-4. **Concurrency Problem Statement**
-   - restate NR6 and affected business rules;
-   - list current Task 08 conflicts in concise form.
-5. **Current Database Contract**
-   - relevant current tables, statuses, triggers/procedures, indexes, system rows, and
-     application-layer handoff notes;
-   - what existing enforcement remains as defense-in-depth.
-6. **Candidate Strategies**
-   - comparison table with tradeoffs.
-7. **Selected Design**
-   - chosen strategy;
-   - why it fits SQL Server and this schema;
-   - why rejected options are weaker for this project.
-8. **Transaction and Locking Design**
-   - lock resource or lock-read policy;
-   - acquisition order;
-   - isolation level;
-   - timeout behavior;
-   - deadlock/retry rules;
-   - deterministic error contract.
-9. **Workflow Designs**
-   - instant booking;
-   - staff approval;
-   - maintenance escalation/downgrade;
-   - room-finder/availability read.
-10. **Conflict Coverage Matrix**
-    - each current Task 08 conflict mapped to prevention mechanism and residual risk.
-11. **Task 12 Implementation Handoff**
-    - procedures/triggers or application entry points to implement;
-    - required inputs/outputs;
-    - error messages/result codes;
-    - application responsibilities, including session context if still current.
-12. **Task 13 Test Handoff**
-    - concurrent-session scenarios that must be demonstrated;
-    - expected winner/loser outcomes;
-    - retry/deadlock/timeout cases.
-13. **Assumptions, Risks, and Out of Scope**
-14. **Revision Log**
+1. **1. Overview** — short scope of the task.
+2. **2. Concurrency Identification** — Task 08 conflicts (ID, name, description),
+   which workflows can violate each, and how the design prevents it.
+3. **3. Resolved Design Ambiguities & Decisions** — each Task 11 open question:
+   question, final decision, rationale, impact on Tasks 12/13/reporting.
+4. **4. Current Database Baseline & Contract** — relevant tables, statuses, system
+   user `-1`, defense-in-depth (filtered unique indexes, triggers).
+5. **5. Evaluation of Candidate Strategies** — comparison table, selection
+   rationale, rejection justifications.
+6. **6. Transaction and Locking Architecture** — lock resource scope +
+   acquisition order; isolation level + timeout; exact `sp_getapplock` return→code
+   mapping; 1:1 error contract (P3).
+7. **7. Workflow Designs & Double-Check Specifications** — the entry points per
+   `{{max_concurrency}}`, the out-of-contract listed with residual risk,
+   room-finder read path.
+8. **8. Conflict Coverage Matrix** — every Task 08 conflict → prevention mechanism,
+   100%-for-scope proof + residual risk rows for dropped conflicts.
+9. **9. Task 12 Implementation Guidance** — the `{{max_concurrency}}` entry points
+   (instant + staff always; escalation if >=3; ticket creation if =4), inputs/return
+   codes, application-layer responsibilities.
+10. **10. Task 13 Test Guidance** — concurrent two-session scripts (Winner/Loser)
+    for every matrix conflict INCLUDING the homogeneous same-path pairings (e.g.
+    staff-vs-staff, instant-vs-instant) or an explicit redundancy note;
+    deterministic assertions + codes, deadlock/timeout/retry edge cases.
+11. **11. System Assumptions, Risks, and Boundaries** — requirements (SQL Server
+    2019+, RCSI), hotspot-space performance risk, explicit out-of-scope boundaries.
+12. **12. Revision Log** — date, author, summary of changes.
 
-Use concise tables where they improve comparison. Trace each design choice back to a
-requirement, Task 08 conflict, Task 09 design, Task 10 contract, registry entry, or
-recorded decision.
+## Validation Checklist (before finishing)
 
-## SQL Server Design Notes
-
-Use these notes when evaluating options, but verify them against the current files:
-
-- SQL Server cannot enforce arbitrary time-range non-overlap with a plain UNIQUE
-  constraint. A filtered unique index may catch exact same-start collisions, but range
-  overlap needs a transaction-safe check.
-- A trigger that checks for overlaps can still race under concurrent transactions unless
-  the read locks protect the checked range or all relevant writes are serialized.
-- `SERIALIZABLE` with suitable indexes can protect key ranges, but interval predicates
-  are easy to get wrong across multiple code paths.
-- `UPDLOCK, HOLDLOCK` can work when every writer uses the same range-read pattern and
-  supporting indexes are correct.
-- `sys.sp_getapplock` can serialize by logical resource, commonly one resource per
-  `space_id`, without changing the schema. It is coarse-grained but easy to reason
-  about and test.
-- `sys.sp_getapplock` returns distinguishable negative codes — typically timeout (-1),
-  cancelled (-2), and deadlock victim (-3). Map each return value to its documented
-  outcome separately in the contract tables AND in any acquisition fragment; collapsing
-  them into a single code is a review defect even when the note says "shape only".
-- Application locks must be acquired inside the same transaction that performs the final
-  invariant check and write. Releasing the lock before the write is not sufficient.
-- If the current implementation uses `SESSION_CONTEXT`, remember it is session-scoped,
-  not transaction-scoped; the application must set and clear it per unit of work.
-
-## Validation Checklist
-
-Before finalizing the Task 11 output, verify:
-
-- All directly relevant Task 11 open questions are resolved in the document, or
-  generation stopped before output.
-- Every current Task 08 conflict is addressed.
-- Instant and staff approval share one concurrency strategy.
-- Maintenance escalation/downgrade is included.
-- The design does not contradict the current instant-approval origin model.
-- The design does not add schema outside current approved sources.
-- Task 12 receives implementable boundaries.
-- Task 13 receives concrete concurrent-session scenarios.
-- No runnable Task 12 implementation or Task 13 scripts are included.
-- Current application handoff contracts, such as `SESSION_CONTEXT`, are referenced if
-  still present.
-- `docs/design-decisions.md` contains appended Task 11 decisions, or the run stopped
-  before making those decisions.
-- **R1:** every write workflow that can confirm or invalidate an interval performs an
-  authoritative re-check after entering the critical section and before writing — no
-  single-check workflow remains (escalation/downgrade included).
-- **R2:** every invariant/business rule that a workflow can violate is checked in THAT
-  workflow (gate parity); gaps traced upstream are fixed here, not in upstream outputs.
-- **R3:** result codes are 1:1 with rejection causes; no code is overloaded across
-  business rules.
-- **R4:** shape fragments and pseudocode agree with the timeout/deadlock/error contract
-  tables (e.g., each applock return value mapped to its own code).
+- All Task 11 open questions resolved (or stopped before output).
+- Exactly `{{max_concurrency}}` entry points: workflows + §9 handoff match; dropped
+  entry points are declared and residual risk stated.
+- Instant + staff approval share one strategy; escalation/downgrade when >=3;
+  ticket creation when =4.
+- No contradiction with the instant-approval origin model; no new schema outside
+  approved sources.
+- P1 (all write workflows do a post-lock re-check), P2 (gate parity), P3 (cause-family
+  codes, no overclaim), P4 (fragments match contract), P5 (lock granularity argued,
+  quantified against expected volume).
+- `docs/design-decisions.md` appended ONLY if a decision was made this run.
+- No runnable Task 12/13 scripts in the output.
+- Hardness gates executed and logged: G1 (scan `## N.` headings = 1..12 unique),
+  G2 (token scan for run-machinery/CLI/agent language), G3 (citation scan: no
+  `docs/` references), G4 (cross-references all resolve), G7 (granularity argument +
+  volume grounding present in §5/§6/§11).
+- Error-code gates: G5 (claims cross-checked — no "one cause per code" overclaim;
+  shared buckets explicitly labeled), P3 (codes are cause-family 1:1; retries only on
+  the designated codes).
+- Conflict→test mapping: G6 (every K-conflict has an explicit T-scenario; same-path
+  homogeneous pairings — instant-vs-instant, staff-vs-staff — present or their
+  redundancy explained).
+- One canonical `docs/design-decisions.md` entry per topic: if a prior entry is
+  superseded this run, it was replaced (not appended beside the stale claim).
 
 ## Static Verification
 
-Task 11 is a Markdown design document, so there is no SQL compile step. Perform static
-verification and record the result in:
-
-`logs/eval/task11/YYYY-MM-DD-HHmm-11-concurrency-design-check.log`
-
-The log should check:
-
-- output file exists and is non-empty;
-- required sections are present;
-- no full implementation SQL script is embedded;
-- all source files used are listed or referenced;
-- no unresolved Task 11 gate remains;
-- no prior outputs or registries were modified except the allowed decision-log append.
+Task 11 has no SQL compile step. Write `logs/eval/task11/YYYY-MM-DD-HHmm-...-check.log`
+covering: output exists and non-empty; required sections present; no full SQL
+scripts embedded; sources listed; gates resolved; entry-point count ==
+`{{max_concurrency}}`; dropped entry points declared; no upstream files modified
+except a key-decision append to `docs/design-decisions.md`. Include the G1/G2/G3/G4
+scan outcomes (headings list, forbidden-token scan, `docs/` reference scan, and the
+cross-reference spot checks), the G5/G6 checks (error-code claim vs workflow code,
+conflict→test trace), and the G7 result (granularity rationale + volume grounding
+present or absent).
 
 ## Trajectory and Completion
 
-After writing or revising `outputs/11-concurrency-design-G{{group}}.md`, write the
-trajectory file before any user-facing task-complete summary:
-
-`logs/trajectory/task11/YYYY-MM-DD-HHmm-trajectory.md`
-
-Use the evaluation trajectory template, adapting the task number to `11`.
-
-Then summarize:
-
-1. What was completed.
-2. Assumptions made.
-3. Verification performed or why verification could not run.
-4. The exact prompt from `AGENTS.md`:
+Write the trajectory file (evaluation template, task number 11) BEFORE any
+user-facing summary. Then report: what was completed; assumptions; verification done
+or why not; end with the AGENTS.md prompt:
 
 > _"Ready to mark Task X as ✅ and update `memory/Progress.md`? Or do you want to run revisions?"_
 
-Replace `X` with `11`.
+with `X` = `11`.
 
 ## Idempotency
 
-- Default mode: overwrite the full Task 11 output after re-reading current sources.
-- Revise mode: re-read all current sources, compare the existing Task 11 output against
-  the current sources and decisions, then overwrite with a coherent revised document.
-- Never patch isolated paragraphs while leaving stale design choices elsewhere.
+- Overwrite (default): re-read sources, replace the whole Task 11 output.
+- Revise: re-read sources, compare with the existing output, overwrite coherently.
+- Never patch isolated paragraphs while leaving stale decisions elsewhere.
+- **Reconcile sibling artifacts in the same run as any revision.** After rewriting
+  the output, immediately reconcile everything that recorded the OLD state so the
+  repo never carries two versions of the truth:
+  - `docs/design-decisions.md` — replace the superseded decision entry (one canonical
+    entry per topic; no revision-log/audit rows for the regeneration itself).
+  - Prior `logs/eval/task11/*` and `logs/trajectory/task11/*` for this task — mark
+    them superseded (do not silently delete) and write new `YYYY-MM-DD-HHmm` files for
+    the current run; the trajectory sets `revision_of` (and the superseded file gains a
+    `superseded_by`).
+- Gate G1 heading scan must be re-run after every rewrite pass (numbering drifts most
+  often on rewrites, not first drafts).
