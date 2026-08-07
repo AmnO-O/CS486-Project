@@ -82,7 +82,7 @@ Checks
        not a returned code); lock inside same transaction as final check+write;
        release-before-write marked invalid (5.3, 6)
 [PASS] retry contract: only 51005/51006 retryable; 51007 restarts the unit
-[PASS] SESSION_CONTEXT(N'current_user_id') handoff referenced (3 AUD row, 6.4,
+[PASS] SESSION_CONTEXT(N'current_user_id') handoff referenced (3 DD4 row, 6.4,
        7.3, 9) with clear-at-end requirement and -1 fallback
 [PASS] docs/design-decisions.md: the interim scope-3 entry (written earlier
        2026-08-06) replaced by the final scope-4 decision (K5 closed via
