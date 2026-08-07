@@ -4,7 +4,7 @@
 **Course:** CS486 — Introduction to Database System
 **Phase:** 2 · **Task:** 11
 **Date:** 2026-08-06
-**Doc version:** 2.0
+**Doc version:** 2.5
 
 ---
 
@@ -438,7 +438,13 @@ the overlap-invariant audit query.
     `current_user_id`; the app sets/clears per unit; audit falls back to `-1`.
   - **Non-contractual raw DML** (any INSERT/UPDATE that bypasses the four procedures)
     reopens K5/K3; enforced by application convention and Task 13 tests, not by the
-    database alone.
+    database alone. A database-level closure exists and is the recommended Task 12
+    hardening: `DENY INSERT/UPDATE/DELETE` on the write tables
+    (`bookings`, `booking_approvals`, `booking_advisory_acknowledgement`,
+    `maintenance`) to the application role + `GRANT EXECUTE` only on the four entry
+    procedures — ownership chaining covers the DML the procedures perform internally.
+    Caveat: bulk data generation (Task 14) and test seeding must run as an elevated
+    principal (`dbo`), not as the application role.
   - **Deadlock (`-3`):** detected and returned `51007`; restart, no silent retry.
 - **Boundaries:** no schema change (this design adds no tables/columns/indexes/
   triggers; only procedures); index tuning is Task 15; analytical queries are Task 16;
@@ -452,3 +458,4 @@ the overlap-invariant audit query.
 |---|---|---|
 | 1.0 | 2026-08-06 | First issue covering three write paths (instant submit, approval, escalation/downgrade) with the per-space app lock strategy. |
 | 2.0 | 2026-08-06 | Expanded to four write paths: added `usp_maintenance_report` (ticket creation) as the K5 closure; added T9 test scenario; clarified the error-code and lock contract wording. |
+| 2.5 | 2026-08-06 | Review round: error-contract claim softened to cause-family codes (`51001` documented as generic request-context bucket); added T10 (staff-vs-staff approval) and §6.1 lock-granularity rationale + §11 volume grounding; fixed five drifted section cross-references; renamed §3 decision labels to DD1–DD4 (collision with doc 09 deviation log D1–D8 and internal K4 reuse); added §11 database-level closure for raw DML (DENY table writes + GRANT EXECUTE only, ownership chaining). |
