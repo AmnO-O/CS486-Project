@@ -25,8 +25,8 @@ description; all are ⬜ until their task runs.
 | Task | Deliverable | Output | Status | Depends on |
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
-| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved | Task 08 |
-| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ✅ Approved (2026-08-04) | Task 09 |
+| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved (v2.5 revision 2026-08-07) | Task 08 |
+| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ⚠️ Needs revision — must add Task 09 v2.5 objects (`spaces.max_hours`, `space_type_allowed_purpose`, drop `usage_policy`) before downstream use | Task 09 |
 | Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
@@ -61,6 +61,7 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-08-07 | Task 09 v2.5 revision — usage policy made data-driven: drop `spaces.usage_policy` free-text; add `spaces.max_hours` (per-space instant-booking cap, NULL = no cap); new table `space_type_allowed_purpose` (per space_type×purpose seeded rules). Instant-approval test = checks 1–6; soft-gate failures (purpose/cap unmet → non-instant eligible) → `pending` fallback (no auto-approval); hard failures → reject (Phase-1 triggers unchanged) | Post-Task 09 v2.5 revision handshake — supersedes Q2 free-text decision and amends Task 09 eligibility test (U1) |
 | 2026-08-04 | Task 10 approved — Phase 2 schema migration (delta on Phase 1 baseline) + rollback script, compiled & verified on a scratch DB | Post-Task 10 handshake |
 | 2026-08-04 | `changed_by` audit mechanism = `SESSION_CONTEXT(N'current_user_id')` via `sys.sp_set_session_context` (not `CONTEXT_INFO()` byte packing); fallback to reserved system user `-1`; session-scoped → app layer must set/clear per unit of work (connection-pooling leak risk, handoff to Task 11/12) | Reviewer feedback — SQL Server 2016+ recommended mechanism |
 | 2026-08-04 | `trg_maintenance_recompute_space_status` guarded to status-relevant columns: `IF UPDATE(status) OR UPDATE(impact_level) OR UPDATE(start_time) OR UPDATE(completion_time) OR UPDATE(is_deleted)` — skips no-op updates; `is_deleted` required so soft-delete still recomputes | Reviewer feedback — avoid wasted recompute round-trips without regression |
@@ -108,7 +109,7 @@ unresolved question (see AGENTS.md)._
 
 | # | Question | Resolved before | Resolution | Date |
 |---|---|---|---|---|
-| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligible `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | 2026-08-03 |
+| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligibility data-defined (Task 09 v2.5): `(space_type, purpose) ∈ space_type_allowed_purpose` seeded for `{classroom, computer_lab, project_lab, meeting_room}`; test = checks 1–6 (usage-policy pair ∧ account active ∧ participants ≤ capacity ∧ duration ≤ `spaces.max_hours`/NULL ∧ no overlap BR1 ∧ no out-of-service BR4); soft failures (checks 1,4) → `pending`, hard → reject | 2026-08-07 |
 | U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ✅ New table `booking_advisory_acknowledgement` (one row per (booking, advisory)) | 2026-08-03 |
 | U3 | Escalation → pending vs only approved | Task 11 | ⬜ pending | — |
 | U4 | "Semester" reporting window definition | Task 16 | ⬜ pending | — |

@@ -156,10 +156,32 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 | floor | NVARCHAR(50) | NO | — | — | Free-text floor identifier |
 | room_number | NVARCHAR(50) | NO | — | — | |
 | capacity | INT | NO | — | `CHECK (capacity > 0)` | |
-| current_status | VARCHAR(50) | NO | — | `CHECK IN ('available','in_use','under_maintenance','temporarily_closed','retired')` | DEFAULT 'available' |
-| usage_policy | NVARCHAR(MAX) | YES | — | — | Free-text (Q2) |
+| current_status | VARCHAR(50) | NO | — | `CHECK IN ('available','in_use','under_maintenance','temporarily_closed','retired')` | DEFAULT 'available' (recomputed per Area-1 design) |
+| max_hours | DECIMAL(5,2) | YES | — | `CHECK (max_hours > 0)` | Max single-booking duration (hours) for instant eligibility (Phase 2 v2.5); NULL = no cap |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |
+
+---
+
+### Space_Type_Allowed_Purpose
+
+**Description:** For each space type, the booking purposes permitted to be instant (auto) approved — the data-driven usage policy for instant booking.
+**Maps to table:** `space_type_allowed_purpose`
+**Source:** outputs/09 §B.2.4 (Phase 2, NR5 / U1 revision, Task 09 v2.5)
+
+**Candidate keys:**
+- `(space_type, purpose)` (composite, PK)
+
+**Attributes:**
+
+| Attribute | Type | Nullable | Key | Constraint / Enum | Notes |
+|---|---|---|---|---|---|
+| space_type | VARCHAR(50) | NO | PK | `CHECK IN ('auditorium','classroom','computer_lab','project_lab','meeting_room','student_workspace')` | Domain mirrors spaces.space_type (soft reference — no FK) |
+| purpose | VARCHAR(50) | NO | PK | `CHECK IN ('lecture','examination','seminar','workshop','meeting','student_activity','administrative_event')` | Domain mirrors bookings.purpose |
+| created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+| updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() (BR12) |
+
+**Relationships (prose):** constrains instant-booking eligibility for Spaces by `space_type` *value* (a space is instant-eligible only if a pair exists for its type and the booking's purpose); no FK — the reference is by enumerated value (§B.2.4 of Task 09).
 
 ---
 
@@ -365,6 +387,7 @@ provisional in Task 01 and are finalized/locked in Task 03.)_
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-08-07 | Task 09 v2.5 (Area 2): `spaces.usage_policy` free-text **removed**; `spaces.max_hours` added (per-space instant-booking duration cap, NULL = no cap); new entity **Space_Type_Allowed_Purpose** (data-driven instant usage policy) | Phase 2 NR5 / U1 revision (`outputs/09` §B.2.3–B.2.5) |
 | 2026-08-03 | Task 09 (Areas 2–3): documented reserved system user `user_id = -1` (System Booking Service, instant approver); instant/staff origin derived from `approver_id = -1` (no stored origin column — keeps 3NF); Area 3 reporting confirmed as no-schema-change (derived queries) | Phase 2 C2 (NR5/NR6) / C3 |
 | 2026-08-03 | Task 09 (Area 1): added `maintenance.impact_level`; added entities Maintenance_Impact_History (R12, R13) and Booking_Advisory_Acknowledgement (R14, R15) | Phase 2 C1 / NR1–NR4 |
 | 2026-08-02 | 🔓 Unfroze for Phase 2 re-design — project extended to 16 tasks (08–16); added Phase 2 status banner. Affected entities (Maintenance, Bookings) to be updated in Task 09 | Phase 2 kickoff (`docs/project_phase2_description.md`) |

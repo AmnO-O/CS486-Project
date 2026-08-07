@@ -18,8 +18,15 @@ affected tables `maintenance` and `bookings`, Option B).
 | Area | Phase 1 baseline | Phase 2 design |
 |---|---|---|
 | **1 — Maintenance impact levels** | every active maintenance blocks booking | `maintenance.impact_level` (`advisory` \| `out-of-service`); only `out-of-service` blocks an overlapping booking; escalation/downgrade logged; advisory acknowledgement recorded |
-| **2 — Concurrent/instant booking** | booking approval is staff-only, recorded in `booking_approvals` | eligible space types may be auto-approved at submission; the origin (instant vs staff) is **derived** from the reserved system approver (`approver_id = -1`) — no stored origin column |
+| **2 — Concurrent/instant booking** | booking approval is staff-only, recorded in `booking_approvals` | eligible space types may be auto-approved at submission; the origin (instant vs staff) is **derived** from the reserved system approver (`approver_id = -1`); the usage policy is **data-driven** — `(space_type, purpose) ∈ space_type_allowed_purpose` ∧ duration ≤ `spaces.max_hours` (NULL = unlimited), on top of the prior active-account / capacity / overlap / out-of-service checks; new schema `space_type_allowed_purpose` + `spaces.max_hours`; `spaces.usage_policy` free-text dropped |
 | **3 — Analytical reporting** | staff-view reports (BR14) | four new reports; all answerable as queries over the existing + Area-1 schema — **no schema change required** |
+
+**Revision 2.5 (2026-08-07):** Area 2 is extended so the usage-policy test (U1) is
+**data-driven** — instant eligibility is defined by the `space_type_allowed_purpose`
+junction (seeded for the four previously approved types) plus a per-space duration cap
+`spaces.max_hours`, replacing the hardcoded eligible-set/test description from v2.0–2.4
+and the (never-enforced) `spaces.usage_policy` text. The derived origin
+(`approver_id = -1`) design is **unchanged**.
 
 Task 09 designs **ERD and logical schema only**. The migration scripts (Task 10), the
 concurrency controls/mechanisms (Tasks 11–13), index tuning (Task 15), and the query
@@ -197,6 +204,21 @@ INSERT / UPDATE / resolve**, using the combined-state priority rule:
 
 ```mermaid
 erDiagram
+    Spaces {
+        int space_id PK
+        string space_code
+        string space_name
+        string space_type
+        string building
+        string floor
+        string room_number
+        int capacity
+        string current_status
+        decimal max_hours
+        datetime created_at
+        datetime updated_at
+    }
+
     Bookings {
         int booking_id PK
         int space_id
@@ -235,6 +257,13 @@ erDiagram
         datetime updated_at
     }
 
+    Space_Type_Allowed_Purpose {
+        string space_type PK
+        string purpose PK
+        datetime created_at
+        datetime updated_at
+    }
+
     Bookings ||--o| Booking_Approvals : "decided_by"
     Users ||--o{ Booking_Approvals : "approves"
 ```
@@ -242,6 +271,12 @@ erDiagram
 > Attribute-level consistency: the excerpts above list every column of the logical
 > tables in §B.2, including audit columns (`created_at`, `updated_at`) and the
 > soft-delete flag (`is_deleted`), matching the table definitions column-for-column.
+> Revision 2.5: `Spaces` now shows `max_hours` (new) and no `usage_policy` (dropped).
+
+> `Space_Type_Allowed_Purpose` is a reference table keyed on the `space_type`
+> **value** — it carries **no FK** to `spaces` (soft reference by domain pair; see
+> §B.2.4). It therefore appears in the ERD excerpt **without** a relationship line:
+> `spaces.space_type` and its domain are already covered by the existing CHECK.
 
 > The instant/staff pathway is **derived, not stored**: an approval is `instant` iff
 > `approver_id = -1` (the reserved system user), otherwise `staff`. No new attribute,
@@ -269,9 +304,12 @@ derived from the reserved system approver:
 - `approver_id` stays **NOT NULL**; BR6 (`trg_booking_approvals_decision`) and BR15
   (`trg_booking_approvals_check_role`) remain satisfied because instant approvals are
   recorded against the reserved system user (role `facility_manager`).
-- The auto-approval **test** (eligibility + checks 1–5) is business logic applied at
-  submission; it needs **no additional schema** — it reuses the existing BR1/BR3/BR4
-  enforcement objects. See §7 (U1) and §8 (assumptions).
+- The auto-approval **test** (eligibility + checks 1–6, §B.2.5) is business logic applied
+  at submission: hard checks (2, 3, 5, 6) reuse the existing BR1/BR3/BR4 enforcement
+  objects and the account-status gate; soft checks (1, 4) read the new
+  `space_type_allowed_purpose` junction (§B.2.4) and `spaces.max_hours` (§B.2.3). A soft
+  failure creates the booking as `pending` for staff rather than rejecting it. See
+  §7 (U1) and §8 (assumptions).
 
 #### B.2.2 `users` (data change only — reserved system user)
 
@@ -293,6 +331,76 @@ This row is documented in `docs/schema-registry.md` as a special record; it must
 excluded from any "real user" reports. The instant approval flow inserts
 `booking_approvals(approver_id = -1, decision = 'approved')`; the pathway is derived
 as `CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END` (§B.2.1).
+
+#### B.2.3 `spaces` (changed — add `max_hours`, drop `usage_policy`)
+
+| Column | Type | Nullable | PK / UQ | FK Reference | Default | Notes |
+|--------|------|----------|---------|-------------|---------|-------|
+| … *(all Phase 1 columns unchanged, except as below)* | | | | | | |
+| **max_hours** | DECIMAL(5,2) | YES | — | — | `NULL` | NEW (v2.5). Max single-booking duration (hours) for instant eligibility on this space; `CHECK (max_hours > 0)`; `NULL` = no limit |
+| **usage_policy** | NVARCHAR(MAX) | — | — | — | — | **REMOVED** — Phase-1 free-text (Q2) was never enforced and its name collided with the data-driven usage-policy test (§B.2.5). Dropped in the Task 10 migration; Phase-1 baseline (05/06) retains it as historical |
+
+**Constraint / behavior notes:**
+- `max_hours` is consulted **only** by the instant-eligibility test (soft gate 4,
+  §B.2.5); staff approval is duration-agnostic. `NULL` skips the gate.
+- The `current_status` recompute design (Area 1, §A.3) is unaffected by this column.
+
+#### B.2.4 `space_type_allowed_purpose` (new — data-driven instant usage policy)
+
+Reference table listing, for each space type, the booking **purposes** permitted for
+instant (auto) approval. One row per allowed `(space_type, purpose)` pair.
+
+| Column | Type | Nullable | PK / UQ | FK Reference | Default | Notes |
+|--------|------|----------|---------|-------------|---------|-------|
+| space_type | VARCHAR(50) | NO | PK | — | — | Part of composite PK; CHECK mirrors `spaces.space_type` (6 types) |
+| purpose | VARCHAR(50) | NO | PK | — | — | Part of composite PK; CHECK mirrors `bookings.purpose` (7 values) |
+| created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | BR12 |
+| updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | BR12 |
+
+**Composite PK** `(space_type, purpose)` — a full candidate key; no multi-valued
+attribute, no subset determines any non-key column (§5).
+
+**Soft reference (no FK):** `spaces.space_type` is an inline `VARCHAR(50)` + CHECK
+(Phase 1), not a lookup FK. This table mirrors the same domain through its own CHECK
+constraint. No `space_types` dimension table is introduced — out of scope (consistent
+with keeping `space_type` an enumerated string in this phase).
+
+**Instant eligibility is data-defined:** a space type is instant-eligible **iff** rows
+exist for it. Reference data (seeded by the Task 10 migration) covers exactly the four
+previously approved types, preserving the v2.0–2.4 eligible set:
+
+| space_type | allowed purposes |
+|---|---|
+| classroom | lecture, examination, seminar, workshop, student_activity |
+| computer_lab | lecture, examination, seminar, workshop |
+| project_lab | workshop, seminar, meeting, student_activity |
+| meeting_room | meeting, seminar, administrative_event, workshop, student_activity |
+
+**Enforcement:** at instant submission, resolve the booking's `space_id → space_type`
+(JOIN `spaces`), then verify `(space_type, purpose)` membership (procedure logic —
+Task 11/12). Staff approval never consults this table; no trigger enforces it at the
+DB level.
+
+#### B.2.5 Instant-approval test — usage policy (U1 revision)
+
+The instant (auto) approval clause is the conjunction of:
+
+| # | Check | Source | Kind |
+|---|-------|--------|------|
+| 1 | `(space_type, purpose) ∈ space_type_allowed_purpose` (space resolved via JOIN) | §B.2.4 | **soft** |
+| 2 | requester `users.account_status = 'active'` | A09-3 | hard |
+| 3 | `expected_participants ≤ spaces.capacity` | BR3 | hard |
+| 4 | `requested_end_time − requested_start_time ≤ max_hours × 60 min` **OR** `max_hours IS NULL` | §B.2.3 | **soft** |
+| 5 | no overlapping confirmed booking (`approved`/`checked_in`/`completed`, `is_deleted = 0`) | BR1 | hard |
+| 6 | no overlapping active `out-of-service` maintenance | BR4 | hard |
+
+(NR2 still applies on approval: one acknowledgement row per overlapping active advisory.)
+
+**Soft vs hard disposition (v2.5):** failing a **soft** gate (1 or 4) does **not**
+reject the booking — it is created `pending` and routed to the staff-approval workflow;
+the instant-submit procedure reports `@instant_accepted = 0` (contract designed in Task
+11, implemented in Task 12). Failing a **hard** gate keeps Phase-1 trigger rejection
+semantics (the booking cannot exist / cannot be approved).
 
 ### B.3 No-schema-change statement (concurrency enforcement)
 
@@ -334,14 +442,17 @@ schema plus the Area-1 additions. No support entity or table is required:
 | `booking_advisory_acknowledgement` | ✅ atomic | ✅ single-column PK `ack_id` | ✅ no transitive dependency | `booking_id`, `maintenance_id`, `acknowledged_at`, `acknowledged_by`, `created_at`, `updated_at` depend only on `ack_id`; the composite UQ (booking_id, maintenance_id) is a **full** alternate key — neither proper subset (`booking_id` alone, `maintenance_id` alone) determines any other column, so no partial dependency on any candidate key exists |
 | `booking_approvals` | ✅ atomic | ✅ single-column PK `approval_id` | ✅ no transitive dependency | every column depends only on the candidate keys `approval_id` and `booking_id`; no non-key attribute depends on another non-key attribute (no transitive dependency); the instant/staff origin is **derived from `approver_id = -1`**, not stored, so no non-key FD (e.g. `approver_id → origin`) exists |
 | `users` | ✅ atomic | ✅ single-column PK `user_id` | ✅ no transitive dependency | unchanged from Phase 1; the reserved system row does not alter the relation's FDs |
+| `spaces` | ✅ atomic | ✅ single-column PK `space_id` | ✅ no transitive dependency | `max_hours` is a direct property of `space_id`; `usage_policy` removed; no non-key column depends on another non-key column |
+| `space_type_allowed_purpose` | ✅ atomic | ✅ composite PK `(space_type, purpose)` — **full** key | ✅ no transitive dependency | non-key columns (`created_at`, `updated_at`) depend only on the **full** pair; neither proper subset (`space_type` alone, `purpose` alone) determines any non-key attribute, so no partial dependency exists |
 
 All affected relations satisfy at least 3NF. No functional dependencies beyond
 candidate-key determinants → non-key attributes were identified; no multi-valued
-attributes; no partial dependencies on any candidate key. The two new tables use
-single-column surrogate PKs; only `booking_advisory_acknowledgement` carries a
-composite unique key — its full pair (booking_id, maintenance_id) determines every
-attribute (via `ack_id`), so no proper-subset dependency exists
-(`maintenance_impact_history` has no composite unique key).
+attributes; no partial dependencies on any candidate key. Composite-key tables:
+`booking_advisory_acknowledgement` carries a surrogate PK (`ack_id`) plus a composite
+**unique** key `(booking_id, maintenance_id)` (full pair determines every attribute);
+`space_type_allowed_purpose` uses the composite pair `(space_type, purpose)` as its PK
+(also a full candidate key, no proper-subset dependency).
+`maintenance_impact_history` keeps a single-column surrogate PK.
 
 ---
 
@@ -370,6 +481,10 @@ attribute (via `ack_id`), so no proper-subset dependency exists
 | D6 | Approval origin not recorded | derived `approver_id = -1` ⇒ `'instant'`, else `'staff'` (no stored column) | No column added — derived attribute | NR5 — distinguishes auto-approval from staff approval; a stored origin column was rejected because `approver_id → origin` (non-key → non-prime) would break 3NF (§5) |
 | D7 | No approver for auto-approval | reserved system user `user_id = -1` (`role='facility_manager'`) | Added seed row (data) | keeps `approver_id NOT NULL` and BR6/BR15 intact |
 | D8 | Reporting needs (C3) | no support table added | No schema change | reports are derived queries (§4) |
+| D9 | `spaces.usage_policy` free-text (Q2) | column **removed** | Dropped column | never enforced (no consumer); name collides with the data-driven usage-policy test; the 2026-06-15 free-text decision is superseded (`docs/design-decisions.md`) |
+| D10 | per-space duration cap not modeled | `spaces.max_hours DECIMAL(5,2) NULL` (`CHECK (max_hours > 0)`, NULL = unlimited) | Added column | instant soft gate (check 4); one UPDATE changes a room's cap without code changes |
+| D11 | usage-policy test hardcoded (U1: eligible set + checks 1–5) | `space_type_allowed_purpose` junction | Added table | data-defined instant eligibility — one row per allowed `(space_type, purpose)` pair; seeded for the four approved types (§B.2.4) |
+| D12 | instant test checks 1–5 (no purpose / no cap) | checks 1–6: purpose membership + duration cap | Test revision | the NR5 usage-policy test must cover purpose and duration; soft-gate failures route to `pending` instead of rejecting (§B.2.5) |
 
 ---
 
@@ -377,7 +492,7 @@ attribute (via `ack_id`), so no proper-subset dependency exists
 
 | # | Question | Decision | Designed in |
 |---|---|---|---|
-| U1 | Which space types are eligible for instant booking; what is the usage-policy test? | Eligible set `{classroom, computer_lab, project_lab, meeting_room}`; test = checks 1∧2∧3∧4∧5 (space_type eligible, requester active, participants ≤ capacity, no overlap, no out-of-service overlap). Test is business logic reusing BR1/BR3/BR4 — no extra schema. | §B.2, §8 |
+| U1 | Which space types are eligible for instant booking; what is the usage-policy test? | Eligible set is **data-defined** by `space_type_allowed_purpose` (seeded for `{classroom, computer_lab, project_lab, meeting_room}`); usage-policy test = checks 1–6: `(space_type, purpose) ∈` junction (soft) ∧ requester `account_status='active'` ∧ participants ≤ capacity (BR3) ∧ duration ≤ `max_hours` (NULL = unlimited) (soft) ∧ no overlap (BR1) ∧ no out-of-service overlap (BR4). Soft-gate failures create a `pending` booking; hard-gate failures reject. | §B.2.3–B.2.5, §8 |
 | U2 | How is the advisory acknowledgement captured/stored? | New child table `booking_advisory_acknowledgement`, one row per (booking, advisory), with `acknowledged_at` / `acknowledged_by` | §A.2.3 |
 | U5 | Should `out-of-service` maintenance flip `spaces.current_status`, or is the status derived? | `spaces` unchanged; `current_status` is a display hint recomputed on maintenance INSERT/UPDATE/resolve via the priority rule; correctness comes from `maintenance` overlap | §A.3 |
 
@@ -397,6 +512,9 @@ Carried forward (not in Task 09 scope): **U3** (escalation → pending vs only a
 | A09-3 | The instant-booking test includes the **requester `account_status = 'active'`** gate (check 2) | Account lifecycle attribute exists in Phase 1; an auto-approval must not go to a suspended/inactive account |
 | A09-4 | The instant approver is the reserved system user `user_id = -1` (role `facility_manager`) | Keeps `approver_id NOT NULL` and satisfies BR6/BR15 without real-staff involvement |
 | A09-5 | Instant auto-approval is a *submission-time* decision; the concurrency-safe enforcement of the no-overlap rule is designed in Task 11, not here | Task 09 is schema-only; the mechanism is a later task |
+| A09-6 | A failed **soft** instant gate (purpose not allowed for the space type, or duration > `max_hours`) creates the booking as `pending` (staff workflow) — the booking is never rejected for these reasons | NR5: requests "that satisfy the usage policy may be approved automatically"; the staff path is the fallback for everything else |
+| A09-7 | Instant eligibility is defined **entirely** by `space_type_allowed_purpose` membership (data), seeded for the four approved types; no additional hardcoded type gate remains | single source of truth; the effective eligible set is unchanged from U1 (v2.0–2.4) |
+| A09-8 | `spaces.max_hours` is `NULL` for all legacy spaces after the Task 10 migration (no cap invented); per-space cap values are operational data set by Task 10/14 | data-preserving migration must not fabricate values; `NULL` = no limit by design |
 
 ### Unresolved (carried forward)
 
@@ -412,9 +530,12 @@ Carried forward (not in Task 09 scope): **U3** (escalation → pending vs only a
 The complete Phase 2 end-state ERD at a glance. Entities are shown as **nodes only**
 (no attributes) — the same style as "Diagram 1 — Overview (nodes only)" in
 `outputs/02-erd-design-G05.md`. The **Phase 2 new** entities are `Maintenance_Impact_History`
-(NR3) and `Booking_Advisory_Acknowledgement` (NR2); all other entities are the
-unchanged Phase 1 baseline. Relationship lines match the Phase 1 naming (R1–R11) plus
-the four new Phase 2 relationships from §A.1.
+(NR3), `Booking_Advisory_Acknowledgement` (NR2), and `Space_Type_Allowed_Purpose`
+(Area 2, v2.5); `spaces` is the only Phase-1 entity that gains a column
+(`max_hours`) and drops one (`usage_policy`). Relationship lines match the Phase 1
+naming (R1–R11) plus the four new Phase 2 relationships from §A.1. The
+`space_type` reference of `Space_Type_Allowed_Purpose` is a **soft value reference**
+(no relationship line — it is an enumeration-domain lookup; see §B.2.4).
 
 ```mermaid
 erDiagram
@@ -429,6 +550,7 @@ erDiagram
     Maintenance
     Maintenance_Impact_History
     Booking_Advisory_Acknowledgement
+    Space_Type_Allowed_Purpose
 
     Departments ||--o{ Users : "belongs_to"
     Users ||--o{ Bookings : "requests"
@@ -453,6 +575,7 @@ erDiagram
 
 | Version | Date | Change |
 |---|---|---|
+| 2.5 (Area 2) | 2026-08-07 | Usage-policy test made **data-driven** (U1 revision): new `space_type_allowed_purpose` junction (allowed purposes per space type; composite PK; soft value reference; seeded for the four eligible types) + `spaces.max_hours` (per-space duration cap, NULL = unlimited); `spaces.usage_policy` free-text **dropped** (Q2 reversal); instant test extended from checks 1–5 to checks 1–6 with soft-gate (purpose/cap) → `pending`-fallback vs hard-gate → reject disposition (A09-6); 3NF rows added for `spaces` and the junction; deviations D9–D12; §1, §B.1–B.3, §5, §6, §7, §8, §9 updated |
 | 2.4 (all) | 2026-08-05 | Added §9 "Final ERD Overview (nodes only)" — full Phase 2 end-state ERD (11 entities, 16 relationships) in the Task 02 "Diagram 1" style for quick orientation; no design change (diagram only). Revision log renumbered to §10. |
 | 2.3 (all) | 2026-08-04 | Review fix (§5 wording only, no design change): 3NF evidence rows corrected for precision — removed the garbled `approval_id → non-key → other non-key` notation (`booking_approvals` now states "no non-key attribute depends on another non-key attribute"); the `booking_advisory_acknowledgement` row now states in 2NF-precise terms that the composite UQ is a **full** alternate key with no proper-subset dependency; the closing paragraph now states that **only** `booking_advisory_acknowledgement` carries the composite unique key (`maintenance_impact_history` has none). |
 | 2.2 (Area 2) | 2026-08-03 | Revision: the instant/staff origin is **derived** from `approver_id = -1` (no stored origin column; a stored one would add the non-key FD `approver_id → origin` and break 3NF). ERD excerpt (§B.1), §B.2.1 (no-column-change statement), §B.2.2, §5, §6.1, §6.2 updated. |
