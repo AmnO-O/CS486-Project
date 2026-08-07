@@ -65,14 +65,14 @@ confirmation steps — a read result is only ever a hint.
 
 ---
 
-## 3. Design Decisions
+## 3. Resolved Design Ambiguities & Decisions
 
-| # | Question | Decision | Rationale | Effect on Tasks 12 / 13 / reporting |
-|---|---|---|---|---|
-| DD1 | Does escalation to `out-of-service` also affect **pending** requests, or only already-approved bookings? | **Only already-approved bookings.** Escalation performs **no booking DML**. Pending bookings stay `pending`; any later approval attempt fails the out-of-service gate with deterministic code `51002`. | Matches the Phase 2 wording of NR4 ("already-approved bookings … must be identified"); consistent with BR2 as designed in Task 09 (availability is checked at approval time, so a pending request is only evaluated when it is decided); no additional trigger or schema is needed. | Task 12: `usp_maintenance_set_impact_level` mutates no booking row. Task 13: regression scenario proving pending bookings stay `pending` and are rejected with `51002` at approval time. Report #4 (Task 16) covers approved bookings only. |
-| DD2 | Which write paths must be within the critical section? | **Four**: instant booking submission, staff approval, maintenance escalation/downgrade, and maintenance-ticket creation. | The Phase 2 requirement (NR6) frames the no-overlap guarantee as unconditional, and ticket creation is the entry point through which a blocking (`out-of-service`) record is legitimately born. Leaving it outside the lock would preserve K5, a BR4/NR6 violation of the same shape the other three paths guard against, while the fix is a single procedure reusing the same lock (§6.1). | Task 12 implements four procedures. Task 13 adds a K5 scenario (T9). Report #4 is unaffected (derived query). |
-| DD3 | How are read-only availability / room-finder reads treated? | **Advisory hints only.** Reads never serialize and never confirm a booking; the confirmation paths re-check under the lock. | A point-in-time read can be stale by definition; a hint cannot break NR6 as long as final confirmation re-checks. | Task 12: confirmation procs re-read all predicates post-lock. Task 13: no assertion that a simultaneous read is "fresh" — only that it cannot confirm a booking. |
-| DD4 | Audit mechanism for `changed_by` on maintenance level changes | `sys.sp_set_session_context N'current_user_id', <id>` at the start of every unit of work; clear (set NULL) at the end. Fallback = reserved system approver `-1`. | Follows the Task 10 handoff (`SESSION_CONTEXT` adopted for `trg_maintenance_impact_history`); session-scoped, so the app must set/clear per unit. | Task 12 entry points set/clear the context. Task 13 asserts history-row `changed_by` attribution with and without context. |
+| # | Question | Decision + rationale | Effect on Tasks 12 / 13 / reporting |
+|---|---|---|---|
+| DD1 | Does escalation to `out-of-service` affect **pending** requests too? | **No — only already-approved bookings.** Escalation performs **no booking DML**; pending bookings stay `pending` and are rejected with `51002` only at approval time (NR4 wording; BR2 checks availability at approval per Task 09; no extra schema needed). | W3 writes no booking row. T4: pending stays `pending`, later approval fails `51002`. Report #4 covers approved bookings only. |
+| DD2 | Which write paths must be inside the critical section? | **Four** — instant submit, staff approval, escalation/downgrade, ticket creation. Ticket creation is the legitimate birth of a blocking record; omitting it leaves K5, a BR4/NR6 hole closed by one procedure reusing the same lock (§6.1). | Task 12 implements all four. T9 covers K5 (ticket vs booking). Report #4 unaffected (derived). |
+| DD3 | How are read-only room-finder / availability reads treated? | **Advisory hints only.** Reads never serialize or confirm; the locked confirmation paths re-check, which is what guarantees NR6. | Confirmations re-read all predicates post-lock. No assertion of read "freshness". |
+| DD4 | How is `changed_by` captured on maintenance level changes? | **`sys.sp_set_session_context(N'current_user_id', <id>)`** set at unit start, cleared at end; fallback = reserved approver `-1` (Task 10 handoff). | Entry points set/clear the context. T13 asserts history-row attribution with and without context. |
 
 ---
 
