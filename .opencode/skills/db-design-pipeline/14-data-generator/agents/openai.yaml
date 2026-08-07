@@ -1,0 +1,4 @@
+interface:
+  display_name: "14 Data Generator"
+  short_description: "Generate deterministic 100k+ booking data"
+  default_prompt: "Use $14-data-generator to design or validate the Task 14 generator artifacts from current project sources."

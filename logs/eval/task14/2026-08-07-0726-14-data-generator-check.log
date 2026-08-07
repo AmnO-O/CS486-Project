@@ -1,0 +1,68 @@
+CS486 G05 - Task 14 (data generator) execution/verification log
+Run at: 2026-08-07 07:26 (+07)
+Artifact: outputs/14-data-generator-G05/
+
+ENVIRONMENT
+  Python: 3.12.13 (workspace runtime)
+  sqlcmd / SQL Server: available via localhost\SQL1
+  Scratch DB used for live checks: CS486_G05_T14
+
+STATIC CHECKS
+  [PASS] All six required files exist and are non-empty: README.md, config.example.json,
+         generate.py, load.sql, verify.sql, requirements.txt
+  [PASS] generate.py parses as valid Python 3 AST
+  [PASS] config.example.json parses as valid JSON; counts.bookings = 120000
+         (inside the required [100000, 500000] window)
+  [PASS] requirements.txt states stdlib-only explicitly (no unpinned dependency)
+  [PASS] No unseeded RNG: all randomness derives from stable_rng(seed, label)
+  [PASS] No schema DDL, no origin column, no index tuning, no analytical query,
+         no Task 13 test folder added
+  [PASS] Generated CSVs excluded from git (.gitignore updated)
+
+GENERATOR SMOKE RUNS
+  [PASS] Smoke run (--bookings 3000 --smoke): all 10 CSVs plus manifest.json produced
+         manifest: bookings=3000, booking_advisory_acknowledgement=1105,
+         booking_approvals=2312, booking_sessions=1636, confirmed_count=1952
+  [PASS] Second smoke run, same seed -> byte-identical SHA-256 for all 10 CSVs
+
+FULL RUNS
+  [PASS] Full run (120000 bookings, default config): manifest recorded
+         bookings=120000, booking_advisory_acknowledgement=45431,
+         booking_approvals=79007, booking_sessions=54058, confirmed_count=64607,
+         span=2021-09-06T07:00:00 .. 2025-06-21T18:00:00
+  [PASS] Second full run, same seed -> byte-identical SHA-256 for all 10 CSVs
+
+INDEPENDENT INVARIANT CHECK
+  [PASS] G1 booking_count = 120000
+  [PASS] G2 span_days = 1384
+  [PASS] G7/V2 confirmed-overlap violations = 0
+  [PASS] filtered-unique-index exact-start collisions = 0
+  [PASS] BR4/V3 confirmed booking over active out-of-service maintenance = 0
+  [PASS] NR2/V4 confirmed booking missing ack for overlapping active advisory = 0
+  [PASS] V6 no_show rows holding a booking_sessions row = 0
+  [INFO] G6 origins: instant/approved=4600, staff/approved=66007, staff/rejected=8400
+         (both origins present)
+  [INFO] G4 statuses: completed=50231, cancelled=26593, pending=14400,
+         approved=10549, rejected=8400, no_show=6000, checked_in=3827
+  [INFO] G3 impact levels present: advisory=1396, out-of-service=1204
+
+LIVE SQL SERVER VALIDATION
+  [PASS] Tasks 05 + 10 applied to scratch DB CS486_G05_T14
+  [PASS] load.sql imported all 10 CSVs and created 2 maintenance_impact_history rows
+  [PASS] verify.sql completed successfully; V1 PASS and V2-V11 returned zero violations
+
+SELF-DETECTED ISSUES AND FIXES DURING THIS RUN
+  1. validate_config() originally rejected any run below 100000 bookings, which made
+     smoke testing impossible. Fixed with an explicit --smoke flag.
+  2. choose_day() originally rebuilt the day-weight vector on every booking draw.
+     Fixed with a precomputed cumulative table and bisect lookup.
+  3. The initial 3-academic-year calendar failed G2 because summer breaks shortened
+     the day span. Fixed by extending config.example.json to four academic years.
+  4. load.sql originally mixed a T-SQL variable with sqlcmd substitution. Fixed by
+     using a single sqlcmd variable guard.
+  5. Advisory acknowledgements were originally emitted for soft-deleted confirmed
+     bookings. Fixed by skipping deleted bookings in the ack loop, then regenerating
+     the dataset and rerunning live load/verify.
+
+BLOCKERS / RESIDUAL RISK
+  - None.

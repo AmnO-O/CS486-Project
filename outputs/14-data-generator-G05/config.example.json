@@ -1,0 +1,48 @@
+{
+  "seed": 20260807,
+  "output_dir": "outputs/14-data-generator-G05/_generated",
+  "id_base": 200000,
+  "calendar": {
+    "academic_years": [
+      {"label": "AY2021-2022", "start": "2021-09-06", "end": "2022-06-25"},
+      {"label": "AY2022-2023", "start": "2022-09-05", "end": "2023-06-24"},
+      {"label": "AY2023-2024", "start": "2023-09-04", "end": "2024-06-22"},
+      {"label": "AY2024-2025", "start": "2024-09-02", "end": "2025-06-21"}
+    ],
+    "term_start_spike_days": 21,
+    "term_start_spike_weight": 4
+  },
+  "counts": {
+    "departments": 8,
+    "users": 2200,
+    "spaces": 120,
+    "facilities": 12,
+    "maintenance": 2600,
+    "bookings": 120000
+  },
+  "status_weights": {
+    "completed": 52,
+    "approved": 11,
+    "checked_in": 4,
+    "cancelled": 9,
+    "rejected": 7,
+    "pending": 12,
+    "no_show": 5
+  },
+  "instant_share": 0.10,
+  "maintenance": {
+    "advisory_share": 0.55,
+    "resolved_share": 0.62,
+    "soft_deleted_share": 0.04,
+    "escalation_candidates": 6
+  },
+  "space_status": {
+    "temporarily_closed": 4,
+    "retired": 3
+  },
+  "batch_size": 20000,
+  "csv": {
+    "delimiter": ",",
+    "line_terminator": "\n"
+  }
+}
