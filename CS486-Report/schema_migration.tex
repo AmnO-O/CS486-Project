@@ -1,0 +1,113 @@
+\section{Schema Migration}
+\label{sec:schema-migration}
+
+Phase 2 extends the frozen Phase 1 schema with maintenance impact levels,
+advisory acknowledgements, and data-driven instant booking. Since the database
+already contained booking and maintenance data, the upgrade was implemented as
+a data-preserving T-SQL delta in \texttt{10-schema-migration.sql}. The script
+upgrades the Task 05 baseline, \texttt{05-db-definition.sql}, to the approved
+Task 09 design. The companion script
+\texttt{10-schema-migration-rollback.sql} reverses the upgrade when required.
+
+\subsection{Migration Approach}
+
+The migration is primarily additive: it introduces new columns, tables,
+indexes, and triggers without rebuilding or renaming any Phase 1 table. The
+only removed element is \texttt{spaces.usage\_policy}, an unused free-text
+column superseded by the Task 09 reference-table design. No rule, index, or
+trigger depended on this column.
+
+The complete schema delta is summarized in Table~\ref{tab:migration-delta}.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabularx}{\textwidth}{>{\RaggedRight\arraybackslash}p{0.27\textwidth}
+                                  >{\RaggedRight\arraybackslash}X}
+        \toprule
+        \textbf{Schema component} & \textbf{Phase 2 implementation} \\
+        \midrule
+        Maintenance impact &
+        Add \texttt{maintenance.impact\_level} as \texttt{NOT NULL}, defaulting
+        to \texttt{'out-of-service'}. A check constraint permits only
+        \texttt{out-of-service} and \texttt{advisory}. \\
+        \midrule
+        Impact history &
+        Add \texttt{maintenance\_impact\_history} to record every maintenance
+        impact-level change. \\
+        \midrule
+        Advisory acknowledgement &
+        Add \texttt{booking\_advisory\_acknowledgement}. A composite unique
+        constraint permits one acknowledgement per booking--advisory pair. \\
+        \midrule
+        Instant-booking policy &
+        Add \texttt{space\_type\_allowed\_purpose} and remove the superseded
+        \texttt{spaces.usage\_policy} column. \\
+        \midrule
+        Trigger logic &
+        Restrict booking blocks to out-of-service maintenance; record impact
+        history; validate acknowledgement ownership; maintain modification
+        timestamps; and recompute space status. \\
+        \midrule
+        Configuration data &
+        Seed one reserved system approver and 18 allowed-purpose pairs for the
+        four approved space types. \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Phase 2 schema migration delta}
+    \label{tab:migration-delta}
+\end{table}
+\FloatBarrier
+
+The revised booking and maintenance triggers block overlaps only when a space
+has out-of-service maintenance; advisory maintenance produces a warning but
+does not make the space unavailable. Additional triggers record impact-level
+changes, verify that acknowledgements are submitted by the booking owner,
+maintain last-modified timestamps, and recompute
+\texttt{spaces.current\_status}. Status is derived using the approved priority
+order, avoiding duplicated state.
+
+The migration is both transactional and repeatable. All operations execute in
+a single transaction, so a failed or interrupted run leaves the database
+unchanged. Existence checks guard object creation and seed insertion, allowing
+the script to be rerun without creating duplicate objects or rows. The rollback
+script restores the four Phase 1 trigger definitions and removes every column,
+table, index, trigger, and seed row introduced by the migration, returning the
+schema to the Task 05 baseline.
+
+\subsection{Data Preservation and Backfill}
+
+No existing booking or maintenance row is deleted or assigned a new identity.
+The only backfill sets the new maintenance impact level to
+\texttt{`out-of-service'}. This preserves Phase 1 behavior because every
+existing active maintenance record continues to block overlapping bookings.
+
+After the schema changes, \texttt{spaces.current\_status} is recomputed using
+the priority order: retired, temporarily closed, out-of-service maintenance,
+live session, and available. Existing manual \texttt{retired} and
+\texttt{temporarily\_closed} overrides are preserved.
+
+The migration also inserts the reserved system approver used to identify
+derived instant approvals and the 18 \texttt{(space\_type, purpose)} pairs that
+define instant-booking eligibility for the four approved space types. Guarded
+inserts ensure that each row is created only once and do not disturb existing
+identity values.
+
+\subsection{Verification}
+
+Verification was performed on a scratch SQL Server 2022 database. The Task 05
+DDL and sample data were loaded first, followed by the migration, a second run
+of the same migration, and the rollback. Validation queries confirmed that the
+new schema objects had the approved definitions, every maintenance row had an
+impact level, and the system approver and all 18 allowed-purpose pairs existed
+exactly once. The second migration run completed without errors or duplicates,
+confirming repeatability.
+
+Transactional smoke tests covered the main behavioral rules. Advisory
+maintenance allowed overlapping bookings, whereas out-of-service maintenance
+continued to block them. Duplicate acknowledgement of the same advisory was
+rejected, as was approval without the required acknowledgement. Each test was
+rolled back after execution. Finally, the rollback script restored the
+baseline row counts exactly, confirming that the migration and reversal caused
+no data loss.

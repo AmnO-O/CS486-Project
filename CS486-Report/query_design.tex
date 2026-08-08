@@ -1,0 +1,232 @@
+% ==================================================================
+\subsection{Task 07: Query Design}
+\label{sec:task07}
+% ==================================================================
+
+
+\subsubsection{Database Objective}
+
+Task~07 designed executable SQL queries that answer role-specific business
+questions for the Campus Space Management System.The task produced \texttt{outputs/07-query-design-G05.sql}, containing all
+student queries assembled into a single executable file. Each query follows the
+4-field template: business question, target user(s), explanation of usefulness,
+and a parameterized T-SQL statement using \texttt{DECLARE} blocks.
+
+\subsubsection{Agent Configuration and Improvement Process}
+
+\paragraph{Initial approach.}
+The initial design treated Task~07 as a straightforward generation task: the
+agent would read the approved schema and sample data, then produce five queries
+independently. A basic command and skill were written to define the output
+template and SQL quality rules. While the agent successfully generated
+syntactically valid queries, the output lacked depth and variety. Queries
+tended to cluster around simple availability checks and repeated similar
+patterns across students, resulting in low semantic coverage of the domain's
+business questions.
+
+\paragraph{Improvement: role-scoped query generation.}
+After reviewing the initial output, the team identified the root cause: the
+agent had no guidance on which user perspective each student should adopt.
+Without role constraints, every student's queries converged toward the same
+generic availability-search pattern.
+
+The command was extended with explicit per-student arguments:
+
+\begin{itemize}[noitemsep]
+    \item \texttt{--student-name} to assign authorship to each query block
+    \item \texttt{--target-users} to restrict each student's queries to a
+          specific role subset (e.g.\ \texttt{facility\_manager},
+          \texttt{lecturer})
+    \item \texttt{--num-queries} to control output volume
+    \item \texttt{--mode} to support append or overwrite when multiple
+          students contributed to the same file
+    \item \texttt{--business-question} to guide the agent to follow each
+          student's intended scenario
+\end{itemize}
+
+The skill was updated with a query distribution table mapping each role to
+expected query categories: lecturers focused on availability and schedule
+views; facility staff on approvals, check-in, and maintenance; facility
+managers on utilization analytics and no-show analysis; department admins on
+audit trails and inter-department comparisons. This prevented semantic
+duplication across students and produced a query set with wider operational
+coverage.
+
+\paragraph{Interaction rule.}
+To protect each student's contribution, the command required the agent to stop
+and ask the user before overwriting an existing output file. If \texttt{--mode}
+was not specified and the file already existed, the agent would prompt:
+\textit{``Output file exists. Append new queries for [student name] to the
+existing file, or overwrite the entire file?''} Only after an explicit answer
+would the agent proceed. This prevented silent data loss when multiple students
+ran the command sequentially.
+
+% ==================================================================
+\subsubsection{Per-Student Query Summary}
+% ==================================================================
+
+% ----------------------------------------------------------------
+% TEMPLATE for each student — copy and fill in
+% ----------------------------------------------------------------
+
+% ---- Student: Nguyen Huu Phuoc ----
+\paragraph{Nguyễn Hữu Phước --- Role: Facility Staff.}
+\begin{itemize}[noitemsep]
+
+    \item \textbf{Q1 --- Pending approvals for today:} Retrieves all pending booking requests within the next 24 hours so facility staff can review and approve or reject them in a timely manner.
+
+\item \textbf{Q2 --- Real-time occupancy snapshot:} Shows which spaces are currently checked-in or approved, who booked them, and when the session ends, enabling live occupancy monitoring across campus.
+
+\item \textbf{Q3 --- Active maintenance tickets:} Lists all open and in-progress maintenance tickets with problem descriptions, assigned staff, and days open, helping staff prioritise repairs.
+
+\item \textbf{Q4 --- Eligible check-in bookings:} Identifies approved bookings past their start time with no check-in, enabling proactive follow-up on no-shows or late arrivals.
+
+\item \textbf{Q5 --- Session completion report for today:} Retrieves sessions completed on a given date with actual end times, space conditions, and check-in staff, supporting end-of-day space review.
+\end{itemize}
+% ---- Student: Pham Huu Nam ----
+\paragraph{Phạm Hữu Nam --- Role: Facility Manager.}
+\begin{itemize}[noitemsep]
+    \item \textbf{Q6 --- Rejected booking audit trail:} retrieves the full
+    rejection history for a specific lecturer, filtered by their natural
+    key (unique email), including rejection reasons, decision timestamps,
+    and the staff member who processed each decision. Supports
+    investigation of possible bias or procedural issues and accountability
+    reviews.
+
+    \item \textbf{Q7 --- Spaces with upcoming bookings but no recent
+    maintenance:} identifies spaces with approved or checked-in bookings
+    scheduled within the next 10 days that have \emph{not} undergone any
+    resolved maintenance or quality inspection within the past month (and
+    are not currently under maintenance), so technicians can be
+    proactively dispatched for pre-use checks on long-neglected,
+    high-risk rooms.
+
+    \item \textbf{Q8 --- Department no-show rate analysis:} aggregates
+    confirmed booking and no-show counts per department for the current
+    semester, computes the no-show rate percentage, and ranks departments
+    from worst to best to support enforcement of stricter reservation
+    penalties on departments that over-reserve and under-utilize spaces.
+
+    \item \textbf{Q9 --- Cumulative usage hours for competing requesters:}
+    identifies student requesters with overlapping pending or approved
+    bookings for a contested meeting room and time slot, then calculates
+    each requester's cumulative actual usage hours for the current month
+    from completed booking sessions, enabling fair-access allocation that
+    prioritises under-served (low-usage) users.
+
+    \item \textbf{Q10 --- Semester room-type request summary:} aggregates
+    total requests, approval rates, and unique user counts by room
+    category (classroom, laboratory, meeting room, auditorium) for a
+    declared semester window, to support data-driven decisions on space
+    expansion or consolidation.
+\end{itemize}
+% ---- Student: Cao Quang Hung ----
+\paragraph{Cao Quảng Hưng --- Role: Student.}
+\begin{itemize}[noitemsep]
+    \item \textbf{Q11 --- Available spaces with particular facilities:} Finds teaching or study spaces equipped with some particular facilities (such as Projector, WhiteBoard) that are free to book within their desired time window
+
+    \item \textbf{Q12 --- Particular events on a date:} Find particular events (such as Seminar or Student Activity) are happening on a given date with specified capacity and organizer.
+
+    \item \textbf{Q13 --- Alternative spaces when usual room is blocked: } Learns which room the student uses most from their booking history, checks if it is unavailable then proactively recommends up to a specified number of alternatives on the same floor. 
+
+    \item \textbf{Q14 --- Lab availability by day of week:} Based on booking history from the past year, retrieves which days of the week have the most available project and computer laboratories
+
+    \item \textbf{Q15 --- Department admin's upcoming approved bookings:} A particular department administrators identifies all approved upcoming booking made by members of their department, seeing who booked which space, for what purpose, and when.
+\end{itemize}
+
+% ---- Student: Tran Dinh Quoc Thang ----
+\paragraph{Trần Đình Quốc Thắng --- Role: Lecturer, Teaching Assisstant.}
+\begin{itemize}[noitemsep]
+    \item \textbf{Q16 --- Lab availability with equipment and conflict checks:}
+    finds computer or project labs for a requested tutorial slot by checking
+    capacity, workstation count, optional projector availability, live room
+    status, confirmed booking overlaps, and unresolved maintenance conflicts.
+
+    \item \textbf{Q17 --- Lecturer personal booking timeline:} retrieves a
+    lecturer's semester booking history across all active lifecycle statuses,
+    including room details, decision notes, rejection reasons, approver
+    information, and actual session timestamps.
+
+    \item \textbf{Q18 --- Completed TA lab session history:} lists completed
+    computer/project lab sessions for a teaching assistant, including actual
+    duration, condition notes, check-in staff, usage notes, and a summarized
+    facility list.
+
+    \item \textbf{Q19 --- Approval lead-time analysis:} aggregates approved
+    and rejected lecturer bookings by purpose, space type, and decision status
+    to show minimum, average, and maximum decision lead time for planning
+    future submissions.
+
+    \item \textbf{Q20 --- Upcoming lab readiness alert:} identifies approved
+    upcoming TA lab bookings that may be disrupted by non-available space
+    status or overlapping unresolved maintenance, supporting early backup-room
+    planning.
+\end{itemize}
+
+% ==================================================================
+\subsubsection{Issues and Improvements Summary}
+% ==================================================================
+
+Table~\ref{tab:task07-improvements} consolidates the significant issues
+identified across all students during the review cycle, together with the
+improvements made and their effect on query correctness or maintainability.
+
+\begin{table}[http]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.6cm}
+                             >{\raggedright\arraybackslash}p{1.2cm}
+                             >{\raggedright\arraybackslash}p{3.2cm}
+                             >{\raggedright\arraybackslash}X
+                             >{\raggedright\arraybackslash}p{2.6cm}}
+\toprule
+\textbf{Q\#} & \textbf{Student} & \textbf{Issue found} & \textbf{Improvement made} & \textbf{Effect} \\
+\midrule
+
+Q6 & Nam &
+Filtered on \texttt{full\_name}, which is not unique. &
+Replaced with \texttt{DECLARE @requester\_id INT}; filter now uses the
+surrogate key \texttt{b.requester\_id}. &
+Eliminates false multi-row matches. \\
+
+
+\addlinespace[0.4em]
+
+
+Q9 & Nam &
+\texttt{COALESCE(actual\_end, requested\_end)} overcounted
+hours for \texttt{checked\_in} sessions still in progress. &
+Replaced with a \texttt{CASE} expression: \texttt{completed} uses
+\texttt{actual\_end\_time}; \texttt{checked\_in} in-progress uses
+\texttt{GETDATE()}; month bounds derived via \texttt{DATEFROMPARTS}. &
+Duration accurate per status; query is self-updating each month. \\
+
+\addlinespace[0.4em]
+
+% ---- Add rows for other students below ----
+% Q11 & Phuoc & [issue] & [improvement] & [effect] \\
+% Q12 & Hung  & [issue] & [improvement] & [effect] \\
+
+\bottomrule
+\end{tabularx}
+\caption{Issues and improvements across all Task~07 student queries}
+\label{tab:task07-improvements}
+\end{table}
+
+% ==================================================================
+\subsubsection{Evaluation Result}
+% ==================================================================
+
+Task~07 was evaluated on query quality, SQL correctness, and alignment with the
+4-field template.
+Queries that returned zero rows due to sample data coverage gaps were documented
+with an inline comment noting that the logic was correct and the data seed did
+not cover the scenario. No query was accepted without at least a syntax
+verification pass.
+
+\newpage
+
+
+
+

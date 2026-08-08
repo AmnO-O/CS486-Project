@@ -1,0 +1,44 @@
+Task 11 — Static Verification Log (doc-only trim: Section 4)
+============================================================
+File     : logs/eval/task11/2026-08-08-1901-11-concurrency-design-check.log
+Task     : 11 — Concurrency Design
+Group    : G05
+Run mode : documentation-only trim of rev 3.3 — Section 4 (Current Database
+           Baseline & Contract) condensed from 61 to 57 lines; all object/contract
+           anchors kept; no design content changed; no version bump, no new
+           revision-log row (user decision)
+Date     : 2026-08-08
+Status   : PASS (all checks)
+
+Scope of this run
+-----------------
+- outputs/11-concurrency-design-G05.md (530 -> 526 lines):
+  * Section 4 intro: unchanged (05/10/09 citations kept).
+  * 4.1: status-set table -> one compact bullet (same predicate, is_deleted=0,
+    excluded statuses).
+  * 4.2: five bullets/triggers -> three bullets (default semantics + [Section 7.4]
+    pointer; blocking vs advisory + ack rule; single trigger line naming all
+    three triggers and their roles).
+  * 4.3: two bullets kept (ack table + composite UQ; approver_id = -1 derived
+    origin).
+  * 4.4: defense-in-depth table + conclusion kept, wording condensed.
+  * 4.5: index list + Task 15 note kept verbatim.
+  - Splice performed deterministically (line-anchored UTF-8 replace of Section 4
+    block).
+
+Gate checks
+-----------
+G1 (headings): 12 unique section headings, no duplicates; 5 subsection headings
+  (4.1-4.5) present — PASS
+G2/G3 (no run/CLI/docs tokens): no run tokens, no new docs/ citations — PASS
+G4 (cross-references + contracts):
+  - trg_bookings_check_grounds: kept
+  - trg_booking_approvals_check_space x3; trg_booking_advisory_ack_validate x1
+  - uq_bookings_active_overlap x2; idx_bookings_time_range x1; approver_id = -1 x2
+  - Report-# scope (Section 7.4/10), T12, DD6 pointers unchanged — PASS
+G5 (error codes): no code-text changed in this section — PASS
+Artifacts
+---------
+- outputs/11-concurrency-design-G05.md (rev 3.3 with Section 4 trimmed)
+- logs/trajectory/task11/2026-08-08-1901-trajectory.md
+- Prior run 2026-08-08-1845 log + trajectory marked superseded_by this run.
