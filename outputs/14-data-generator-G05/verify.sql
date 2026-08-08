@@ -17,22 +17,39 @@ SELECT
     MAX(requested_end_time)   AS last_end,
     CASE WHEN DATEDIFF(DAY, MIN(requested_start_time), MAX(requested_end_time)) >= 3 * 365
          THEN 'PASS' ELSE 'FAIL-G2' END AS g2_span
-FROM dbo.bookings;
+FROM dbo.bookings b
+INNER JOIN dbo.spaces s
+    ON s.space_id = b.space_id
+   AND s.space_code LIKE N'T14-%';
 GO
 
-PRINT '=== V2/G7/BR1/NR6: confirmed-overlap self-join (expect 0 rows = PASS) ===';
-SELECT a.space_id, a.booking_id AS booking_a, b.booking_id AS booking_b,
-       a.requested_start_time AS a_start, a.requested_end_time AS a_end,
-       b.requested_start_time AS b_start, b.requested_end_time AS b_end
-FROM dbo.bookings a
-JOIN dbo.bookings b
-  ON b.space_id = a.space_id
- AND b.booking_id > a.booking_id
- AND a.requested_start_time < b.requested_end_time
- AND b.requested_start_time < a.requested_end_time
-WHERE a.is_deleted = 0 AND b.is_deleted = 0
-  AND a.status IN ('approved','checked_in','completed')
-  AND b.status IN ('approved','checked_in','completed');
+PRINT '=== V2/G7/BR1/NR6: confirmed-overlap running-max check (expect 0 rows = PASS) ===';
+WITH confirmed_ordered AS (
+    SELECT
+        b.space_id,
+        b.booking_id,
+        b.requested_start_time,
+        b.requested_end_time,
+        MAX(b.requested_end_time) OVER (
+            PARTITION BY b.space_id
+            ORDER BY b.requested_start_time, b.requested_end_time, b.booking_id
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prior_max_end
+    FROM dbo.bookings b
+    INNER JOIN dbo.spaces s
+        ON s.space_id = b.space_id
+       AND s.space_code LIKE N'T14-%'
+    WHERE b.is_deleted = 0
+      AND b.status IN ('approved','checked_in','completed')
+)
+SELECT
+    space_id,
+    booking_id,
+    requested_start_time,
+    requested_end_time,
+    prior_max_end
+FROM confirmed_ordered
+WHERE prior_max_end > requested_start_time;
 GO
 
 PRINT '=== V3/BR4: confirmed booking over active out-of-service maintenance (expect 0 rows = PASS) ===';
@@ -46,6 +63,12 @@ JOIN dbo.maintenance m
  AND m.impact_level = 'out-of-service'
  AND m.start_time < b.requested_end_time
  AND (m.completion_time IS NULL OR m.completion_time > b.requested_start_time)
+JOIN dbo.spaces bs
+  ON bs.space_id = b.space_id
+ AND bs.space_code LIKE N'T14-%'
+JOIN dbo.spaces ms
+  ON ms.space_id = m.space_id
+ AND ms.space_code LIKE N'T14-%'
 WHERE b.is_deleted = 0
   AND b.status IN ('approved','checked_in','completed');
 GO
@@ -60,6 +83,12 @@ JOIN dbo.maintenance m
  AND m.impact_level = 'advisory'
  AND m.start_time < b.requested_end_time
  AND (m.completion_time IS NULL OR m.completion_time > b.requested_start_time)
+JOIN dbo.spaces bs
+  ON bs.space_id = b.space_id
+ AND bs.space_code LIKE N'T14-%'
+JOIN dbo.spaces ms
+  ON ms.space_id = m.space_id
+ AND ms.space_code LIKE N'T14-%'
 WHERE b.is_deleted = 0
   AND b.status IN ('approved','checked_in','completed')
   AND NOT EXISTS (
@@ -71,43 +100,82 @@ WHERE b.is_deleted = 0
 GO
 
 PRINT '=== V5a/G4/G6: booking status distribution (informational) ===';
-SELECT status, COUNT(*) AS row_count FROM dbo.bookings GROUP BY status ORDER BY status;
+SELECT b.status, COUNT(*) AS row_count
+FROM dbo.bookings b
+JOIN dbo.spaces s
+  ON s.space_id = b.space_id
+ AND s.space_code LIKE N'T14-%'
+GROUP BY b.status
+ORDER BY b.status;
 GO
 
 PRINT '=== V5b/G3: maintenance impact/status distribution (informational) ===';
-SELECT impact_level, status, COUNT(*) AS row_count
-FROM dbo.maintenance GROUP BY impact_level, status ORDER BY impact_level, status;
+SELECT m.impact_level, m.status, COUNT(*) AS row_count
+FROM dbo.maintenance m
+JOIN dbo.spaces s
+  ON s.space_id = m.space_id
+ AND s.space_code LIKE N'T14-%'
+GROUP BY m.impact_level, m.status
+ORDER BY m.impact_level, m.status;
 GO
 
 PRINT '=== V5c/G6: approval origin distribution (both must have COUNT > 0 = PASS) ===';
 SELECT
-    CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END AS origin,
-    decision, COUNT(*) AS row_count
-FROM dbo.booking_approvals
-GROUP BY CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END, decision
+    CASE WHEN a.approver_id = -1 THEN 'instant' ELSE 'staff' END AS origin,
+    a.decision, COUNT(*) AS row_count
+FROM dbo.booking_approvals a
+JOIN dbo.bookings b ON b.booking_id = a.booking_id
+JOIN dbo.spaces s ON s.space_id = b.space_id AND s.space_code LIKE N'T14-%'
+GROUP BY CASE WHEN a.approver_id = -1 THEN 'instant' ELSE 'staff' END, a.decision
 ORDER BY origin, decision;
 GO
 
 PRINT '=== V5d/G3: maintenance_impact_history row count (informational; >0 after Mode-A escalation slice) ===';
-SELECT COUNT(*) AS impact_history_rows FROM dbo.maintenance_impact_history;
+SELECT COUNT(*) AS impact_history_rows
+FROM dbo.maintenance_impact_history h
+JOIN dbo.maintenance m ON m.maintenance_id = h.maintenance_id
+JOIN dbo.spaces s ON s.space_id = m.space_id AND s.space_code LIKE N'T14-%';
 GO
 
 PRINT '=== V5e/G5: acknowledgement row count (informational) ===';
-SELECT COUNT(*) AS ack_rows FROM dbo.booking_advisory_acknowledgement;
+SELECT COUNT(*) AS ack_rows
+FROM dbo.booking_advisory_acknowledgement a
+JOIN dbo.bookings b ON b.booking_id = a.booking_id
+JOIN dbo.spaces s ON s.space_id = b.space_id AND s.space_code LIKE N'T14-%';
+GO
+
+PRINT '=== V5f/NR5: instant approvals must use seeded allowed space_type/purpose pairs (expect 0 rows = PASS) ===';
+SELECT a.approval_id, a.booking_id, s.space_type, b.purpose
+FROM dbo.booking_approvals a
+JOIN dbo.bookings b ON b.booking_id = a.booking_id
+JOIN dbo.spaces s ON s.space_id = b.space_id
+WHERE a.approver_id = -1
+  AND NOT EXISTS (
+      SELECT 1
+      FROM dbo.space_type_allowed_purpose p
+      WHERE p.space_type = s.space_type
+        AND p.purpose = b.purpose
+  );
 GO
 
 PRINT '=== V6a/no_show shape: no no_show may have a session (expect 0 rows = PASS) ===';
 SELECT b.booking_id
 FROM dbo.bookings b
+JOIN dbo.spaces s
+  ON s.space_id = b.space_id
+ AND s.space_code LIKE N'T14-%'
 WHERE b.status = 'no_show'
   AND EXISTS (
-      SELECT 1 FROM dbo.booking_sessions s WHERE s.booking_id = b.booking_id
+      SELECT 1 FROM dbo.booking_sessions sess WHERE sess.booking_id = b.booking_id
   );
 GO
 
 PRINT '=== V6b/no_show shape: every no_show has an approved decision (expect 0 rows = PASS) ===';
 SELECT b.booking_id
 FROM dbo.bookings b
+JOIN dbo.spaces s
+  ON s.space_id = b.space_id
+ AND s.space_code LIKE N'T14-%'
 WHERE b.status = 'no_show'
   AND NOT EXISTS (
       SELECT 1
@@ -128,7 +196,9 @@ GO
 PRINT '=== V8/UQ: duplicate confirmed exact-start collisions on one space (expect 0 rows = PASS) ===';
 SELECT space_id, requested_start_time, COUNT(*) AS collisions
 FROM dbo.bookings
-WHERE is_deleted = 0 AND status IN ('approved','checked_in','completed')
+WHERE is_deleted = 0
+  AND status IN ('approved','checked_in','completed')
+  AND space_id IN (SELECT space_id FROM dbo.spaces WHERE space_code LIKE N'T14-%')
 GROUP BY space_id, requested_start_time
 HAVING COUNT(*) > 1;
 GO
@@ -138,6 +208,7 @@ SELECT a.ack_id, a.booking_id, a.maintenance_id
 FROM dbo.booking_advisory_acknowledgement a
 JOIN dbo.bookings b ON b.booking_id = a.booking_id
 JOIN dbo.maintenance m ON m.maintenance_id = a.maintenance_id
+JOIN dbo.spaces s ON s.space_id = b.space_id AND s.space_code LIKE N'T14-%'
 WHERE b.is_deleted = 1
    OR m.is_deleted = 1
    OR m.impact_level <> 'advisory'
@@ -151,7 +222,8 @@ FROM sys.check_constraints
 WHERE OBJECT_NAME(parent_object_id) IN (
     'departments','users','spaces','facilities','space_facilities','maintenance',
     'bookings','booking_approvals','booking_sessions',
-    'maintenance_impact_history','booking_advisory_acknowledgement'
+    'maintenance_impact_history','booking_advisory_acknowledgement',
+    'space_type_allowed_purpose'
 )
 AND is_not_trusted = 1;
 GO
@@ -164,11 +236,29 @@ FROM sys.foreign_keys
 WHERE OBJECT_NAME(parent_object_id) IN (
     'departments','users','spaces','facilities','space_facilities','maintenance',
     'bookings','booking_approvals','booking_sessions',
-    'maintenance_impact_history','booking_advisory_acknowledgement'
+    'maintenance_impact_history','booking_advisory_acknowledgement',
+    'space_type_allowed_purpose'
 )
 AND is_not_trusted = 1;
 GO
 -- Remediation on a SCRATCH database only, if V11 returns rows:
 --   ALTER TABLE dbo.<table_name> WITH CHECK CHECK CONSTRAINT ALL;
+
+PRINT '=== V12/Task09: spaces schema and instant-policy seed coverage (expect PASS) ===';
+SELECT
+    CASE
+        WHEN COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NULL
+         AND COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
+        THEN 'PASS' ELSE 'FAIL'
+    END AS spaces_schema_alignment,
+    COUNT(*) AS allowed_purpose_rows,
+    COUNT(DISTINCT space_type) AS allowed_space_types,
+    CASE
+        WHEN COUNT(*) = 18
+         AND COUNT(DISTINCT space_type) = 4
+        THEN 'PASS' ELSE 'FAIL'
+    END AS allowed_purpose_coverage
+FROM dbo.space_type_allowed_purpose;
+GO
 
 PRINT 'TASK14-VERIFY-COMPLETE: review PASS/FAIL markers and any non-empty result sets above.';

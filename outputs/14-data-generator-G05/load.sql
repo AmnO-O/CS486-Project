@@ -26,6 +26,9 @@
     * Every table uses BATCHSIZE. A failed batch rolls back without deleting
       previously committed batches. The database must be scratch or isolated by
       the T14 ID/natural-key namespace; reruns are not append-safe.
+    * Task 09 v2.6 / Task 10 v5 are assumed: spaces.usage_policy and
+      spaces.max_hours are absent, while space_type_allowed_purpose already
+      exists and is seeded by the migration.
 */
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -59,8 +62,16 @@ IF OBJECT_ID(N'dbo.departments', N'U') IS NULL
    OR OBJECT_ID(N'dbo.booking_sessions', N'U') IS NULL
    OR OBJECT_ID(N'dbo.maintenance_impact_history', N'U') IS NULL
    OR OBJECT_ID(N'dbo.booking_advisory_acknowledgement', N'U') IS NULL
+   OR OBJECT_ID(N'dbo.space_type_allowed_purpose', N'U') IS NULL
 BEGIN
     THROW 51401, 'Task 14 requires the Phase 2 migrated schema (Tasks 05 + 10).', 1;
+END
+GO
+
+IF COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NOT NULL
+   OR COL_LENGTH(N'dbo.spaces', N'max_hours') IS NOT NULL
+BEGIN
+    THROW 51402, 'Task 14 expects the Task 09 v2.6 spaces schema (no usage_policy or max_hours columns).', 1;
 END
 GO
 

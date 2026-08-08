@@ -2,8 +2,9 @@
 name: 16-analytical-queries
 description: >
   Generate, append, revise, and validate the Phase 2 Task 16 analytical SQL
-  deliverable for CS486 G05. Covers Q1 booking conflict, Q2 room finder,
-  Q3 approved hours, Q4 weekday/hour demand, and Q5 escalation impact.
+  deliverable for CS486 G05. The approved artifact is a reusable stored-procedure
+  script covering Q1 booking conflict, Q2 room finder, Q3 approved hours,
+  Q4 weekday/hour demand, and Q5 escalation impact.
 ---
 
 # Task 16 - Analytical Queries
@@ -11,7 +12,9 @@ description: >
 ## Goal and output
 
 Generate `outputs/16-analytical-queries-G{{group}}.sql`, an executable SQL Server
-2019+ script containing these stable query IDs:
+2019+ script containing these stable query IDs. Each canonical query block is
+implemented as a stored procedure wrapper, and the file may include sample
+`EXEC` calls after the canonical blocks:
 
 | ID | Query | Requirement |
 |---|---|---|
@@ -86,6 +89,8 @@ Rules for every query:
 - Use `NOT EXISTS` rather than nullable `NOT IN` anti-joins.
 - Keep every block independently executable after its `GO`.
 - Do not include index DDL, execution plans, timings, or Task 15 results.
+- The only allowed DDL in a canonical block is the per-query `CREATE OR ALTER
+  PROCEDURE` wrapper that implements the approved stored-procedure form.
 
 ## Query requirements
 
@@ -100,10 +105,12 @@ concurrency-safe confirmation authority.
 
 ### Q2 - Room finder
 
-Parameters: `@slot_start`, `@slot_end`, `@minimum_capacity`, and a local
-`@required_facilities` table variable containing all facility names required by the
-caller. The query supports zero, one, or many rows; the generation example must seed
-at least two rows to represent a realistic multi-facility search.
+Parameters: `@slot_start`, `@slot_end`, `@minimum_capacity`, and a caller-supplied
+JSON array parameter `@required_facilities_json`. The procedure must normalize the
+JSON into a local `@required_facilities` table variable containing all facility
+names required by the caller. The query supports zero, one, or many rows; the
+generation example must seed at least two rows to represent a realistic
+multi-facility search.
 Return spaces with sufficient capacity that have every requested facility. Use
 relational division (`NOT EXISTS` double-nested, not a one-facility match).
 Exclude `retired` and `temporarily_closed` spaces. Exclude spaces with overlapping
@@ -174,11 +181,15 @@ Before reporting, confirm:
 
 - Q1-Q5 markers are unique and each block ends with `GO`.
 - Append did not alter earlier blocks; requested IDs are present.
-- Q1 has confirmed overlap logic; Q2 checks **every facility** in the table
-  variable (the example must seed **at least two** rows) and both availability
-  sources; Q3/Q4 share U4 semantics; Q4 weekday numbering is
-  deterministic; Q5 reads escalation history rather than current level only.
-- No schema/index/procedure/trigger/concurrency DDL or Task 15 measurements exist.
+- Q1 has confirmed overlap logic; Q2 normalizes `@required_facilities_json` into a
+  local table variable, checks **every facility** (the example must seed **at least
+  two** rows), and checks both availability sources; Q3/Q4 share U4 semantics; Q4
+  weekday numbering is deterministic; Q5 reads escalation history rather than current
+  level only.
+- The approved stored-procedure wrappers are present, and any example `EXEC` calls
+  are `GO`-terminated after the canonical blocks.
+- No schema/index/trigger/concurrency DDL beyond the approved per-query procedure
+  wrappers, and no Task 15 measurements exist.
 - The SQL is compiled/run only on a scratch database with Tasks 05/10 and Task 14
   data. Record results under `logs/eval/task16/` and trajectory under
   `logs/trajectory/task16/` for an actual generation run. Do not create those logs

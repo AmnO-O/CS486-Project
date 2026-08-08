@@ -3,6 +3,9 @@
 Deterministic, stdlib-only Python generator for the migrated Phase 2 schema
 (`outputs/10-schema-migration-G05.sql` on top of `outputs/05-db-definition-G05.sql`).
 Produces one CSV per table, a bulk loader, and a verification script.
+This revision targets Task 09 v2.6 / Task 10 v5: `spaces.usage_policy` and
+`spaces.max_hours` are absent, while `space_type_allowed_purpose` is a
+migration-seeded reference table consumed by instant-approval checks.
 
 ## Files
 
@@ -21,20 +24,19 @@ Generated CSVs and `manifest.json` are written to `_generated/` (not committed; 
 
 All measurements below are from an actual run of `generate.py` against
 `config.example.json` (seed `20260807`, 120,000 bookings) on this machine, verified
-independently with a second Python script that recomputes the invariants directly
-from the CSVs and through a live SQL Server load on `localhost\SQL1` (see
-"Execution evidence").
+through the regenerated manifest plus a live SQL Server load on `localhost\SQL1`
+and `verify.sql` (see "Execution evidence").
 
 | # | Target | Measured result |
 |---|---|---|
 | G1 | `bookings` between 100,000 and 500,000 | 120,000 - PASS |
 | G2 | booking span >= 3 academic years | 2021-09-06 to 2025-06-21 = 1,384 days (>= 1,095) - PASS |
 | G3 | both impact levels present; escalation produces history | advisory 1,396 / out-of-service 1,204 present in the bulk data; `maintenance_impact_history` is populated by the automatic Mode-A slice in `load.sql` (the AFTER-UPDATE trigger never fires from bulk-generated rows - see "Design decisions") |
-| G4 | `cancelled`/`no_show` present in realistic proportion | cancelled 26,593 (22.2%), no_show 6,000 (5.0%), rejected 8,400 (7.0%) of 120,000 |
-| G5 | every confirmed booking overlapping an active advisory has an ack | 0 NR2 violations (independent CSV check) |
-| G6 | both instant and staff approval origins present | instant (`approver_id=-1`) 4,600 approved; staff 66,007 approved + 8,400 rejected |
-| G7 | no two confirmed bookings overlap on one space | 0 overlap violations, 0 exact-start collisions (independent CSV check) |
-| G8 | same seed reproduces the same dataset | two independent runs with the same seed produced byte-identical SHA-256 hashes for all 10 CSVs (both at 4,000-row smoke scale and at the full 120,000-row scale) |
+| G4 | `cancelled`/`no_show` present in realistic proportion | cancelled 27,422, no_show 6,000, rejected 8,400 of 120,000 |
+| G5 | every confirmed booking overlapping an active advisory has an ack | 0 NR2 violations (`verify.sql` V4) |
+| G6 | both instant and staff approval origins present | instant (`approver_id=-1`) 2,977 approved; staff 66,801 approved + 8,400 rejected; every instant approval matches a seeded `(space_type, purpose)` pair |
+| G7 | no two confirmed bookings overlap on one space | 0 overlap violations, 0 exact-start collisions (`verify.sql` V2/V8) |
+| G8 | same seed reproduces the same dataset | a second same-seed full run produced byte-identical SHA-256 hashes for all 10 CSVs |
 
 ## Mode A/B split
 
@@ -43,9 +45,12 @@ from the CSVs and through a live SQL Server load on `localhost\SQL1` (see
   `booking_sessions`, `booking_advisory_acknowledgement`. The generator is
   single-threaded and owns the full booking schedule per space (a 30-minute slot
   occupancy set per `space_id`), so it satisfies BR1/NR6 by construction without
-  needing the Task 12 applock - there is no concurrent writer. This is the
-  documented single-threaded exception in the Task 14 skill (`14-data-generator/SKILL.md`,
-  "Loading design").
+  needing the Task 12 applock - there is no concurrent writer. It also mirrors
+  Task 09 v2.6's instant-purpose gate, so approval rows stay legal before the bulk
+  loader runs. This is the documented single-threaded exception in the Task 14
+  skill (`14-data-generator/SKILL.md`, "Loading design"). `space_type_allowed_purpose`
+  is not emitted as CSV because Task 10 v5 creates and seeds that reference table
+  before this loader runs.
 - **Mode A (entry-point, small slice):** `maintenance_impact_history` is **not**
   emitted as CSV. `trg_maintenance_impact_history` is `AFTER UPDATE` only (Task 10),
   so ticket creation never produces history rows regardless of load path. `load.sql`
@@ -101,6 +106,9 @@ Because `bookings`/`booking_approvals`/`booking_sessions` are bulk-loaded withou
   `trg_booking_approvals_decision`); the generator's own status/approval/session
   rows are kept mutually consistent (an `approved`/`checked_in`/`completed` booking
   always has a matching `booking_approvals` row with `decision='approved'`).
+- Approval-bearing rows (`approved`, `checked_in`, `completed`, `no_show`) are
+  generated only on spaces that are not `temporarily_closed` or `retired`, mirroring
+  the approval trigger's manual-override gate.
 - BR1/NR6 (no confirmed overlap) is enforced by the generator's per-space slot
   occupancy bookkeeping, not by `trg_bookings_prevent_overlap` /
   `uq_bookings_active_overlap` (those remain in place as defense-in-depth and will
@@ -111,6 +119,9 @@ Because `bookings`/`booking_approvals`/`booking_sessions` are bulk-loaded withou
   `trg_bookings_check_maintenance` / `trg_booking_approvals_check_space`.
 - `verify.sql` (V2-V4) independently re-checks all three invariants against the
   loaded data, so the claim above is falsifiable rather than assumed.
+- NR5's soft instant-approval gate is enforced by the generator: `approver_id = -1`
+  is assigned only when `(space_type, purpose)` exists in the Task 10 seeded
+  `space_type_allowed_purpose` table. `verify.sql` V5f re-checks this.
 
 `load.sql`'s Mode-A escalation slice (the two `UPDATE ... impact_level` statements)
 runs as plain DML, not through a Task 12 stored procedure, so it does not exercise
@@ -126,6 +137,11 @@ not a concurrency demonstration. Task 13 owns the concurrency proof.
   with it.
 - `maintenance.impact_level` is written explicitly on every row (never relies on
   the column default).
+- `spaces.usage_policy` and the reverted v2.5 `spaces.max_hours` column are not
+  generated. `load.sql` fails fast if either column still exists, because that means
+  the database is not at Task 10 v5 / Task 09 v2.6.
+- `space_type_allowed_purpose` is migration-owned, not generator-owned. It must exist
+  before load; `verify.sql` V12 confirms the 18-row / 4-space-type seed coverage.
 - Acknowledgement rows are loaded (`BULK INSERT ... booking_advisory_acknowledgement`)
   before approval rows, matching the Task 11 sequencing contract.
 - All natural keys are namespaced `T14-*` / `T14 *` / `t14.*@campus.edu` so this
@@ -191,34 +207,41 @@ sqlcmd -S <server> -d <scratch_db> -E -C -I -i verify.sql
   parser can load the CSVs on machines where `FORMAT='CSV'` is unavailable or
   provider-broken. This changes punctuation only, not the schema or lifecycle
   distribution.
+- A14-6: the generator mirrors the Task 09 v2.6 instant-approval test's soft gate:
+  a system-origin approval is generated only for a seeded `(space_type, purpose)`
+  pair; there is no duration gate and no per-space cap.
+- A14-7: approval-bearing rows avoid `temporarily_closed` and `retired` spaces. Pending,
+  rejected, and cancelled demand may still target such spaces because the staff
+  workflow may reject or leave them unresolved.
 
 ## Execution evidence
 
 Environment: Python 3.12 and `sqlcmd` 16 are available. Live SQL Server validation
-was run against `localhost\SQL1` (`CS486_G05`) after dropping/recreating the scratch
-database and applying Tasks 05 + 10. Evidence gathered:
+was run against `localhost\SQL1` (`CS486_G05_T14_V26_REGEN`) after creating the
+scratch database, applying Tasks 05 + 06 + 10 v5, then loading the regenerated T14
+CSV set. Evidence gathered:
 
-1. **Static checks:** `generate.py` parses as valid Python AST; `config.example.json`
-   parses as valid JSON with `counts.bookings` inside `[100000, 500000]`.
-2. **Smoke run (4,000 bookings, `--smoke`):** completed in under a second; produced
-   all 10 CSVs plus `manifest.json`.
-3. **Full run (120,000 bookings, default config):** completed in ~45-55 seconds;
-   `manifest.json` recorded span `2021-09-06` to `2025-06-21` and
-   `confirmed_count` = 64,607 of 120,000.
-4. **Reproducibility (G8):** two independent full runs and two independent smoke
-   runs, same seed, produced byte-identical SHA-256 hashes for all 10 CSV files in
-   every comparison.
-5. **Independent invariant check:** a separate, hand-written Python script (not part
-   of the delivered generator) re-derived G1, G2, G7 (overlap self-join), the exact
-   filtered-unique-index collision check, BR4 (booking vs. out-of-service overlap),
-   NR2 (ack completeness vs. active advisories), no-show-with-session, and
-   no-show-without-approved-decision directly from the generated CSVs, independently
-   of `generate.py`'s own bookkeeping. All checks passed with zero violations.
-6. **Live SQL Server load:** `load.sql` was executed against `localhost\SQL1` after
-   Tasks 05 + 10. The loader imported all 10 CSVs and automatically created two
+1. **Static checks:** `generate.py` compiles cleanly with Python 3.12's
+   `py_compile`; the generator consumed `config.example.json` successfully in both
+   full runs.
+2. **Full run (120,000 bookings, default config):** completed successfully; the
+   manifest recorded span `2021-09-06` to `2025-06-21`, `confirmed_count` =
+   63,778 of 120,000, and `ack_count` = 44,163.
+3. **Reproducibility (G8):** a second same-seed full run in `%TEMP%\\task14_full_1917_repro`
+   produced byte-identical SHA-256 hashes for all 10 CSV files compared with
+   `_generated/`.
+4. **Verifier invariant check:** `verify.sql` re-derived G1, G2, G7
+   (running-max overlap check), the exact filtered-unique-index collision check,
+   BR4 (booking vs. out-of-service overlap), NR2 (ack completeness vs. active
+   advisories), no-show-with-session, no-show-without-approved-decision, instant
+   approval purpose membership, and schema/seed coverage from the loaded data. All
+   checks passed with zero violation rows.
+5. **Live SQL Server load:** `load.sql` was executed against `localhost\SQL1` after
+   Tasks 05 + 06 + 10 v5. The loader imported all 10 CSVs and automatically created two
    `maintenance_impact_history` rows through the Mode-A escalation/downgrade slice.
-7. **Live SQL Server verification:** `verify.sql` completed successfully. Final
-   invariant counts were zero for confirmed booking overlaps, confirmed booking vs.
-   active out-of-service maintenance, missing advisory acknowledgements,
-   no-show-with-session, no-show-without-approved-decision, untrusted CHECK
-   constraints, and untrusted foreign keys.
+6. **Live SQL Server verification:** `verify.sql` completed successfully on the
+   T14 namespace. Final invariant counts were zero for confirmed booking overlaps,
+   confirmed booking vs. active out-of-service maintenance, missing advisory
+   acknowledgements, no-show-with-session, no-show-without-approved-decision,
+   untrusted CHECK constraints, untrusted foreign keys, instant approvals outside
+   seeded purpose policy, and Task 09 v2.6 schema/seed mismatches.
