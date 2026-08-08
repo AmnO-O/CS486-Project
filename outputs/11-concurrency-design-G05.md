@@ -4,7 +4,7 @@
 **Course:** CS486 — Introduction to Database System
 **Phase:** 2 · **Task:** 11
 **Date:** 2026-08-06
-**Doc version:** 2.5
+**Doc version:** 3.0
 
 ---
 
@@ -144,30 +144,66 @@ lock and handoff rely on.
 
 ### 5.1 Comparison
 
-| Strategy | Anomalies prevented | Residual gap | Implementation complexity | Concurrency impact | Fit with current schema / SQL Server 2019+ |
-|---|---|---|---|---|---|
-| (a) `SERIALIZABLE` + key-range locks | Overlap races on a narrow predicate | Correct **only** if every writer's interval predicates lock identical ranges — the four write paths differ in shape; easy to miss (K3/K5 resurface) | High: per-query hints, plan-sensitive | Serializes by predicate, not by space | Poor fit with trigger gates |
-| (b) `UPDLOCK, HOLDLOCK` range reads | Same range-blocks as (a) | Same "every writer must be perfect" burden | High | Partial range locking; leaks | Poor fit |
-| (c) transaction-owned `sp_getapplock` per space (`space_booking:<space_id>`) | K1, K2, K3, K5; K4 by construction | Coarse serialization (one logical resource per space) so popular spaces contend | Low–medium: one helper, one accounting rule | Serializes on a logical resource; no schema change | Fits — works with every existing trigger, deterministic codes, no plan-sensitivity |
-| (d) Optimistic concurrency (version columns / `ROWVERSION`) | Works only with a version column | Task 09 deliberately kept the schema unchanged (no version columns) | Would need schema change | Low (retry) | Rejected — adds schema the approved design lacks |
-| (e) Trigger-only (baseline) | — | Cannot serialize two READ COMMITTED writers | Low | none | Baseline only |
+For completeness, the candidate strategies that were evaluated are shown briefly;
+the selection is argued entirely in §5.2.
+
+| Strategy | Anomalies prevented | Why not chosen |
+|---|---|---|
+| (a) `SERIALIZABLE` + key-range locks | Overlap races on a narrow predicate | Fails criterion 1 — serializes by predicate, not by space; needs **identical** interval-range locks from every write path, but the four write shapes differ; an off-by-one range re-opens K3/K5; plan-sensitive |
+| (b) `UPDLOCK, HOLDLOCK` range reads | Same range-blocks as (a) | Same "identical ranges" burden as (a); partial range locking leaks past gaps |
+| (c) transaction-owned `sp_getapplock` per space (`space_booking:<space_id>`) | K1, K2, K3, K5; K4 by construction | **Selected** — satisfies all five criteria in §5.2 |
+| (d) Optimistic concurrency (version columns / `ROWVERSION`) | Conflicts only detected if a version column exists | Fails criterion 2 — requires the schema change (version column) that Task 09 deliberately kept out |
+| (e) Trigger-only (baseline) | — | Fails criterion 1 — cannot serialize two READ COMMITTED writers; this is precisely the race that Task 11 exists to close |
+| (f) RCSI / snapshot isolation | Read-consistency only; K4 | Read-side mechanism only, writers check-then-act race (K1/K2) remains unsolved |
 
 ### 5.2 Selection
 
-**Selected: transaction-owned `sys.sp_getapplock` on `space_booking:<space_id>`**
-— strategy (c).
+**Selected: (c) — transaction-owned `sys.sp_getapplock` on `space_booking:<space_id>`.**
+Valid on SQL Server 2019+ with READ COMMITTED (the database default; no new
+configuration required). This is the only candidate that satisfies **all five**
+criteria the design stands on:
 
-Valid on SQL Server 2019+ with READ COMMITTED (the database default; no RCSI or new
-configuration required). One critical section per space is shared by **all four** write
-paths, so instant submit, approval, escalation/downgrade, and ticket creation serialize
-against each other. The invariant is re-checked after the lock is held and immediately
-before the write. The approach keeps the current normalized schema untouched and is
-simple to implement and demonstrate.
+1. **One shared critical section per space across all four write paths** — the same
+   per-space lock is taken by instant submit, staff approval, escalation/downgrade,
+   and ticket creation, so every pair of writers on the same space serializes. That
+   is exactly what closes K1, K2, K3 and K5 simultaneously (K4 by construction,
+   §7.5).
+2. **No schema change** — the approach adds only procedures; the Task 09 schema (no
+   version columns) stays untouched.
+3. **Works with the existing backstop objects** — the triggers and filtered index of
+   §4.4 remain the defense-in-depth under the lock; the strategy replaces no object,
+   only serializes the read→re-check→write window they cannot close alone.
+4. **Deterministic, testable contract** — each lock outcome maps 1:1 to a result code
+   (`51005`/`51006` retryable; `51007` restart; §6.3), which Task 13 can assert
+   deterministically.
+5. **Config-free correctness** — correctness comes from the app lock, not from
+   isolation levels or query hints; it holds under the database default
+   READ COMMITTED and is plan-independent.
 
-Against (a)/(b): they require **every** writer to lock an identical predicate range,
-which is a maintenance hazard across four different write shapes and is exactly where
-K3/K5 resurface. Against (d): it requires the schema change that Task 09 deliberately
-avoided. Against (e): it cannot stop a race.
+Plainly put: the invariant is re-checked **after** the lock is held and **immediately
+before** the write, and COMMIT releases the lock automatically.
+
+Why the others were dropped — each fails at least one of the five:
+
+- **(a)/(b)** fail criterion 1: range-/hint-lock schemes are correct only when
+  **every** writer locks an identical predicate range — an obligation the four
+  different write shapes cannot guarantee, and exactly where K3/K5 resurface. They
+  are also plan-sensitive (violates criterion 5).
+- **(d)** fails criterion 2: it requires the version column that Task 09 deliberately
+  excluded from the approved schema.
+- **(e)** fails criterion 1 and 5: a trigger fires inside the writer's own transaction
+  — two concurrent READ COMMITTED writers check and both pass before either commits;
+  that is the race this task closes.
+- **(f) RCSI** fails the write-write requirement: snapshot/read-committed-snapshot
+  guarantees only what a **reader** sees (K4); two concurrent writers can still both
+  commit — no serialization exists at the write side.
+- **`TABLOCKX` (table lock)** — correct but far coarser: it serializes the whole
+  `bookings` table across every space, turning a busy campus into one global queue;
+  per-space resource is the right grain for the target workload.
+
+The cost of the choice is documented, not hidden: one logical resource per popular
+space means writers queue on it (mitigated by the 5 s timeout, retry codes, and the
+Task 14 volume analysis — §6.1, §11).
 
 ### 5.3 Lock acquisition contract
 
@@ -459,3 +495,4 @@ the overlap-invariant audit query.
 | 1.0 | 2026-08-06 | First issue covering three write paths (instant submit, approval, escalation/downgrade) with the per-space app lock strategy. |
 | 2.0 | 2026-08-06 | Expanded to four write paths: added `usp_maintenance_report` (ticket creation) as the K5 closure; added T9 test scenario; clarified the error-code and lock contract wording. |
 | 2.5 | 2026-08-06 | Review round: error-contract claim softened to cause-family codes (`51001` documented as generic request-context bucket); added T10 (staff-vs-staff approval) and §6.1 lock-granularity rationale + §11 volume grounding; fixed five drifted section cross-references; renamed §3 decision labels to DD1–DD4 (collision with doc 09 deviation log D1–D8 and internal K4 reuse); added §11 database-level closure for raw DML (DENY table writes + GRANT EXECUTE only, ownership chaining). |
+| 3.0 | 2026-08-08 | Review round: §5.1 comparison condensed to a 3-column table (Strategy \| Anomalies prevented \| Why not chosen) with RCSI/snapshot added as row (f); §5.2 rewritten as a requirement-driven selection rationale — five selection criteria, selected strategy mapped to each, each rejected candidate tied to the criterion it fails (incl. `TABLOCKX` one-liner); no technical facts changed. |
