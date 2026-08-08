@@ -16,10 +16,12 @@ GO
 --      (trg_bookings_check_maintenance, trg_booking_approvals_check_space,
 --      trg_maintenance_completion_space_status) from the Phase 1 baseline,
 --   3. drops the three new tables (incl. space_type_allowed_purpose),
---   4. drops maintenance.impact_level and spaces.max_hours (column + DF/CK),
+--   4. drops maintenance.impact_level (column + DF/CK),
 --   5. restores spaces.usage_policy NVARCHAR(MAX) NULL (Phase 1 free-text
 --      column dropped by the migration — re-added empty; its values were
---      never read by any enforcement logic, see migration header D9),
+--      never read by any enforcement logic, see migration header D9).
+--      v2.6: the migration adds NO spaces.max_hours column, so there is no
+--      drop step for it here (Task 09 v2.6 removed the duration cap),
 --   6. removes the reserved system approver seed row (-1) and any instant
 --      approvals referencing it (plus the School Administration department
 --      only if it was created by the migration and is still unreferenced).
@@ -36,7 +38,7 @@ IF OBJECT_ID(N'dbo.maintenance_impact_history', N'U') IS NULL
    AND OBJECT_ID(N'dbo.booking_advisory_acknowledgement', N'U') IS NULL
    AND OBJECT_ID(N'dbo.space_type_allowed_purpose', N'U') IS NULL
    AND COL_LENGTH(N'dbo.maintenance', N'impact_level') IS NULL
-   AND COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
+   AND COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NOT NULL
 BEGIN
     PRINT 'Rollback not needed: no Phase 2 migration objects found.';
 END
@@ -115,17 +117,10 @@ IF COL_LENGTH(N'dbo.maintenance', N'impact_level') IS NOT NULL
 GO
 
 -- ============================================================
--- 4. Drop spaces.max_hours (CHECK first, then column) and restore the
---    Phase 1 spaces.usage_policy free-text column
+-- 4. Restore the Phase 1 spaces.usage_policy free-text column
+--    (the migration's only spaces column change; Task 09 v2.6 adds NO
+--    max_hours column, so there is nothing else to drop on spaces)
 -- ============================================================
-IF OBJECT_ID(N'dbo.CK_spaces_max_hours', N'C') IS NOT NULL
-    ALTER TABLE dbo.spaces DROP CONSTRAINT CK_spaces_max_hours;
-GO
-
-IF COL_LENGTH(N'dbo.spaces', N'max_hours') IS NOT NULL
-    ALTER TABLE dbo.spaces DROP COLUMN max_hours;
-GO
-
 IF COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NULL
     ALTER TABLE dbo.spaces ADD usage_policy NVARCHAR(MAX) NULL;
 GO
@@ -254,10 +249,10 @@ SELECT 'R7.2 impact_level gone' AS check_name,
 GO
 
 SELECT 'R7.3 spaces restored' AS check_name,
-       CASE WHEN COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
-             AND COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NOT NULL
+       CASE WHEN COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NOT NULL
+             AND COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
             THEN 'PASS' ELSE 'FAIL' END AS result,
-       'max_hours dropped; usage_policy column restored' AS detail;
+       'usage_policy column restored; no max_hours column present (v2.6)' AS detail;
 GO
 
 SELECT 'R7.4 Phase 1 triggers restored' AS check_name,

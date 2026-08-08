@@ -70,7 +70,7 @@ silently pick a convenient one.
 | Parameter | Meaning | Default (this project) |
 |---|---|---|
 | `{{group}}` | group identifier | `G05` |
-| `{{max_concurrency}}` | number of critical-section entry points the design covers; valid `2`, `3`, `4` | `3` |
+| `{{max_concurrency}}` | number of critical-section entry points the design covers; valid `2`, `3`, `4` | `4` |
 | `{{entry_points}}` | ordered list of write-path entry points, taken from the current Task 08/09/decision files | `instant booking submit, staff approval, maintenance escalation/downgrade, maintenance ticket creation` |
 | `{{lock_resource}}` | lock resource-key template `<domain_resource>:<id>` used in critical sections | `space_booking:<space_id>` |
 
@@ -318,28 +318,31 @@ Write `outputs/11-concurrency-design-G{{group}}.md` with these sections:
 4. **4. Current Database Baseline & Contract** — relevant tables, status sets,
    reserved/system rows (this project: `user_id = -1`), defense-in-depth (filtered
    unique indexes, triggers).
-5. **5. Evaluation of Candidate Strategies** — comparison table, selection
-   rationale, rejection justifications.
+5. **5. Evaluation of Candidate Strategies** — compact candidate comparison
+   (strategy, anomalies it prevents, why not chosen), requirement-driven
+   selection rationale, and the lock-acquisition contract (shape fragment + lock
+   return→code mapping; release-before-write-is-invalid rule).
 6. **6. Transaction and Locking Architecture** — lock resource scope +
-   acquisition order; isolation level + timeout; exact lock return→code mapping
-   (for `sp_getapplock`: `-1`/`-2`/`-3`); 1:1 error contract (P3).
-7. **7. Workflow Designs & Double-Check Specifications** — the entry points per
-   `{{max_concurrency}}`, the out-of-contract listed with residual risk, the
-   availability-read path (this project: room-finder).
+   acquisition order; isolation level + timeout; error contract (cause-family
+   codes, explicit buckets, P3); non-error dispositions recorded as such, never
+   spent as error codes.
+7. **7. Workflow Designs** — the entry points per `{{max_concurrency}}` as step
+   tables (each step states the code it returns when violated), the out-of-contract
+   listed with residual risk, the availability-read path (this project: room-finder).
 8. **8. Conflict Coverage Matrix** — every Task 08 conflict → prevention mechanism,
    100%-for-scope proof + residual risk rows for dropped conflicts.
 9. **9. Task 12 Implementation Guidance** — the `{{max_concurrency}}` entry points
    (the first two in `{{entry_points}}` always; the rest per `{{max_concurrency}}`),
    inputs/return codes, application-layer responsibilities.
 10. **10. Task 13 Test Guidance** — concurrent two-session scripts (Winner/Loser)
-    for every matrix conflict INCLUDING the homogeneous same-path pairings (each
-    entry point vs itself: staff-vs-staff, instant-vs-instant) or an explicit
-    redundancy note; deterministic assertions + codes, deadlock/timeout/retry edge
-    cases.
-11. **11. System Assumptions, Risks, and Boundaries** — requirements (SQL Server
-    2019+, RCSI), hotspot-resource performance risk, explicit out-of-scope
-    boundaries.
-12. **12. Revision Log** — date, author, summary of changes.
+     for every matrix conflict INCLUDING the homogeneous same-path pairings (each
+     entry point vs itself: staff-vs-staff, instant-vs-instant) or an explicit
+     redundancy note; single-session gate tests for business-rule gates and
+     repair paths that need no second session; deterministic assertions + codes,
+     deadlock/timeout/retry edge cases.
+11. **11. Assumptions, Risks, Boundaries** — requirements (SQL Server 2019+,
+     RCSI), hotspot-resource performance risk, explicit out-of-scope boundaries.
+12. **12. Revision Log** — version, date, summary of changes.
 
 ## Validation Checklist (before finishing)
 

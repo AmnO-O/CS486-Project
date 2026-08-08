@@ -1,0 +1,56 @@
+Task 12 CONCURRENCY IMPLEMENTATION — compile + smoke evidence
+Date/time (UTC+7): 2026-08-08
+Database: SQL Server (DESKTOP-5ANO2TS), scratch DB CS486_G05_TASK12
+Files:
+  1 outputs/05-db-definition-G05.sql            (Phase 1 baseline DDL)
+  2 outputs/06-sample-data-G05.sql              (Phase 1 sample data)
+  3 outputs/10-schema-migration-G05.sql         (Phase 2 schema; approved rev4)
+  4 outputs/12-concurrency-implementation-G05.sql (this deliverable)
+
+Command sequence (each with -b, on its own batch set):
+  CREATE DATABASE CS486_G05_TASK12
+  sqlcmd -i outputs\05-db-definition-G05.sql          -> clean
+  sqlcmd -i outputs\06-sample-data-G05.sql            -> 'VERIFY: V16 - Task 06 sample data generation completed'
+  sqlcmd -i outputs\10-schema-migration-G05.sql       -> 'MIGRATION-VALIDATION-DONE'
+  sqlcmd -i outputs\12-concurrency-implementation-G05.sql
+
+Run 1 output (in order):
+  T12-PREFLIGHT-OK
+  T12-PROCEDURES-CREATED
+  SMOKE: verify entry points exist (name + parameter count)
+    usp_booking_approve                               7 params
+    usp_booking_instant_submit                       10 params
+    usp_maintenance_report                            8 params
+    usp_maintenance_set_impact_level                  5 params
+  PASS S1: instant submit auto-approved (rc=0, instant=1).
+  PASS S2: overlap rejected (code 51003, BR1).
+  PASS S3a: ticket created (W4, rc=0).
+  PASS S3b: booking against OOS ticket rejected (code 51002, BR4).
+  PASS S4: purpose not eligible -> pending fallback (rc=0, instant=0).
+  PASS S5: staff approval succeeded (rc=0).
+  PASS S5b: rejection without reason refuses (51001, BR7).
+  PASS S6a: advisory ticket created (no-lock path).
+  PASS S6b: escalation recorded with SESSION_CONTEXT attribution (NR3).
+  PASS S6c: no-op same-level returns 0 and writes no new history row.
+  PASS S6d: downgrade back to advisory succeeded (rc=0).
+  PASS invariant: zero overlapping confirmed bookings on the smoke space.
+  SMOKE-OK: all non-concurrent Task 12 smoke checks finished.
+
+Idempotency re-run (run 2): T12-PREFLIGHT-OK, all smoke PASS again.
+
+Post-smoke cleanliness audit:
+  bookings at DATEADD(day,300,SYSUTCDATETIME())        -> 0 rows
+  maintenance with smoke description LIKE '%smoke%'    -> 0 rows
+  maintenance_impact_history                           -> 0 rows (no leftover history)
+
+Compile bugs found and fixed during this run:
+  1. EXEC parameter lists accept only literals/variables, not function calls
+     ('Incorrect syntax near minute/hour'): smoke pre-computes window values.
+  2. maintenance_impact_history column is new_level (not new_impact_level);
+     2 smoke queries corrected after the trigger definition.
+  3. Smoke S4 candidate purposes not allowed by CK_bookings_purpose ('meeting'
+     etc. also valid): candidates restricted to the CHECK domain, eligibility
+     decided by the space_type_allowed_purpose junction.
+  4. Smoke S6b/S6c procedure parameters restored @new_impact_level (bulk
+     replace had hit the call site).
+All smoke rows cleaned up; the DB is left identical to post-Task-10 state.
