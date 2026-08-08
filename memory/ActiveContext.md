@@ -4,8 +4,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 ---
 
 ## Current phase
-**Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-07 v2.5; Task 10 ✅ 2026-08-08 rev4; Task 11 🔄; Task 14 ✅ 2026-08-07**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-07 v2.5; Task 10 ✅ 2026-08-08 rev4; Task 11 ✅ 2026-08-08; Task 12 🔄; Task 14 ✅ 2026-08-07**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -41,9 +40,15 @@ for the affected tables (Option B, `docs/design-decisions.md`).
   baseline → migration → idempotent re-run → rollback passed; post-rollback counts
   equal baseline with no data loss. Evidence under logs/trajectory/task10/ and
   logs/eval/task10/.
-- Task 11 output: outputs/11-concurrency-design-G05.md 🔄 In progress.
-  Current working scope is the 4-entry-point NR6 design; U3 is synced, and the
-  remaining clean-up is handoff/review before Task 12.
+- Task 11 output: outputs/11-concurrency-design-G05.md ✅ Approved 2026-08-08.
+  v2.0, entry-point scope 4: `usp_booking_instant_submit`, `usp_booking_approve`,
+  `usp_maintenance_set_impact_level`, `usp_maintenance_report`; per-space
+  transaction-owned `sys.sp_getapplock` (`space_booking:<space_id>`, Exclusive,
+  5 s), READ COMMITTED, deterministic result codes 50001–50004 rejection family,
+  51005 lock timeout, 51006 lock cancelled, 51011 unexpected; U3 synced
+  (escalation affects approved only); K5 closed via 4th entry point; handoff to
+  Task 12 (procedures table §9).
+- Task 12 output: outputs/12-concurrency-implementation-G05.sql 🔄 In progress.
 - Task 14 output: outputs/14-data-generator-G05/ ✅ Approved 2026-08-07.
   Generated 120,000 bookings; manifest confirms 45,431 advisory acknowledgements
   and 64,607 confirmed bookings.
@@ -55,9 +60,7 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. Continue Task 11 — concurrency design (outputs/11-concurrency-design-G05.md):
-   the U3 decision is already synced, so this is now a consistency/review pass before
-   handoff to Task 12.
-2. Then Task 12 — concurrency implementation, then Task 13 — concurrency tests.
+1. Complete Task 12 — concurrency implementation (outputs/12-concurrency-implementation-G05.sql).
+2. Then Task 13 — concurrency tests.
 3. Task 14 is complete; the remaining Phase 2 order is Task 16, then Task 15
    (Task 15 still depends on Task 14 and Task 16).

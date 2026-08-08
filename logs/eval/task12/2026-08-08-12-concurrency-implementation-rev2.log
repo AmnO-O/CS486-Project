@@ -1,0 +1,51 @@
+Task 12 CONCURRENCY IMPLEMENTATION — REVISION 2 compile + smoke evidence
+Date/time (UTC+7): 2026-08-08
+Database: SQL Server (DESKTOP-5ANO2TS), scratch DB CS486_G05_TASK12 (recreated)
+
+Chain: 05-db-definition -> 06-sample-data -> 10-schema-migration -> 12-concurrency-implementation
+All batches run with sqlcmd -b (exit on error). Outcome: clean, all smoke PASS.
+
+Run 1 (fresh DB) — selected lines:
+  T12-PREFLIGHT-OK
+  T12-PROCEDURES-CREATED
+  SMOKE entry points exist: usp_booking_instant_submit(10), usp_booking_approve(7),
+                             usp_maintenance_set_impact_level(5), usp_maintenance_report(8)
+  PASS S1   instant submit auto-approved (rc=0, instant=1)
+  PASS S2   overlap rejected 51003 (BR1)
+  PASS S3a  OOS ticket created (W4, rc=0)
+  PASS S3b  booking against OOS ticket rejected 51002 (BR4)
+  PASS S4   purpose not eligible -> pending fallback (rc=0, instant=0)
+  PASS S5   staff approval succeeded (rc=0)
+  PASS S5b  rejection without reason refuses 51001 (BR7)
+  PASS S6a  advisory ticket created (no-lock path)
+  PASS S6b  escalation recorded with SESSION_CONTEXT attribution (NR3)
+  PASS S6c  no-op same-level returns 0, no new history row
+  PASS S6d  downgrade back to advisory (rc=0)
+  PASS invariant: zero overlapping confirmed bookings on the smoke space
+  SMOKE-OK
+
+Run 2 (idempotency re-run): T12-PREFLIGHT-OK + all smoke PASS again.
+Post-run audit: future bookings 0; smoke maintenance 0; impact history 0; procedures = 4.
+
+REVISION 2 CHANGES (vs run 1, reviewer round):
+  1. Removed out-of-contract code 51011 "unexpected error" — Task 11 §6.3 defines
+     exactly 0/51001..51009 and is exhaustive; §7.1 step 10 expects trigger/constraint
+     failures on corrupted data to surface as raw errors. CATCH now: 1205 -> 51007
+     (in-contract); any other error -> ROLLBACK + re-THROW (skill N2-safe shape).
+  2. W1 post-lock requester re-check: NULL guard added (row vanished -> 51001 instead
+     of NULL comparison silently passing).
+  3. W2 approval path: explicit space-existence guard before BR2/BR3 re-checks so a
+     vanished space cannot slip through a NULL capacity comparison.
+  4. W3 comment: SESSION_CONTEXT set/clear responsibility pinned to the application
+     layer (§6.4/§9; signature carries no user param), trigger fallback -1 documented.
+  5. Header: result-code list updated (no 51011), Task 11 §11 recommended
+     DENY/GRANT hardening noted as NOT scripted (no application-role principal
+     exists in the project — operations note only).
+  No procedural behavior outside the above changed; contract items re-audited:
+  four entry points exact signatures (§9); soft gates (junction membership,
+  max_hours) -> pending fallback, hard gates -> codes; lock resource
+  space_booking:<id>, Exclusive, Transaction-owned, 5 s timeout; -1/-2/-3 ->
+  51005/51006/51007; -999 -> THROW 52999; one applock per unit; READ COMMITTED
+  unchanged; BR1 confirmed set == uq_bookings_active_overlap filter; N6 explicit
+  status/impact_level on INSERT; preflight THROWs >= 52010 (no collision);
+  smoke standalone (N3) + self-cleaning.
