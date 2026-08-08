@@ -1,0 +1,138 @@
+\section{Concurrency Design \& Implementation}
+\label{sec:concurrency}
+
+Phase 2 introduces a high-concurrency operating condition: at the start of a
+semester, many users may request popular spaces for overlapping periods within
+a short interval. Eligible requests are confirmed immediately through instant
+booking, whereas other requests follow the staff-approval workflow. Since both
+pathways can confirm the same space--time interval concurrently, the database
+must enforce NR~6: \emph{two approved bookings must never use the same space
+during overlapping periods, regardless of how they were created}.
+
+Task~08 identified five concurrency conflicts (K1--K5) that can violate this
+invariant or expose stale availability. The solution was specified in
+\texttt{11-concurrency-design}, implemented in
+\texttt{12-concurrency-implementation.sql}, and verified through deterministic
+two-session tests in \texttt{13-concurrency-tests}. It serializes the four
+write paths that can change the confirmed state of a space--time interval:
+instant submission, staff approval, maintenance escalation or downgrade, and
+maintenance-ticket creation. Each path uses the same logical resource for a
+space and rechecks the relevant invariants immediately before writing.
+
+\subsection{Identified Concurrency Conflicts}
+
+The primary conflict is the K1 \emph{read--check--write race}. Two concurrent
+requests for the same space and period can both observe the interval as
+available and then confirm their bookings before either transaction sees the
+other's result. Table~\ref{tab:race-sequence} illustrates this race for two
+instant-booking sessions targeting space $S_1$ from 10:00 to 12:00.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabularx}{\textwidth}{c
+        >{\RaggedRight\arraybackslash}X
+        >{\RaggedRight\arraybackslash}X}
+        \toprule
+        \textbf{Step} & \textbf{Session A: instant submission} &
+        \textbf{Session B: instant submission} \\
+        \midrule
+        1 & Check $S_1$: no confirmed overlap or blocking maintenance. & \\
+        2 & & Check $S_1$: no confirmed overlap or blocking maintenance. \\
+        3 & Insert a pending booking and its automatic approval
+        (\texttt{approver\_id = -1}). & \\
+        4 & & Insert a pending booking and its automatic approval; BR1 and BR4
+        checks see no committed competitor. \\
+        5 & Commit. & \\
+        6 & & Commit. \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Concurrent instant-booking race for the same space and period}
+    \label{tab:race-sequence}
+\end{table}
+\FloatBarrier
+
+At step~4, session A's write remains uncommitted and is therefore not visible
+to session B under the default \texttt{READ COMMITTED} isolation level. Both
+transactions pass the availability rule (BR1) and maintenance rule (BR4), then
+commit overlapping approved bookings on $S_1$, violating BR1 and NR6.
+
+The interval between the availability check and the confirmation write is the
+\emph{race window}. Because no lock spans this interval, neither existing
+backstop fully closes it. The trigger
+\texttt{trg\_bookings\_prevent\_overlap} cannot validate against a competing
+row that is not yet visible, while the filtered unique index
+\texttt{uq\_bookings\_active\_overlap} prevents only identical start times.
+It does not reject intersecting intervals with different start times, such as
+10:00--12:00 and 11:00--13:00.
+
+The same check--write race occurs across other booking and maintenance paths.
+K2 covers instant submission racing with staff approval. K3 occurs when a
+maintenance record is escalated to \texttt{out-of-service} during an in-flight
+confirmation, while K5 covers insertion of a new maintenance ticket whose
+default impact is \texttt{out-of-service}. K4 is a read-side conflict in which
+room-finder availability becomes stale before the user acts.
+Table~\ref{tab:conflicts} summarizes the complete conflict inventory.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabularx}{\textwidth}{c
+        >{\RaggedRight\arraybackslash}p{0.37\textwidth}
+        >{\RaggedRight\arraybackslash}p{0.16\textwidth}
+        >{\RaggedRight\arraybackslash}X}
+        \toprule
+        \textbf{ID} & \textbf{Concurrent scenario} &
+        \textbf{Affected rules} & \textbf{Path} \\
+        \midrule
+        K1 & Two requests read the same interval as free and both confirm. &
+        BR1, NR6 & Booking insertion \\
+        K2 & Instant submission races with staff approval. &
+        BR1, NR6 & Cross-pathway confirmation \\
+        K3 & Maintenance is escalated while a booking confirmation is in flight. &
+        BR4, NR4 & Maintenance update \\
+        K4 & Room-finder availability becomes stale before confirmation. &
+        BR1, NR4, NR6 & Read-only availability \\
+        K5 & An out-of-service ticket is inserted during confirmation. &
+        BR4, NR6 & Maintenance insertion \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Concurrency conflicts identified in the Task 08 analysis}
+    \label{tab:conflicts}
+\end{table}
+\FloatBarrier
+
+K1, K2, K3, and K5 share the same root cause: concurrent transactions perform
+a check and a conflicting write on the same space--time interval without a
+common serialization point. K4 cannot by itself corrupt the database, but its
+stale result must not be trusted during confirmation. The implemented control
+therefore serializes the check--recheck--write sequence per space and validates
+availability again inside the protected transaction. Consequently, two
+conflicting confirmations cannot both commit.
+
+\subsection{Cause and Chosen Control}
+Explain why the conflict is possible under the relevant isolation level. Then
+describe the implemented control, such as row or range locks, transaction
+isolation, a database constraint, or optimistic concurrency. Justify why the
+control is correct and discuss its performance trade-offs.
+
+\subsection{Concurrent Test Results}
+Document the test setup, session ordering, expected outcome, and actual result.
+Include concise logs or screenshots demonstrating both the unsafe behavior
+before the fix and the prevented conflict after the fix.
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabularx}{\textwidth}{p{0.19\textwidth}X X X}
+        \toprule
+        \textbf{Test} & \textbf{Concurrent actions} & \textbf{Before fix} & \textbf{After fix} \\
+        \midrule
+        % TODO: Populate from 13-concurrency-tests.
+        To be completed & To be completed & To be completed & To be completed \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Concurrency test results}
+    \label{tab:concurrency-tests}
+\end{table}

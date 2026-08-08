@@ -1,0 +1,150 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage{amssymb}
+\usepackage[utf8]{vietnam}
+\usepackage{geometry}
+\usepackage{tcolorbox}
+\usepackage{graphicx}
+\usepackage{lipsum}
+\usepackage{pifont}
+\usepackage{ragged2e}
+\usepackage{setspace}
+\usepackage{tocloft}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\usepackage{fancyhdr}
+\setlength{\headheight}{14.5pt}
+\usepackage{caption}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{placeins}
+\usepackage[colorlinks=true, urlcolor=blue, hidelinks]{hyperref}
+\usepackage{bigfoot}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+\usepackage{booktabs,tabularx,array,tikz,graphicx}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+
+
+\pagestyle{fancy} % Kích hoạt fancy header/footer
+\fancyhf{} % Xóa header/footer mặc định
+\fancyhead[R]{\ifnum\value{page}>3 \vspace*{0.4cm} \textit{Database Project}\hspace{-2.3cm} \fi}
+\fancyhead[L]{\ifnum\value{page}>3 \raisebox{-1ex}{\makebox[\textwidth]{\hrulefill}} \fi}
+
+\renewcommand{\headrulewidth}{0pt}
+
+\geometry{left=3cm,right=1cm,top=2cm,bottom=2cm}
+\sloppy
+\newtcbox{\inlinecode}{on line,
+	boxsep=1pt, left=1pt, right=1pt, top=1pt, bottom=1pt,
+	colframe=gray!80, colback=gray!20,  
+	boxrule=0.5pt, arc=3pt,
+	nobeforeafter}
+\lstset{
+	language=C++,                      
+	basicstyle=\ttfamily\footnotesize,
+	keywordstyle=\color{blue},
+	commentstyle=\color{gray}, 
+	stringstyle=\color{red},          
+	numbers=left,  
+	numberstyle=\tiny\color{black},
+	backgroundcolor=\color{black!5},
+	frame=single,
+	tabsize=4,
+	breaklines=true,
+	captionpos=b 
+	columns=fixed, 
+	basewidth=0.5em,
+}
+
+
+
+
+\begin{document}
+	
+	\begin{tcolorbox}[colframe=black, width=\textwidth, height=\textheight, sharp corners, boxrule=1.5pt, 
+		colback=white, colframe=black, enlarge left by=-1cm, enlarge right by=-1cm, 
+		enlarge top by=-1cm, enlarge bottom by=-1cm]
+		
+		\begin{center}
+			\vspace{0.25cm}
+			\textbf{\Large VNUHCM - UNIVERSITY OF SCIENCE}\\
+			\vspace{0.25cm}
+			\textbf{\Large FACULTY OF INFORMATION TECHNOLOGY}\\
+			\vspace{0.5cm}
+			\noindent\rule{0.3\textwidth}{0.5pt} \ding{72} \ding{73} \ding{72} \rule{0.3\textwidth}{0.5pt}
+			
+			\vspace{0.5cm}
+
+			\includegraphics[width=6cm]{logo.png}
+			
+			\vspace{0.5cm}
+			\textbf{\Large CS486 COURSE REPORT -- PHASE 2}\\
+			\vspace{0.75cm}
+
+			\vspace{0.25cm}
+			
+			\setlength{\fboxrule}{1.5pt}
+			\fbox{
+				\parbox{0.9\linewidth}{
+					\centering
+					\vspace{0.3cm}
+					\textbf{\LARGE Campus Space Management System} \\[7pt]
+				}
+			}
+			
+			\vspace{2cm}
+			
+			\begin{center}
+				\begin{tabular}{l l} % Cả hai cột đều căn trái
+					\textbf{Members of group 05:} & \textbf{   MSSV:} \\
+					\textbf{Phạm Hữu Nam}  &   \textbf{24125015} \\
+					\textbf{Cao Quảng Hưng} &    \textbf{24125010} \\
+					\textbf{Nguyễn Hữu Phước} &    \textbf{24125018} \\
+					\textbf{Trần Đình Quốc Thắng} &    \textbf{24125079} \\
+				\end{tabular}
+			\end{center}
+			\vfill
+			\vspace{4cm}
+			\textbf{TP. Hồ Chí Minh, 08/2026}
+		\end{center}
+		
+	\end{tcolorbox}
+	\newpage
+    
+    \renewcommand{\baselinestretch}{1}\normalsize
+    \tableofcontents
+    \renewcommand{\baselinestretch}{1}\normalsize
+
+	\newpage
+
+
+
+    
+
+\input{llm_usage}
+
+\input{requirement_changes}
+
+\input{updated_design}
+
+\input{schema_migration}
+
+\input{concurrency}
+
+\input{sample_data}
+
+\input{analytical_queries}
+
+\input{index_tuning}
+
+\input{normalization}
+
+\input{conclusion}
+
+\label{EndOfText}
+
+
+\end{document}

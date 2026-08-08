@@ -4,7 +4,7 @@
 **Course:** CS486 — Introduction to Database System
 **Phase:** 2 · **Task:** 11
 **Date:** 2026-08-08
-**Doc version:** 3.3
+**Doc version:** 3.4
 
 ---
 
@@ -69,12 +69,12 @@ confirmation steps — a read result is only ever a hint.
 
 | # | Question | Decision + rationale | Effect on Tasks 12 / 13 / reporting |
 |---|---|---|---|
-| DD1 | Does escalation to `out-of-service` affect **pending** requests too? | **No — only already-approved bookings.** Escalation performs **no booking DML**; pending bookings stay `pending` and are rejected with `51002` only at approval time (NR4 wording; BR2 checks availability at approval per Task 09; no extra schema needed). | W3 writes no booking row. T4: pending stays `pending`, later approval fails `51002`. Report #4 covers approved bookings only. |
-| DD2 | Which write paths must be inside the critical section? | **Four** — instant submit, staff approval, escalation/downgrade, ticket creation. Ticket creation is the legitimate birth of a blocking record; omitting it leaves K5, a BR4/NR6 hole closed by one procedure reusing the same lock (§6.1). | Task 12 implements all four. T9 covers K5 (ticket vs booking). Report #4 unaffected (derived). |
-| DD3 | How are read-only room-finder / availability reads treated? | **Advisory hints only.** Reads never serialize or confirm; the locked confirmation paths re-check, which is what guarantees NR6. | Confirmations re-read all predicates post-lock. No assertion of read "freshness". |
-| DD4 | How is `changed_by` captured on maintenance level changes? | **`sys.sp_set_session_context(N'current_user_id', <id>)`** set at unit start, cleared at end; fallback = reserved approver `-1` (Task 10 handoff). | Entry points set/clear the context. T13 asserts history-row attribution with and without context. |
-| DD5 | How do **soft-gate failures** (instant check 1 — purpose membership) behave? | **Pending fallback, not an error** (Task 09 v2.6 A09-6): the booking is created `pending` (hard gates still enforced), no auto-approval row is inserted, and the procedure returns `0` with `@instant_accepted = 0`; W2 later decides. Hard-gate failures keep the §6.3 codes. **v2.6 note:** the v2.5 duration-cap soft gate was removed upstream (Task 09 v2.6, Task 10 rev 5) — purpose membership is the **only** soft gate the design implements. | W1 (`@instant_accepted` OUT) and W2 (approval of such `pending` rows) both implemented in Task 12. T11/T12 assert the fallback and its overlap interactions; no new error code introduced. |
-| DD6 | At **staff approval** the NR2-completeness gate (`trg_booking_approvals_check_space`, §4.2) can fail `51004` on a booking whose ack rows are missing (e.g. a booking created before its overlap-aware path, or a new advisory appearing after submission) — what repairs the set? | **W2 is the repair source.** Before the approval `INSERT`, W2 re-reads the active advisories overlapping the interval under the lock and inserts any missing ack rows (`acknowledged_by` = the booking's requester, `acknowledged_at` = now). The completeness trigger then passes; the repair never invents rows for advisories that do NOT overlap. | Task 12 implements the repair inside W2 (step 5). T13 asserts an approval that would otherwise hit `51004` succeeds and the ack rows exist. No schema change. |
+| DD1 | Does escalation to `out-of-service` affect **pending** requests too? | **No — approved bookings only.** Escalation does **no booking DML**; pending bookings stay `pending` and are rejected with `51002` only at approval time (BR2/NR4). | W3 writes no booking row. T4: later approval fails `51002`. Report #4 covers approved only. |
+| DD2 | Which write paths must be inside the critical section? | **All four** — instant submit, staff approval, escalation/downgrade, ticket creation. Omitting the last leaves K5 (BR4/NR6 hole); one shared lock (§6.1) closes it. | Task 12 implements all four. T9 covers K5. Report #4 unchanged (escalation-scoped; §7.4). |
+| DD3 | How are read-only room-finder / availability reads treated? | **Advisory hints only** — reads never serialize or confirm; the locked confirmation paths re-check (NR6). | Confirmations re-read predicates post-lock. No read "freshness" asserted. |
+| DD4 | How is `changed_by` captured on maintenance level changes? | **`sys.sp_set_session_context(N'current_user_id', <id>)`** set at unit start, cleared at end; fallback = reserved approver `-1` (Task 10 handoff). | T13 asserts history attribution with and without context. |
+| DD5 | How do **soft-gate failures** (instant check 1 — purpose membership) behave? | **Pending fallback, not an error** (A09-6): booking is created `pending` (hard gates still enforced), no auto-approval row, returns `0` with `@instant_accepted = 0`; W2 decides later. Hard-gate failures keep the §6.3 codes. Purpose membership is the **only** soft gate (v2.5 duration cap removed upstream). | Task 12 implements W1 (`@instant_accepted` OUT) and W2 (approval of such `pending` rows). T11/T12 assert; no new error code introduced. |
+| DD6 | At **staff approval** the NR2-completeness gate (`trg_booking_approvals_check_space`, §4.2) fails `51004` when ack rows are missing — what repairs the set? | **W2 is the repair source.** Under the lock, W2 re-reads the active advisories overlapping the interval and inserts any missing ack rows (`acknowledged_by` = requester, `acknowledged_at` = now); never invents rows for non-overlapping advisories. | Task 12 W2 step 5. T13 asserts the approval succeeds and ack rows exist. No schema change. |
 
 ---
 
@@ -87,47 +87,43 @@ Schema facts below come from the frozen Phase 1 DDL
 
 ### 4.1 The "confirmed" booking status set (BR1 / NR6)
 
-| Status set | Enforced as | Notes |
-|---|---|---|
-| `'approved'`, `'checked_in'`, `'completed'` | the confirmed-state predicate for all overlap checks | `is_deleted = 0` is also required everywhere; `pending` / `rejected` / `cancelled` / `no_show` are not confirmed |
+- **`'approved'`, `'checked_in'`, `'completed'`** (with `is_deleted = 0`) form the
+  confirmed predicate for every overlap check; `pending` / `rejected` / `cancelled` /
+  `no_show` are **not** confirmed.
 
 ### 4.2 Maintenance impact levels (advisory vs out-of-service)
 
-- `maintenance.impact_level VARCHAR(50) NOT NULL DEFAULT 'out-of-service'`,
-  `CHECK (impact_level IN ('advisory','out-of-service'))` (Task 10). The default
-  preserves Phase 1 blocking semantics for legacy rows and also means any
-  ticket-creation statement that omits the column produces a blocking ticket —
-  hence the ticket-entry procedure always passes the level explicitly (§7.4).
-- **out-of-service** blocks any overlapping booking; **advisory** permits the booking
-  provided the requester acknowledges it (one row per overlapping advisory).
-- `trg_bookings_check_maintenance` (replaced) blocks overlapping active
-  **out-of-service** maintenance on booking DML (BR4 Phase 2).
-- `trg_booking_approvals_check_space` (replaced) at approval time: manual overrides,
-  out-of-service overlap, and **advisory acknowledgement completeness** covering both
-  pathways.
-- `trg_booking_advisory_ack_validate` (new): each ack row must reference an active
+- `impact_level VARCHAR(50) NOT NULL DEFAULT 'out-of-service'`, `CHECK (impact_level IN
+  ('advisory','out-of-service'))` (Task 10). The default preserves Phase 1 blocking
+  semantics for legacy/ad-hoc rows, so the ticket procedure always passes the level
+  explicitly (§7.4).
+- **out-of-service** blocks any overlapping booking; **advisory** permits it provided the
+  requester acknowledges it (one ack row per overlapping advisory).
+- Triggers: `trg_bookings_check_maintenance` — blocks overlapping active out-of-service
+  maintenance on booking DML (BR4); `trg_booking_approvals_check_space` — approval-time
+  manual overrides, out-of-service overlap, and advisory acknowledgement completeness;
+  `trg_booking_advisory_ack_validate` (new) — each ack row must reference an active
   advisory overlapping the booking period.
 
 ### 4.3 Acknowledgement table & instant-origin model
 
-- `booking_advisory_acknowledgement (ack_id, booking_id, maintenance_id, ...)` with a
-  composite unique key `(booking_id, maintenance_id)` — one row per (booking, advisory).
-- Instant auto-approval is recorded by inserting
-  `booking_approvals(approver_id = -1, decision = 'approved', decision_time, ...)`; the
-  origin is **derived** from `approver_id = -1` (the reserved system approver row,
-  `role='facility_manager'`). No origin column exists and none is introduced (3NF, Task 09).
+- `booking_advisory_acknowledgement (ack_id, booking_id, maintenance_id, ...)` with the
+  composite unique `(booking_id, maintenance_id)` — one row per (booking, advisory).
+- Instant auto-approval = a `booking_approvals` row with `approver_id = -1` (the
+  reserved system approver, `role='facility_manager'`); origin is **derived**, never
+  stored (3NF, Task 09).
 
 ### 4.4 Existing defense-in-depth objects (kept; not sufficient alone)
 
 | Object | Purpose | Limitation under concurrency |
 |---|---|---|
-| `uq_bookings_active_overlap` (filtered unique index: `space_id, requested_start_time` where status confirmed) | cheap same-start collision guard | only same-start; not interval overlap; no serialization |
-| `trg_bookings_prevent_overlap` (interval overlap trigger, BR1) | rejects the 10–12 vs 11–13 overlap shape | fires only **inside** the writer's own transaction — two concurrent writers can each pass the check before either commits (classic check-then-act) |
+| `uq_bookings_active_overlap` (filtered unique index: `space_id, requested_start_time`, confirmed statuses) | cheap same-start collision guard | same-start only; no interval overlap, no serialization |
+| `trg_bookings_prevent_overlap` (interval overlap trigger, BR1) | rejects the 10–12 vs 11–13 shape | fires inside the writer's own transaction — two concurrent writers can each pass before either commits (classic check-then-act) |
 | `trg_bookings_check_maintenance`, `trg_booking_approvals_check_space` | BR4 / BR2 / NR2 gates | same window — a competing writer or ticket can commit between the read and the write |
 
-> Conclusion: these objects are necessary but insufficient. This design adds
-> **serialization around the read→re-check→write window**; the triggers and filtered
-> index stay as backstop defense-in-depth.
+> Conclusion: necessary but insufficient. The design adds **serialization around the
+> read→re-check→write window**; these triggers and the filtered index remain as backstop
+> defense-in-depth.
 
 ### 4.5 Indexes the design relies on (existing; not tuned here)
 
@@ -387,11 +383,17 @@ the default silently.
 | 5 | COMMIT (locked path); return `0` + `@maintenance_id` | — |
 
 **Interaction with confirmed bookings:** a new `out-of-service` ticket does **not**
-reject or cancel existing confirmed bookings — those are identified later via report
-#4 (NR4 semantics). The lock is for serialization only: a confirmation arriving after
-the ticket commits fails the BR4 gate with `51002`; a confirmation that lands first
-shows up in the affected set. The booking side therefore holds the only rejection; the
-ticket side never rejects.
+reject or cancel existing confirmed bookings. **Report #4 scope:** report #4 (doc 09
+§C.1/§A.2.3; implemented by Task 16 query Q5 — "confirmed bookings affected by
+escalation") is **escalation-scoped and ack-joined** — it surfaces only
+bookings that acknowledged an active advisory at booking time (the T3a/T3b case). A
+booking confirmed **before any advisory existed** on the space — the K5 submit-wins
+case — has no acknowledgement row and no escalation event, so it lies **outside report
+#4's scope** and needs a separate discovery path (a direct time-overlap check, out of
+Task 11 scope — see the T9 note in §10). The lock is for serialization only: a
+confirmation arriving after the ticket commits fails the BR4 gate with `51002`; a
+confirmation that lands first stays valid. The booking side therefore holds the only
+rejection; the ticket side never rejects.
 
 > **Boundary (non-contractual DML):** writing `INSERT INTO dbo.maintenance` directly
 > (client code that bypasses `usp_maintenance_report`) takes no lock and reopens the
@@ -434,8 +436,10 @@ per-space lock:
      OUT, @result_code OUT, @message OUT`.
    - Soft gate (Task 09 v2.6 check 1): `(space_type, purpose)` membership in
      `space_type_allowed_purpose` (space resolved via JOIN) → `@instant_accepted = 0`
-     fallback to `pending`, result `0`; hard gates (checks 2–5: account `active`,
-     capacity/BR3, BR1 overlap, BR4 out-of-service) return the §6.3 codes.
+fallback to `pending`, result `0`; hard gates — doc 09 checks 2–5 (account
+      `active`, capacity/BR3, BR1 overlap, BR4 out-of-service) **plus the baseline BR2
+      availability gate** (`retired`/`temporarily_closed`, `51008`) — return the §6.3
+      codes.
 2. `usp_booking_approve`
    - Params: `@booking_id, @approver_id, @decision, @rejection_reason, @decision_note`
      → `@result_code OUT, @message OUT`.
@@ -474,11 +478,19 @@ the overlap-invariant audit query.
 | T6 | Forced deadlock `1205` | other session succeeds | victim `51007` |
 | T7 | Retry after lock frees | second attempt `0` | — |
 | T8 | Invariant audit: overlapping confirmed bookings = 0 | 0 rows | — |
-| T9 | `out-of-service` ticket creation vs instant submit (K5): ticket first then submit, and submit first then ticket | submit `51002` (ticket won) or `0` + booking in report #4 set (submit won) | — |
+| T9 | `out-of-service` ticket creation vs instant submit (K5): ticket first then submit, and submit first then ticket | submit `51002` (ticket won) or `0` + booking confirmed (submit wins; **not discoverable via report #4** — scope note below) | — |
 | T10 | Two concurrent staff approvals of different pending bookings on the same space/overlap (staff-vs-staff; K1 shape through the W2 code path) | first approve `0` | other approve `51003` |
 | T11 | Instant submit whose purpose is **not allowed** by `space_type_allowed_purpose` (soft gate check 1 fails — the only soft gate in v2.6; there is no duration gate, so no second sub-case exists) | result `0`, `@instant_accepted = 0`, booking stays `pending`, **no** auto-approval row | — |
 | T12 | Soft-gate fallback vs instant confirmation on the same space/overlap: the pending-fallback booking is created alongside an instant-confirmed one (pending is not confirmed, §4.1); later staff approval of the pending one is rejected | both succeed — fallback `0` (`@instant_accepted = 0`, stays `pending`) and instant `0` (approved) | later approval of the pending → `51003` |
 | T13 | Staff approval of a `pending` booking overlapped by an active **advisory** whose ack rows were never inserted (DD6): W2 repairs the ack set inside the critical section | approve `0`; ack rows exist for every overlapping advisory; complete-set rows present | — |
+
+> **Report #4 scope note (T9):** report #4 (doc 09 §C.1/§A.2.3; implemented by Task 16
+> query Q5 — "confirmed bookings affected by escalation") is escalation-scoped and
+> ack-joined — it surfaces bookings that acknowledged an active
+> advisory at booking time (T3a/T3b). The K5 submit-wins branch of T9 (booking confirmed
+> before any advisory existed) has **no acknowledgement row and no escalation event**, so
+> it is **outside report #4's scope**; discovering it requires a separate direct
+> time-overlap check (§7.4), which Task 12/13 do not implement.
 
 **Conflict → scenario trace (G6):** K1 → T1 (same-path instant) and T10 (same-path
 staff); K2 → T2; K3 → T3a/T3b (and T4, escalation vs pending); K5 → T9; K4 →
@@ -495,40 +507,13 @@ only observable conflict is with a confirmation (T3a/T3b/T9), which is covered.
 
 ## 11. Assumptions, Risks, Boundaries
 
-- **Assumptions:** SQL Server 2019+; READ COMMITTED; no schema change beyond Task 10
-  (no version columns, no RCSI requirement); confirmed-status set §4.1; instant
-  eligibility is **data-driven** — `space_type_allowed_purpose` is seeded by the Task
-  10 migration for the four approved types (Task 09 v2.6 A09-7), there is **no
-  duration cap anywhere** (the v2.5 `max_hours` column does not exist in Task 10 rev 5;
-  A09-8), so an empty junction simply means no instant
-  acceptances (all submissions fall back to `pending`, never a code).
+- **Assumptions:** SQL Server 2019+; READ COMMITTED; no schema change beyond Task 10 (no version columns, no RCSI); confirmed-status set §4.1; instant eligibility **data-driven** — `space_type_allowed_purpose` is seeded by the Task 10 migration for the four approved types, **no duration cap anywhere** (the v2.5 `max_hours` column does not exist in rev 5), so an empty junction means no instant acceptances (all fall back to `pending`, never a code).
 - **Risks:**
-  - **Hotspot-space contention:** per-space serialization queues a popular space's
-    writers; mitigated by small critical sections (no UI waits inside), 5 s timeout,
-    and `51005/51006` retry. This coarse granularity is a deliberate correctness/
-    simplicity-vs-throughput trade-off (see §6.1) and is acceptable at the volumes
-    the system is designed for: Task 14 requires ≥100k bookings over three academic
-    years (≈33k–170k/year), so even a busy room sees only tens of writes per day and
-    each critical section is sub-millisecond — a 5 s timeout is multiple orders of
-    magnitude above the expected wait. If monitoring ever shows real contention on a
-    specific space, a finer `space_booking:<space_id>:<date>` key is the documented
-    tuning lever (adoption delayed because it reintroduces day-set acquisition
-    ordering).
-  - **SESSION_CONTEXT leakage:** pooled connections can carry a stale
-    `current_user_id`; the app sets/clears per unit; audit falls back to `-1`.
-  - **Non-contractual raw DML** (any INSERT/UPDATE that bypasses the four procedures)
-    reopens K5/K3; enforced by application convention and Task 13 tests, not by the
-    database alone. A database-level closure exists and is the recommended Task 12
-    hardening: `DENY INSERT/UPDATE/DELETE` on the write tables
-    (`bookings`, `booking_approvals`, `booking_advisory_acknowledgement`,
-    `maintenance`) to the application role + `GRANT EXECUTE` only on the four entry
-    procedures — ownership chaining covers the DML the procedures perform internally.
-    Caveat: bulk data generation (Task 14) and test seeding must run as an elevated
-    principal (`dbo`), not as the application role.
-  - **Deadlock (`-3`):** detected and returned `51007`; restart, no silent retry.
-- **Boundaries:** no schema change (this design adds no tables/columns/indexes/
-  triggers; only procedures); index tuning is Task 15; analytical queries are Task 16;
-  Task 12/13 implement the scripts this document only specifies.
+  - **Hotspot contention:** per-space serialization queues a busy room's writers; mitigated by small critical sections, 5 s timeout, and `51005/51006` retry. Coarse granularity is a deliberate correctness/simplicity-vs-throughput trade-off (§6.1), acceptable at the designed volumes (Task 14: ≥100k bookings over three academic years → tens of writes/day per room, sub-millisecond critical sections vs a 5 s timeout). If monitoring shows real contention, a finer `space_booking:<space_id>:<date>` key is the documented tuning lever (§6.1; delayed because it reintroduces day-key acquisition ordering).
+  - **SESSION_CONTEXT leakage:** pooled connections can carry a stale `current_user_id`; the app sets/clears per unit; audit falls back to `-1`.
+  - **Raw DML** bypassing the four write procedures reopens K5/K3 — closed by application convention + Task 13 tests; a database-level closure is the recommended Task 12 hardening (`DENY` table writes + `GRANT EXECUTE` only, ownership chaining; Task 14/test seeding run as an elevated principal).
+  - **Deadlock (`-3`):** returned `51007`; restart, no silent retry.
+- **Boundaries:** this design adds no tables/columns/indexes/triggers — only procedures; index tuning is Task 15; analytical queries are Task 16; Task 12/13 implement the scripts this document specifies.
 
 ---
 
@@ -543,3 +528,4 @@ only observable conflict is with a confirmation (T3a/T3b/T9), which is covered.
 | 3.1 | 2026-08-08 | Task 09 v2.5 alignment: data-driven usage policy — soft gates 1+4 (junction membership, `max_hours` cap) with `@instant_accepted = 0` pending fallback; DD5; T11/T12. |
 | 3.2 | 2026-08-08 | Review fix: W2 ack-set repair closes the NR2 approval deadlock (DD6); T13; W1 step-7 wording. No strategy change. |
 | 3.3 | 2026-08-08 | Task 09 v2.6 / Task 10 rev 5 alignment: duration cap removed — soft gate = check 1 (purpose) only; hard gates checks 2–5; §6.3 heading → cause-family; G6 conflict→scenario trace added. No strategy/code/scope change. |
+| 3.4 | 2026-08-08 | Review: Report #4 scope limitation — the escalation-ack-joined report cannot surface K5 submit-wins bookings (no ack row, no escalation event); T9 corrected (§7.4/§10); Q5 citation clarified; §9 hard-gate list now names the baseline BR2 gate. No strategy change. |

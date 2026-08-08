@@ -1,0 +1,31 @@
+\section{Sample Data Generation}
+\label{sec:sample-data}
+
+This section describes \texttt{14-data-generator} and the generated Phase 2
+dataset.
+
+\subsection{Scale and Time Coverage}
+Report the number of rows generated for each important table. Confirm that the
+dataset contains at least 100,000 bookings and spans three academic years.
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabularx}{\textwidth}{X r X}
+        \toprule
+        \textbf{Table or data category} & \textbf{Rows} & \textbf{Coverage notes} \\
+        \midrule
+        % TODO: Insert measured row counts from the generated database.
+        Bookings & 0 & Replace with the generated count and date range \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Generated Phase 2 data volume}
+    \label{tab:generated-data-volume}
+\end{table}
+
+\subsection{Generation Strategy}
+Explain distributions, reproducibility controls such as random seeds, referential
+integrity handling, and how realistic booking patterns were produced.
+
+\subsection{Exceptional Cases}
+Describe how cancellations, no-shows, advisory acknowledgements, maintenance
+overlaps, and other edge cases were deliberately seeded and validated.
