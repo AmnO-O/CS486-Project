@@ -9,6 +9,10 @@ validate `outputs/16-analytical-queries-G{{group}}.sql`.
 
 This command is the invocation interface. The Task 16 skill contains the source
 priority, query contracts, U4 gate, append safety rules, and validation checklist.
+The approved output is a reusable stored-procedure script: each canonical query
+block is emitted as `CREATE OR ALTER PROCEDURE`, and sample `EXEC` calls may
+follow the canonical blocks. Q2 accepts a JSON array of required facilities that
+the procedure normalizes internally.
 
 ## Usage
 
@@ -79,9 +83,11 @@ Required behavior:
 6. In `append`, preserve existing blocks byte-for-byte semantically, reject duplicate
    Q IDs/titles, append complete `GO`-terminated blocks, and validate the whole file.
 7. Use the exact Q1-Q5 contracts from the skill.
-8. Do not edit upstream outputs, registries, Task 14 artifacts, Task 15 artifacts,
+8. Keep the stored-procedure layout and sample `EXEC` calls aligned with the canonical
+   query IDs.
+9. Do not edit upstream outputs, registries, Task 14 artifacts, Task 15 artifacts,
    or memory files. Do not create trajectory/eval logs for a tooling-only edit.
-9. On an actual generation run, create the Task 16 eval log and trajectory before
+10. On an actual generation run, create the Task 16 eval log and trajectory before
    reporting completion.
 
 ## Required output
@@ -115,7 +121,8 @@ ownership is recorded in each block's `-- owner:` metadata only.
 - Do not treat Task 14's academic-year labels as the semester definition.
 - Do not generate Q3/Q4 while U4 is pending.
 - Do not add `approval_source` or any other schema column.
-- Do not write indexes, stored procedures, concurrency code, or Task 15 results.
+- Do not write indexes, concurrency code, or Task 15 results. The only stored
+  procedures permitted are the approved per-query wrappers for Q1-Q5.
 - Do not update `memory/Progress.md` or `memory/ActiveContext.md` before the user
   approves Task 16.
 

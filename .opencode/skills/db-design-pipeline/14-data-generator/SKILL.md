@@ -100,6 +100,11 @@ project's own triggers reject. Verify each against the current migration before 
   approval. Origin is derived from `approver_id = -1`; there is no origin column,
   because a stored one was rejected for 3NF reasons. Reports must exclude `-1` from
   real-user aggregations.
+- Task 09 v2.6 / Task 10 v5 baseline: `spaces.usage_policy` and `spaces.max_hours` are
+  absent, while `space_type_allowed_purpose` is a migration-owned reference table seeded
+  by Task 10. Task 14 must not generate or populate that table.
+- Instant approvals are legal only when `(space_type, purpose)` exists in
+  `space_type_allowed_purpose`; the generator and `verify.sql` must both check this.
 - **`maintenance.impact_level` is `NOT NULL DEFAULT 'out-of-service'`.** Any INSERT
   omitting it silently creates a blocking ticket. Always pass it explicitly.
 - **Advisory acknowledgement is a gate, not decoration.**
@@ -211,6 +216,9 @@ Lifecycle model:
   expected zero rows.
 - **V5/G3-G6:** grouped booking statuses, maintenance impact/status, derived approval
   origins, history count, and acknowledgement count.
+- **V5f/NR5:** instant approvals map only to seeded `(space_type, purpose)` pairs and
+  the Task 09 v2.6 schema state is intact (`space_type_allowed_purpose` exists, while
+  `spaces.usage_policy` and `spaces.max_hours` do not).
 - **V6:** `no_show` rows without a session; expected zero rows.
 - Constraint trust/catalog checks if bulk load omitted `CHECK_CONSTRAINTS`, plus a
   scratch-DB-only `WITH CHECK CHECK CONSTRAINT ALL` remediation instruction.

@@ -11,6 +11,8 @@ Contract highlights (see README.md for the full rationale):
     outputs/10-schema-migration-G05.sql and only referenced as approver_id;
   * maintenance.impact_level is always written explicitly (the column DEFAULT is
     'out-of-service', so omitting it would silently create blocking tickets);
+  * spaces.usage_policy was removed by Task 10 v5 / Task 09 v2.6, and instant
+    approvals now follow the seeded space_type_allowed_purpose pairs;
   * maintenance_impact_history is NOT generated: the Task 10 trigger is
     AFTER UPDATE only, so escalation history is produced by load.sql updating
     impact_level on active tickets.
@@ -47,7 +49,6 @@ SPACE_TYPES = (
     "meeting_room",
     "student_workspace",
 )
-INSTANT_ELIGIBLE = ("classroom", "computer_lab", "project_lab", "meeting_room")
 PURPOSES = (
     "lecture",
     "examination",
@@ -57,6 +58,12 @@ PURPOSES = (
     "student_activity",
     "administrative_event",
 )
+SPACE_TYPE_ALLOWED_PURPOSES = {
+    "classroom": {"lecture", "examination", "seminar", "workshop", "student_activity"},
+    "computer_lab": {"lecture", "examination", "seminar", "workshop"},
+    "project_lab": {"workshop", "seminar", "meeting", "student_activity"},
+    "meeting_room": {"meeting", "seminar", "administrative_event", "workshop", "student_activity"},
+}
 BUILDINGS = (
     "Alpha Building",
     "Beta Building",
@@ -201,7 +208,7 @@ HEADERS = {
     ),
     "spaces": (
         "space_id", "space_code", "space_name", "space_type", "building",
-        "floor", "room_number", "capacity", "current_status", "usage_policy",
+        "floor", "room_number", "capacity", "current_status",
         "created_at", "updated_at",
     ),
     "facilities": ("facility_id", "name", "created_at", "updated_at"),
@@ -440,10 +447,6 @@ def make_master_data(config):
             "room_number": room_number,
             "capacity": capacity,
             "current_status": current_status,
-            "usage_policy": (
-                "Academic use has priority during teaching hours."
-                if space_type != "student_workspace" else "Open collaboration; keep noise moderate."
-            ),
             "created_at": iso_dt(now),
             "updated_at": iso_dt(now),
         })
@@ -527,6 +530,10 @@ def parse_dt(value):
     return datetime.fromisoformat(value) if isinstance(value, str) else value
 
 
+def instant_allowed(space_type, purpose):
+    return purpose in SPACE_TYPE_ALLOWED_PURPOSES.get(space_type, set())
+
+
 def make_bookings(config, users, spaces, maintenance, workdays):
     day_weights = build_day_weights(workdays, config["calendar"])
     rng = stable_rng(config["seed"], "bookings")
@@ -539,6 +546,9 @@ def make_bookings(config, users, spaces, maintenance, workdays):
     active_requesters = [u for u in users if u["account_status"] == "active" and u["role"] in ("student", "lecturer", "teaching_assistant", "department_admin")]
     if not staff or not active_requesters:
         raise ValueError("generator requires active requesters and staff approvers")
+    bookable_spaces = [space for space in spaces if space["current_status"] not in ("retired", "temporarily_closed")]
+    if not bookable_spaces:
+        raise ValueError("generator requires at least one bookable space")
     active_advisories, active_oos = maintenance_indexes(maintenance)
     # Slot-level occupancy makes the single-threaded conflict proof O(1) per
     # candidate. All generated windows are aligned to the 30-minute grid.
@@ -560,7 +570,8 @@ def make_bookings(config, users, spaces, maintenance, workdays):
     # confirmed schedule is dense. Non-confirmed demand is allowed to overlap.
     for offset, target_status in enumerate(target_statuses):
         booking_id = base + 100000 + offset
-        space = spaces[rng.randrange(len(spaces))]
+        space_pool = bookable_spaces if target_status in ("approved", "checked_in", "completed", "no_show") else spaces
+        space = space_pool[rng.randrange(len(space_pool))]
         requester = active_requesters[rng.randrange(len(active_requesters))]
         day, _label = choose_day(rng, workdays, day_weights)
         purpose = rng.choice(PURPOSES)
@@ -614,10 +625,7 @@ def make_bookings(config, users, spaces, maintenance, workdays):
         })
         if target_status in ("approved", "checked_in", "completed", "no_show"):
             approval_id = base + 220000 + offset
-            instant = (
-                space["space_type"] in INSTANT_ELIGIBLE
-                and rng.random() < float(config["instant_share"])
-            )
+            instant = instant_allowed(space["space_type"], purpose) and rng.random() < float(config["instant_share"])
             approver = -1 if instant else staff[rng.randrange(len(staff))]["user_id"]
             decision_time = start - timedelta(days=1 + rng.randrange(20))
             approval_rows.append({
@@ -687,18 +695,21 @@ def make_bookings(config, users, spaces, maintenance, workdays):
     # rules; only the derived origin attribution is normalized.
     booking_by_id = {row["booking_id"]: row for row in booking_rows}
     space_type_by_id = {space["space_id"]: space["space_type"] for space in spaces}
-    eligible_confirmed = [
+    eligible_approved = [
         row for row in approval_rows
-        if booking_by_id[row["booking_id"]]["status"] in ("approved", "checked_in", "completed")
-        and space_type_by_id[booking_by_id[row["booking_id"]]["space_id"]] in INSTANT_ELIGIBLE
+        if row["decision"] == "approved"
+        and instant_allowed(
+            space_type_by_id[booking_by_id[row["booking_id"]]["space_id"]],
+            booking_by_id[row["booking_id"]].get("purpose"),
+        )
     ]
-    if eligible_confirmed:
-        eligible_confirmed[0]["approver_id"] = -1
-        eligible_confirmed[0]["decision_note"] = "Instant eligibility checks passed."
+    if eligible_approved:
+        eligible_approved[0]["approver_id"] = -1
+        eligible_approved[0]["decision_note"] = "Instant eligibility checks passed."
     staff_origin = next(
-        (row for row in eligible_confirmed if row["booking_id"] != eligible_confirmed[0]["booking_id"]),
+        (row for row in eligible_approved if row["booking_id"] != eligible_approved[0]["booking_id"]),
         None,
-    ) if eligible_confirmed else None
+    ) if eligible_approved else None
     if staff_origin is not None:
         staff_origin["approver_id"] = staff[0]["user_id"]
         staff_origin["decision_note"] = "Approved by facility staff."
