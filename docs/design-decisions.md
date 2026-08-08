@@ -799,10 +799,13 @@ K1–K5; recorded K5 decision (2026-08-05); `outputs/11-concurrency-design-G05.m
 **Date:** 2026-08-07
 
 **Problem:** Two design debts surfaced during Task 09 review (Area 2, instant booking):
-1. The Phase-1 `spaces.usage_policy` free-text attribute (decision 2026-06-15) is **never
-   read** by any Phase-2 logic — no trigger, query, or generator consumes it — and its
-   name collides with the actual "usage policy" = the instant-booking eligibility test
-   (U1). It is a source of confusion, not of behavior.
+1. The Phase-1 `spaces.usage_policy` free-text attribute (decision 2026-06-15) is **not
+   read by any enforcement logic** — no trigger, constraint, or instant-policy test
+   consumes the text — and its name collides with the actual "usage policy" = the
+   instant-booking eligibility test (U1). It is a source of confusion, not of behavior.
+   Note: the Task 14 generator still *writes* it
+   (`outputs/14-data-generator-G05/generate.py` — headers + row builder), so the drop is
+   not free — the generator must remove the column in lockstep with the Task 10 migration.
 2. The instant usage-policy test (NR5 / U1) currently encodes only criteria that are
    **hardcoded or already enforced** (eligible `space_type` set, requester active,
    BR1/BR3/BR4). It lacks two criteria that ought to be data-driven: (i) the booking
@@ -862,7 +865,14 @@ and drops the text column (with rollback mirror). The instant-approval entry poi
 The data generator (Task 14) seeds per-space caps and generates purposes/durations that
 conform (plus a small share that exercise the pending-fallback). Task 09 v2.5,
 registries, and the U1 resolution are updated accordingly. Phase-1 outputs (03/05/06/07)
-remain frozen — the removal is a Phase-2 delta via the migration.
+remain frozen — the removal is a Phase-2 delta via the migration. This revision also
+**widens the Phase-2 unfreeze scope**: `spaces` is added to the unfrozen set, beyond the
+kickoff scope of 2026-08-02 (`maintenance`, `bookings`) — recorded explicitly, not as an
+implicit amendment.
+
+**Ratified by the group on 2026-08-08** (post-review): the two data-driven criteria —
+purpose membership + per-space duration cap — are confirmed as the intended reading of
+the (underspecified) "usage policy" in `docs/project_phase2_description.md` §1.2.
 
 **Requirement reference:** `docs/project_phase2_description.md` §1.2 (NR5, usage policy);
 Task 08 U1 (revised); decision 2026-06-15 (superseded); decision 2026-08-03 (amended).

@@ -22,7 +22,7 @@ Core domain entities (high level)
 - Users: university accounts with `user_id`, name, email, phone, role,
 	department, account_status
 - Spaces: `space_code`, name, type, building, floor, room_number, capacity,
-	status, usage_policy
+	status, usage_policy (for Phase 1)
 - Facilities: equipment items tied to spaces (projector, AC, microphone, etc.)
 - Bookings: requested periods, purpose, expected participants, status,
 	approval and decision metadata, actual session times, check-in/out records
