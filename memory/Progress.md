@@ -20,17 +20,17 @@
 **Phase 2 extends the Phase 1 baseline to a 16-task pipeline.** Source of truth:
 `docs/project_phase2_description.md`. The schema is **unfrozen** for Phase-2 re-design
 (see `docs/design-decisions.md`). Deliverables below follow §3.2 of the Phase 2
-description; all are ⬜ until their task runs.
+description; statuses below reflect the current task state.
 
 | Task | Deliverable | Output | Status | Depends on |
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
-| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved (v2.5 revision 2026-08-07) | Task 08 |
-| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ⚠️ Needs revision — must add Task 09 v2.5 objects (`spaces.max_hours`, `space_type_allowed_purpose`, drop `usage_policy`) before downstream use | Task 09 |
-| Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
+| Task 09 | Updated ERD + logical design (+ 3NF re-check) | outputs/09-updated-erd-and-logical-design-G05.md | Approved (v2.5 revision 2026-08-07) | Task 08 |
+| Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | Approved (2026-08-08, v2.5 rev4) | Task 09 |
+| Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | In progress | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
-| Task 14 | Data generator (≥100k bookings) | `outputs/14-data-generator-G05/` | ⬜ | Task 10 |
+| Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | Approved (2026-08-07) | Task 10 |
 | Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | ⬜ | Task 14, Task 16 |
 | Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ⬜ | Task 14 |
 | — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ⬜ | All tasks |
@@ -61,7 +61,6 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
-| 2026-08-07 | Task 09 v2.5 revision — usage policy made data-driven: drop `spaces.usage_policy` free-text; add `spaces.max_hours` (per-space instant-booking cap, NULL = no cap); new table `space_type_allowed_purpose` (per space_type×purpose seeded rules). Instant-approval test = checks 1–6; soft-gate failures (purpose/cap unmet → non-instant eligible) → `pending` fallback (no auto-approval); hard failures → reject (Phase-1 triggers unchanged) | Post-Task 09 v2.5 revision handshake — supersedes Q2 free-text decision and amends Task 09 eligibility test (U1) |
 | 2026-08-04 | Task 10 approved — Phase 2 schema migration (delta on Phase 1 baseline) + rollback script, compiled & verified on a scratch DB | Post-Task 10 handshake |
 | 2026-08-04 | `changed_by` audit mechanism = `SESSION_CONTEXT(N'current_user_id')` via `sys.sp_set_session_context` (not `CONTEXT_INFO()` byte packing); fallback to reserved system user `-1`; session-scoped → app layer must set/clear per unit of work (connection-pooling leak risk, handoff to Task 11/12) | Reviewer feedback — SQL Server 2016+ recommended mechanism |
 | 2026-08-04 | `trg_maintenance_recompute_space_status` guarded to status-relevant columns: `IF UPDATE(status) OR UPDATE(impact_level) OR UPDATE(start_time) OR UPDATE(completion_time) OR UPDATE(is_deleted)` — skips no-op updates; `is_deleted` required so soft-delete still recomputes | Reviewer feedback — avoid wasted recompute round-trips without regression |
@@ -93,7 +92,7 @@ _(All resolved — no open questions remain.)_
 | # | Question | Resolution | Date |
 |---|---|---|---|
 | Q1 | Rejection reason — separate column or part of decision note? | Separate `rejection_reason` column | 2026-06-15 |
-| Q2 | Usage policy — free text or coded rules? | Free-text `NVARCHAR(MAX)` | 2026-06-15 |
+| Q2 | Usage policy - free text or coded rules? | Free-text decision superseded by Task 09 v2.5: data-driven space_type_allowed_purpose + spaces.max_hours; usage_policy dropped | 2026-08-07 |
 | Q3 | Maintenance-to-booking interaction — can a space be booked after maintenance is resolved but before status is updated? | Auto-trigger on maintenance resolution + cross-check trigger on booking insert | 2026-06-15 (revised) |
 | Q4 | No-show detection — automatic or manual? | Automatic scheduled job | 2026-06-15 (revised) |
 | Q5 | Building/floor — reference tables or varchar fields? | Free-text `NVARCHAR` fields | 2026-06-15 |
@@ -109,10 +108,10 @@ unresolved question (see AGENTS.md)._
 
 | # | Question | Resolved before | Resolution | Date |
 |---|---|---|---|---|
-| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligibility data-defined (Task 09 v2.5): `(space_type, purpose) ∈ space_type_allowed_purpose` seeded for `{classroom, computer_lab, project_lab, meeting_room}`; test = checks 1–6 (usage-policy pair ∧ account active ∧ participants ≤ capacity ∧ duration ≤ `spaces.max_hours`/NULL ∧ no overlap BR1 ∧ no out-of-service BR4); soft failures (checks 1,4) → `pending`, hard → reject | 2026-08-07 |
+| U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligible `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | 2026-08-03 |
 | U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ✅ New table `booking_advisory_acknowledgement` (one row per (booking, advisory)) | 2026-08-03 |
-| U3 | Escalation → pending vs only approved | Task 11 | ⬜ pending | — |
-| U4 | "Semester" reporting window definition | Task 16 | ⬜ pending | — |
+| U3 | Escalation - pending vs only approved | Task 11 | Approved bookings only; escalation performs no booking DML; pending bookings stay pending and later approval fails 51002 | 2026-08-04 |
+| U4 | Semester reporting window definition | Task 16 | Semester 1 [September 1, February 1); Semester 2 [February 1, July 1); summer excluded; Q3 clips duration; Q4 uses start inside window; Monday = 1 | 2026-08-07 |
 | U5 | Space-status derivation from maintenance levels | Task 09 | ✅ `spaces` unchanged; `current_status` recomputed on maintenance INSERT/UPDATE/resolve via priority rule | 2026-08-03 |
 
 ---

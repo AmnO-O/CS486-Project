@@ -5,7 +5,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 
 ## Current phase
 **Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-03; Task 10 ✅ 2026-08-04**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-07 v2.5; Task 10 ✅ 2026-08-08 rev4; Task 11 🔄; Task 14 ✅ 2026-08-07**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -17,7 +17,7 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - Phase 1 schema is frozen (9 tables). Phase 2 underway.
 - Task 08 output: `outputs/08-requirement-change-analysis-G05.md` ✅ Approved.
   Analyzed C1–C3, affected entities/relationships, changed BRs (BR2, BR4), new rules
-  (NR1–NR6), and 4 concurrency conflicts (K1–K4). Unresolved items U1–U5 feed Task 09/11.
+  (NR1–NR6), and 4 concurrency conflicts (K1–K4). U3 is resolved in docs/design-decisions.md; U4 feeds Task 16.
 - Task 09 output: `outputs/09-updated-erd-and-logical-design-G05.md` ✅ Approved
   (base 2026-08-03; **v2.5 revision 2026-08-07**).
   Areas 1–3 designed (schema-only): `maintenance.impact_level` +
@@ -31,20 +31,22 @@ for the affected tables (Option B, `docs/design-decisions.md`).
   project_lab, meeting_room}); instant-approval test = checks 1–6 with soft-gate
   (purpose/cap) → `pending` fallback and hard-gate → reject. U1 re-resolved under the
   data-driven test; concurrency enforcement deferred to Task 11.
-- Task 10 output: `outputs/10-schema-migration-G05.sql` + companion rollback
-  `outputs/10-schema-migration-G05-rollback.sql` ✅ Approved 2026-08-04 —
-  ⚠️ **flagged: needs a v2.5 follow-up delta** (add `spaces.max_hours`,
-  `space_type_allowed_purpose`, drop `spaces.usage_policy`) before it can serve as an
-  upstream input to Task 14. Original baseline delta covers: `maintenance.impact_level`
-  (DF+CK, backfills legacy rows to `out-of-service`), new tables
-  `maintenance_impact_history` + `booking_advisory_acknowledgement` (composite UQ), 4
-  new indexes, reserved system approver `user_id = -1` seed, one-time `current_status`
-  refresh, 7 triggers (2 replaced: BR4/BR2+NR2 gate; 5 new: ack correspondence, impact
-  history, recompute with `UPDATE()` guard incl. `is_deleted`, 2× updated_at). Compiled
-  on a scratch DB: migration + idempotent re-run + rollback all exit 0; post-rollback
-  counts == baseline. Trajectories under `logs/trajectory/task10/`; compile logs under
-  `logs/eval/task10/`.
-
+- Task 10 output: outputs/10-schema-migration-G05.sql + companion rollback
+  outputs/10-schema-migration-G05-rollback.sql ✅ Approved 2026-08-08 (revision 4).
+  Data-preserving Phase-2 delta plus Task 09 v2.5 changes: maintenance.impact_level,
+  spaces.max_hours with CHECK, dropped spaces.usage_policy, new
+  maintenance_impact_history, booking_advisory_acknowledgement, and
+  space_type_allowed_purpose with 18 guarded seed rows; reserved system approver
+  user_id = -1, required indexes/triggers, and validation checks. Scratch-DB cycle
+  baseline → migration → idempotent re-run → rollback passed; post-rollback counts
+  equal baseline with no data loss. Evidence under logs/trajectory/task10/ and
+  logs/eval/task10/.
+- Task 11 output: outputs/11-concurrency-design-G05.md 🔄 In progress.
+  Current working scope is the 4-entry-point NR6 design; U3 is synced, and the
+  remaining clean-up is handoff/review before Task 12.
+- Task 14 output: outputs/14-data-generator-G05/ ✅ Approved 2026-08-07.
+  Generated 120,000 bookings; manifest confirms 45,431 advisory acknowledgements
+  and 64,607 confirmed bookings.
 ## Verification summary (Phase 1 dependency for Phase 2)
 - SCHEMA FREEZE approved (Task 04), DDL `outputs/05-db-definition-G05.sql`.
 - Sample data / queries landed as upstream inputs for Phase 2 re-design.
@@ -53,17 +55,9 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. **Regenerate Task 10** (schema migration) to include the Task 09 v2.5 delta:
-   `spaces.max_hours` (DF+CK), `space_type_allowed_purpose` (new table + PK),
-   drop `spaces.usage_policy` — per the Task 10 skill (`/generate-schema-migration`),
-   reusing the compiled baseline and re-verifying migration/idempotence/rollback on a
-   scratch DB before Task 14 consumes it.
-2. Proceed to **Task 11** — concurrency design (`outputs/11-concurrency-design-G05.md`):
-   resolve U3 (escalation → pending vs only approved), evaluate candidate SQL Server
-   concurrency strategies, and select the NR6 mechanism + transaction/lock/error
-   contract that Task 12 will implement and Task 13 will test (per the Task 11
-   skill; run via `/generate-concurrency-design`).
-3. Then Task 12 — concurrency implementation, then Task 13 — concurrency tests,
-   then 14 → 15/16 per `memory/Progress.md`.
-4. Task 14 (data generator) depends on Task 10's migrated schema (`impact_level`, new
-   tables incl. `space_type_allowed_purpose`, system user `-1`).
+1. Continue Task 11 — concurrency design (outputs/11-concurrency-design-G05.md):
+   the U3 decision is already synced, so this is now a consistency/review pass before
+   handoff to Task 12.
+2. Then Task 12 — concurrency implementation, then Task 13 — concurrency tests.
+3. Task 14 is complete; the remaining Phase 2 order is Task 16, then Task 15
+   (Task 15 still depends on Task 14 and Task 16).
