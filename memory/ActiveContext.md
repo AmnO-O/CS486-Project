@@ -5,7 +5,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 
 ## Current phase
 **Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-07 v2.5; Task 10 ✅ 2026-08-08 rev4; Task 11 🔄; Task 14 ✅ 2026-08-07**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-07 v2.5; Task 10 ✅ 2026-08-08 rev4; Task 11 🔄; Task 14 ✅ 2026-08-07; Task 16 ✅ 2026-08-08; Task 15 🔄**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -55,9 +55,10 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. Continue Task 11 — concurrency design (outputs/11-concurrency-design-G05.md):
-   the U3 decision is already synced, so this is now a consistency/review pass before
-   handoff to Task 12.
-2. Then Task 12 — concurrency implementation, then Task 13 — concurrency tests.
-3. Task 14 is complete; the remaining Phase 2 order is Task 16, then Task 15
-   (Task 15 still depends on Task 14 and Task 16).
+1. Task 15 — index tuning report (`outputs/15-index-tuning-report-G05.md`): in progress.
+   Measures Q1/Q2 on `CS486_G05_T14` (`LAPTOP-J7QNDDFO\SQL1`) against the 120k-row dataset.
+   Two additional reports selected from {Q3,Q4,Q5} by baseline logical reads.
+2. Task 11 — concurrency design (`outputs/11-concurrency-design-G05.md`): the U3 decision is
+   already synced; remaining is consistency/review pass before Task 12.
+3. Task 12 — concurrency implementation, then Task 13 — concurrency tests.
+4. Task 16 is complete; Task 15 is now in progress (Task 16 dependency cleared).

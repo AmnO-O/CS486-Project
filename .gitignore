@@ -11,3 +11,4 @@ test-database.sql
 .env
 outputs/testt.md
 outputs/14-data-generator-G05/_generated/
+logs/eval/task15/plans/*.raw.txt

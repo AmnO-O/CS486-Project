@@ -101,14 +101,18 @@ concurrency-safe confirmation authority.
 ### Q2 - Room finder
 
 Parameters: `@slot_start`, `@slot_end`, `@minimum_capacity`, and a local
-`@required_facilities` table variable containing required facility names.
+`@required_facilities` table variable containing all facility names required by the
+caller. The query supports zero, one, or many rows; the generation example must seed
+at least two rows to represent a realistic multi-facility search.
 Return spaces with sufficient capacity that have every requested facility. Use
-relational division (`NOT EXISTS` or equivalent), not a one-facility match.
+relational division (`NOT EXISTS` double-nested, not a one-facility match).
 Exclude `retired` and `temporarily_closed` spaces. Exclude spaces with overlapping
 confirmed bookings or active non-deleted `out-of-service` maintenance
 (`open`/`in_progress`). Advisory maintenance does not block availability. Do not
 use `spaces.current_status` as the sole availability authority. Return identity,
 location, type, capacity, facility information, and requested interval.
+The example seed must include at least two distinct facilities from the Task 14
+namespace (e.g. `T14 Projector` and `T14 Whiteboard`).
 
 ### Q3 - Approved hours per space
 
@@ -170,9 +174,10 @@ Before reporting, confirm:
 
 - Q1-Q5 markers are unique and each block ends with `GO`.
 - Append did not alter earlier blocks; requested IDs are present.
-- Q1 has confirmed overlap logic; Q2 checks every facility and both availability
-  sources; Q3/Q4 share U4 semantics; Q4 weekday numbering is deterministic; Q5
-  reads escalation history rather than current level only.
+- Q1 has confirmed overlap logic; Q2 checks **every facility** in the table
+  variable (the example must seed **at least two** rows) and both availability
+  sources; Q3/Q4 share U4 semantics; Q4 weekday numbering is
+  deterministic; Q5 reads escalation history rather than current level only.
 - No schema/index/procedure/trigger/concurrency DDL or Task 15 measurements exist.
 - The SQL is compiled/run only on a scratch database with Tasks 05/10 and Task 14
   data. Record results under `logs/eval/task16/` and trajectory under

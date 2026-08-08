@@ -59,18 +59,22 @@ GO
 --   facility, with no confirmed-booking or out-of-service-maintenance conflict?
 -- why-useful: Supports Phase 2 Report #3. Advisory maintenance does not block a
 --   result; availability is derived directly from time-overlap predicates.
+--   The @required_facilities table variable must contain all requested facilities;
+--   relational division returns only spaces that have every one.
 -- ============================================================
 
 DECLARE @slot_start       DATETIME2 = '2024-09-16T10:00:00';
 DECLARE @slot_end         DATETIME2 = '2024-09-16T12:00:00';
 DECLARE @minimum_capacity INT       = 20;
 
--- Add one row for every required facility. Leave empty to require none.
+-- Add one row for every required facility. Seed with at least two to reflect
+-- a realistic multi-facility search (e.g. a lecture room needing a projector
+-- AND a whiteboard). Leave the table empty to require none.
 DECLARE @required_facilities TABLE (
     facility_name NVARCHAR(255) NOT NULL PRIMARY KEY
 );
 INSERT INTO @required_facilities (facility_name) VALUES (N'T14 Projector');
--- INSERT INTO @required_facilities (facility_name) VALUES (N'T14 Whiteboard');
+INSERT INTO @required_facilities (facility_name) VALUES (N'T14 Whiteboard');
 
 WITH booking_conflicts AS (
     SELECT DISTINCT b.space_id

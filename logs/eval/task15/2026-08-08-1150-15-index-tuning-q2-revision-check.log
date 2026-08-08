@@ -1,0 +1,43 @@
+CS486 G05 - Task 15 Q2 revision execution/verification log
+Run at: 2026-08-08 11:50 (+07)
+Scope: Q2 only; multi-facility room finder correction
+Artifact: outputs/15-index-tuning-report-G05.md
+
+GATES
+  [PASS] Task 14 dataset available: 120000 bookings; approved generator/verification.
+  [PASS] Task 16 Q2 revised to seed T14 Projector + T14 Whiteboard.
+  [PASS] U1-U5 resolved; no directly relevant open question pending.
+  [PASS] Task 11 base indexes preserved; candidate indexes scratch-only.
+
+QUERY SEMANTICS
+  [PASS] Q2 uses nested NOT EXISTS relational division.
+  [PASS] Q2 requires every row in @required_facilities, not one facility only.
+  [PASS] Q2 workload contains two required facilities: T14 Projector, T14 Whiteboard.
+  [PASS] Q2 excludes confirmed booking conflicts and active out-of-service maintenance.
+  [PASS] Q2 allows advisory maintenance; current_status is not sole availability authority.
+
+MEASUREMENT
+  [PASS] Three baseline + three candidate runs completed with DBCC FREEPROCCACHE and DBCC DROPCLEANBUFFERS.
+  [PASS] SET STATISTICS IO/TIME enabled; QUOTED_IDENTIFIER ON for filtered-index tests.
+  [PASS] Same Q2 text, parameters, dataset, and session settings used for comparison.
+  [INFO] Baseline median: 2058 table logical reads; 78 CPU ms; 90 elapsed ms; one result row.
+  [INFO] Candidate median: 1239 table logical reads; 15 CPU ms; 15 elapsed ms; one result row.
+  [INFO] Booking reads: 120 -> 236; maintenance reads: 1107 -> 172.
+  [INFO] space_facilities reads remained 274; facilities reads remained 345.
+
+RECOMMENDATION
+  [PASS] Adopt idx_maintenance_oos_time_window for Q2 subject to reviewer approval.
+  [PASS] Retain idx_bookings_confirmed_time_window as shared Q2/Q3/Q5 candidate;
+         Q2-only booking reads increased for this selective window, but overall Q2 improved.
+  [PASS] Do not add speculative space_facilities bridge index; existing paths adequate.
+
+VALIDATION
+  [PASS] Task 15 Q2 section, summary row, parameter list, and limitations synchronized.
+  [PASS] Q1, Q3, Q5 report sections unchanged in semantics.
+  [PASS] Candidate indexes dropped after benchmark; scratch DB restored to baseline index state.
+  [PASS] No Task 10 DDL, schema registry, or production database changed.
+
+LIMITATIONS
+  Q2 workload has two facilities, meeting the revised requirement; wider facility lists
+  and different facility selectivities require future workload validation.
+  CPU/elapsed timings remain machine/cache sensitive; medians reported.

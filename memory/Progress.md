@@ -31,8 +31,8 @@ description; statuses below reflect the current task state.
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
 | Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | Approved (2026-08-07) | Task 10 |
-| Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | ⬜ | Task 14, Task 16 |
-| Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ⬜ | Task 14 |
+| Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | 🔄 In progress | Task 14, Task 16 ✅ |
+| Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ✅ Approved (2026-08-08, trajectory 2026-08-08-0655) | Task 14 |
 | — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ⬜ | All tasks |
 
 ## Status legend
