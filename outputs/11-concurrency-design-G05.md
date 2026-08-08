@@ -3,8 +3,8 @@
 **Group:** G05
 **Course:** CS486 — Introduction to Database System
 **Phase:** 2 · **Task:** 11
-**Date:** 2026-08-06
-**Doc version:** 3.2
+**Date:** 2026-08-08
+**Doc version:** 3.3
 
 ---
 
@@ -73,7 +73,7 @@ confirmation steps — a read result is only ever a hint.
 | DD2 | Which write paths must be inside the critical section? | **Four** — instant submit, staff approval, escalation/downgrade, ticket creation. Ticket creation is the legitimate birth of a blocking record; omitting it leaves K5, a BR4/NR6 hole closed by one procedure reusing the same lock (§6.1). | Task 12 implements all four. T9 covers K5 (ticket vs booking). Report #4 unaffected (derived). |
 | DD3 | How are read-only room-finder / availability reads treated? | **Advisory hints only.** Reads never serialize or confirm; the locked confirmation paths re-check, which is what guarantees NR6. | Confirmations re-read all predicates post-lock. No assertion of read "freshness". |
 | DD4 | How is `changed_by` captured on maintenance level changes? | **`sys.sp_set_session_context(N'current_user_id', <id>)`** set at unit start, cleared at end; fallback = reserved approver `-1` (Task 10 handoff). | Entry points set/clear the context. T13 asserts history-row attribution with and without context. |
-| DD5 | How do **soft-gate failures** (instant checks 1, 4 — purpose membership, duration cap) behave? | **Pending fallback, not an error** (Task 09 v2.5 A09-6): the booking is created `pending` (hard gates still enforced), no auto-approval row is inserted, and the procedure returns `0` with `@instant_accepted = 0`; W2 later decides. Hard-gate failures keep the §6.3 codes. | W1 (`@instant_accepted` OUT) and W2 (approval of such `pending` rows) both implemented in Task 12. T11/T12 assert the fallback and its overlap interactions; no new error code introduced. |
+| DD5 | How do **soft-gate failures** (instant check 1 — purpose membership) behave? | **Pending fallback, not an error** (Task 09 v2.6 A09-6): the booking is created `pending` (hard gates still enforced), no auto-approval row is inserted, and the procedure returns `0` with `@instant_accepted = 0`; W2 later decides. Hard-gate failures keep the §6.3 codes. **v2.6 note:** the v2.5 duration-cap soft gate was removed upstream (Task 09 v2.6, Task 10 rev 5) — purpose membership is the **only** soft gate the design implements. | W1 (`@instant_accepted` OUT) and W2 (approval of such `pending` rows) both implemented in Task 12. T11/T12 assert the fallback and its overlap interactions; no new error code introduced. |
 | DD6 | At **staff approval** the NR2-completeness gate (`trg_booking_approvals_check_space`, §4.2) can fail `51004` on a booking whose ack rows are missing (e.g. a booking created before its overlap-aware path, or a new advisory appearing after submission) — what repairs the set? | **W2 is the repair source.** Before the approval `INSERT`, W2 re-reads the active advisories overlapping the interval under the lock and inserts any missing ack rows (`acknowledged_by` = the booking's requester, `acknowledged_at` = now). The completeness trigger then passes; the repair never invents rows for advisories that do NOT overlap. | Task 12 implements the repair inside W2 (step 5). T13 asserts an approval that would otherwise hit `51004` succeeds and the ack rows exist. No schema change. |
 
 ---
@@ -146,21 +146,21 @@ lock and handoff rely on.
 
 ### 5.1 Comparison
 
-For completeness, the candidate strategies that were evaluated are shown briefly;
-the selection is argued entirely in §5.2.
+For completeness, the **rejected** candidate strategies that were evaluated are shown
+briefly; the selection is argued entirely in §5.2, so the chosen strategy is not
+repeated here.
 
 | Strategy | Anomalies prevented | Why not chosen |
 |---|---|---|
 | (a) `SERIALIZABLE` + key-range locks | Overlap races on a narrow predicate | Fails criterion 1 — serializes by predicate, not by space; needs **identical** interval-range locks from every write path, but the four write shapes differ; an off-by-one range re-opens K3/K5; plan-sensitive |
 | (b) `UPDLOCK, HOLDLOCK` range reads | Same range-blocks as (a) | Same "identical ranges" burden as (a); partial range locking leaks past gaps |
-| (c) transaction-owned `sp_getapplock` per space (`space_booking:<space_id>`) | K1, K2, K3, K5; K4 by construction | **Selected** — satisfies all five criteria in §5.2 |
-| (d) Optimistic concurrency (version columns / `ROWVERSION`) | Conflicts only detected if a version column exists | Fails criterion 2 — requires the schema change (version column) that Task 09 deliberately kept out |
-| (e) Trigger-only (baseline) | — | Fails criterion 1 — cannot serialize two READ COMMITTED writers; this is precisely the race that Task 11 exists to close |
-| (f) RCSI / snapshot isolation | Read-consistency only; K4 | Read-side mechanism only, writers check-then-act race (K1/K2) remains unsolved |
+| (c) Optimistic concurrency (version columns / `ROWVERSION`) | Conflicts only detected if a version column exists | Fails criterion 2 — requires the schema change (version column) that Task 09 deliberately kept out |
+| (d) Trigger-only (baseline) | — | Fails criterion 1 — cannot serialize two READ COMMITTED writers; this is precisely the race that Task 11 exists to close |
+| (e) RCSI / snapshot isolation | Read-consistency only; K4 | Read-side mechanism only, writers check-then-act race (K1/K2) remains unsolved |
 
 ### 5.2 Selection
 
-**Selected: (c) — transaction-owned `sys.sp_getapplock` on `space_booking:<space_id>`.**
+**Selected: transaction-owned `sys.sp_getapplock` on `space_booking:<space_id>`.**
 Valid on SQL Server 2019+ with READ COMMITTED (the database default; no new
 configuration required). This is the only candidate that satisfies **all five**
 criteria the design stands on:
@@ -191,12 +191,12 @@ Why the others were dropped — each fails at least one of the five:
   **every** writer locks an identical predicate range — an obligation the four
   different write shapes cannot guarantee, and exactly where K3/K5 resurface. They
   are also plan-sensitive (violates criterion 5).
-- **(d)** fails criterion 2: it requires the version column that Task 09 deliberately
+- **(c)** fails criterion 2: it requires the version column that Task 09 deliberately
   excluded from the approved schema.
-- **(e)** fails criterion 1 and 5: a trigger fires inside the writer's own transaction
+- **(d)** fails criterion 1 and 5: a trigger fires inside the writer's own transaction
   — two concurrent READ COMMITTED writers check and both pass before either commits;
   that is the race this task closes.
-- **(f) RCSI** fails the write-write requirement: snapshot/read-committed-snapshot
+- **(e) RCSI** fails the write-write requirement: snapshot/read-committed-snapshot
   guarantees only what a **reader** sees (K4); two concurrent writers can still both
   commit — no serialization exists at the write side.
 - **`TABLOCKX` (table lock)** — correct but far coarser: it serializes the whole
@@ -267,7 +267,7 @@ then writes; COMMIT releases the lock automatically.
   re-check **and** the write. Pre-transaction fast-path *reads* (eligibility hints)
   are allowed because they are re-verified after the lock is held.
 
-### 6.3 Error contract — 1:1 codes
+### 6.3 Error contract — cause-family codes
 
 Result codes are the `@result_code` OUT parameter of each procedure. The mapping is
 **one distinguishable cause-family per code**: within a single procedure, each
@@ -294,11 +294,12 @@ row not in the expected state, or invalid business input, as itemized per workfl
 `-999` (invalid applock parameters) is a programmer error only, not a returned code.
 Only `51005`/`51006` are retryable; `51007` restarts the whole unit.
 
-> **Soft instant-gate failures are not codes.** Failing a soft instant gate (Task 09
-> v2.5 checks 1 and 4: purpose membership, duration cap) returns `0` with
+> **Soft instant-gate failures are not codes.** Failing the soft instant gate (Task 09
+> v2.6 check 1: purpose membership) returns `0` with
 > `@instant_accepted = 0` — the booking is created `pending` for the W2 workflow
-> (§7.1, DD5). No error code is spent on a non-error; the one-cause-per-code rule
-> (§6.3) is preserved.
+> (§7.1, DD5). No error code is spent on a non-error; the cause-family rule
+> (§6.3) is preserved. The v2.5 duration-cap gate no longer exists (Task 09 v2.6 /
+> Task 10 rev 5), so there is nothing else that can fail softly.
 
 ### 6.4 Application-layer responsibilities
 
@@ -321,9 +322,9 @@ rows and re-check every invariant immediately before writing**, (iv) COMMIT.
 | # | Step | Code (if violated) |
 |---|---|---|
 | 1 | Validate inputs (end > start, participants > 0) | `51001` |
-| 2 | **Fast-path soft hints (data-driven, Task 09 v2.5):** resolve `space_id → space_type` (JOIN `spaces`); check 1 `(space_type, purpose) ∈ space_type_allowed_purpose` and check 4 `requested_end − requested_start ≤ max_hours` (or `max_hours IS NULL`). A soft failure is **not an error** — it zeroes `@instant_accepted` (fallback to pending) | no code (fallback, §6.3 note) |
+| 2 | **Fast-path soft hint (data-driven, Task 09 v2.6):** resolve `space_id → space_type` (JOIN `spaces`); check 1 `(space_type, purpose) ∈ space_type_allowed_purpose`. A soft failure is **not an error** — it zeroes `@instant_accepted` (fallback to pending). No duration gate exists (v2.6) | no code (fallback, §6.3 note) |
 | 3 | BEGIN TRAN; acquire lock `space_booking:<space_id>` | `51005/51006/51007` |
-| 4 | Re-check (hard): space not `retired`/`temporarily_closed` (BR2); capacity (BR3); requester still `active` — and **re-run the soft gates from the post-lock read** to finalize `@instant_accepted` | `51008` / `51009` / `51001` |
+| 4 | Re-check (hard): space not `retired`/`temporarily_closed` (BR2); capacity (BR3); requester still `active` — and **re-run the soft gate (check 1) from the post-lock read** to finalize `@instant_accepted` | `51008` / `51009` / `51001` |
 | 5 | Re-check: overlapping confirmed booking (BR1) | `51003` |
 | 6 | Re-check: overlapping active out-of-service (BR4) | `51002` |
 | 7 | Compute overlapping active advisories (NR2) and prepare one acknowledgement row per advisory | `51004` only on trigger-rejected rows (completeness is checked again at approval) |
@@ -332,7 +333,7 @@ rows and re-check every invariant immediately before writing**, (iv) COMMIT.
 | 10 | **IF `@instant_accepted = 1`** (all gates passed): INSERT `booking_approvals (approver_id = -1, decision='approved')` — auto-approval; triggers flip status + backstop gates. **ELSE** (soft-gate fallback, A09-6): no approval row — the booking stays `pending` for the W2 staff workflow | trigger errors on corrupted data only |
 | 11 | COMMIT; return `0` + `@booking_id` + `@instant_accepted` | — |
 
-> **Soft vs hard (Task 09 v2.5 A09-6):** a failed soft gate (1 or 4) never rejects —
+> **Soft vs hard (Task 09 v2.6 A09-6):** a failed soft gate (check 1 only) never rejects —
 > the booking is created `pending` and the procedure returns `0` with
 > `@instant_accepted = 0`; hard-gate failures return the §6.3 codes and create
 > nothing. The hard gates (account `active`, capacity, BR1, BR4) are the ones that
@@ -431,11 +432,10 @@ per-space lock:
    - Params: `@space_id, @requester_id, @purpose, @expected_participants,
      @requested_start_time, @requested_end_time` → `@booking_id OUT, @instant_accepted
      OUT, @result_code OUT, @message OUT`.
-   - Soft gates (Task 09 v2.5 checks 1, 4): `(space_type, purpose)` membership in
-     `space_type_allowed_purpose` (space resolved via JOIN) and
-     `duration ≤ spaces.max_hours` (NULL = no cap) → `@instant_accepted = 0`
-     fallback to `pending`, result `0`; hard gates (checks 2, 3, 5, 6) return the
-     §6.3 codes.
+   - Soft gate (Task 09 v2.6 check 1): `(space_type, purpose)` membership in
+     `space_type_allowed_purpose` (space resolved via JOIN) → `@instant_accepted = 0`
+     fallback to `pending`, result `0`; hard gates (checks 2–5: account `active`,
+     capacity/BR3, BR1 overlap, BR4 out-of-service) return the §6.3 codes.
 2. `usp_booking_approve`
    - Params: `@booking_id, @approver_id, @decision, @rejection_reason, @decision_note`
      → `@result_code OUT, @message OUT`.
@@ -449,7 +449,7 @@ per-space lock:
    - Params: `@space_id, @reporter_id, @problem_description, @start_time, @impact_level`
      (default `'advisory'`) → `@maintenance_id OUT, @result_code OUT, @message OUT`.
 
-Return codes: the `51001`–`51009` table (§6.3), one per cause; retryable `51005`/`51006`.
+Return codes: the `51001`–`51009` table (§6.3), one per cause-family; retryable `51005`/`51006`.
 
 Application-layer duties: set/clear `SESSION_CONTEXT`; bounded retry on `51005/51006`;
 restart the unit on `51007`; route ticket creation through procedure 4 (never a raw
@@ -476,9 +476,20 @@ the overlap-invariant audit query.
 | T8 | Invariant audit: overlapping confirmed bookings = 0 | 0 rows | — |
 | T9 | `out-of-service` ticket creation vs instant submit (K5): ticket first then submit, and submit first then ticket | submit `51002` (ticket won) or `0` + booking in report #4 set (submit won) | — |
 | T10 | Two concurrent staff approvals of different pending bookings on the same space/overlap (staff-vs-staff; K1 shape through the W2 code path) | first approve `0` | other approve `51003` |
-| T11 | Instant submit whose purpose is **not allowed** by `space_type_allowed_purpose` (soft gate 1 fails; same for duration > `max_hours`) | result `0`, `@instant_accepted = 0`, booking stays `pending`, **no** auto-approval row | — |
+| T11 | Instant submit whose purpose is **not allowed** by `space_type_allowed_purpose` (soft gate check 1 fails — the only soft gate in v2.6; there is no duration gate, so no second sub-case exists) | result `0`, `@instant_accepted = 0`, booking stays `pending`, **no** auto-approval row | — |
 | T12 | Soft-gate fallback vs instant confirmation on the same space/overlap: the pending-fallback booking is created alongside an instant-confirmed one (pending is not confirmed, §4.1); later staff approval of the pending one is rejected | both succeed — fallback `0` (`@instant_accepted = 0`, stays `pending`) and instant `0` (approved) | later approval of the pending → `51003` |
 | T13 | Staff approval of a `pending` booking overlapped by an active **advisory** whose ack rows were never inserted (DD6): W2 repairs the ack set inside the critical section | approve `0`; ack rows exist for every overlapping advisory; complete-set rows present | — |
+
+**Conflict → scenario trace (G6):** K1 → T1 (same-path instant) and T10 (same-path
+staff); K2 → T2; K3 → T3a/T3b (and T4, escalation vs pending); K5 → T9; K4 →
+T8 plus the outcome assertions of T1–T13 — K4 is closed by construction (§7.5:
+reads are hints), so no scenario asserts a read's "freshness", which would
+contradict the design. Homogeneous pairings: instant-vs-instant (T1) and
+staff-vs-staff (T10) are covered explicitly. Escalation-vs-escalation and
+ticket-vs-ticket are **redundant by design**: neither path confirms a booking
+interval — escalation/downgrade and ticket creation only invalidate intervals, so
+two such writers cannot create a duplicate confirmed overlap on their own; the
+only observable conflict is with a confirmation (T3a/T3b/T9), which is covered.
 
 ---
 
@@ -487,8 +498,9 @@ the overlap-invariant audit query.
 - **Assumptions:** SQL Server 2019+; READ COMMITTED; no schema change beyond Task 10
   (no version columns, no RCSI requirement); confirmed-status set §4.1; instant
   eligibility is **data-driven** — `space_type_allowed_purpose` is seeded by the Task
-  10 migration for the four approved types and `spaces.max_hours` is NULL for legacy
-  rows (Task 09 v2.5 A09-7/A09-8), so an empty junction simply means no instant
+  10 migration for the four approved types (Task 09 v2.6 A09-7), there is **no
+  duration cap anywhere** (the v2.5 `max_hours` column does not exist in Task 10 rev 5;
+  A09-8), so an empty junction simply means no instant
   acceptances (all submissions fall back to `pending`, never a code).
 - **Risks:**
   - **Hotspot-space contention:** per-space serialization queues a popular space's
@@ -524,9 +536,10 @@ the overlap-invariant audit query.
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-08-06 | First issue covering three write paths (instant submit, approval, escalation/downgrade) with the per-space app lock strategy. |
-| 2.0 | 2026-08-06 | Expanded to four write paths: added `usp_maintenance_report` (ticket creation) as the K5 closure; added T9 test scenario; clarified the error-code and lock contract wording. |
-| 2.5 | 2026-08-06 | Review round: error-contract claim softened to cause-family codes (`51001` documented as generic request-context bucket); added T10 (staff-vs-staff approval) and §6.1 lock-granularity rationale + §11 volume grounding; fixed five drifted section cross-references; renamed §3 decision labels to DD1–DD4 (collision with doc 09 deviation log D1–D8 and internal K4 reuse); added §11 database-level closure for raw DML (DENY table writes + GRANT EXECUTE only, ownership chaining). |
-| 3.0 | 2026-08-08 | Review round: §5.1 comparison condensed to a 3-column table (Strategy \| Anomalies prevented \| Why not chosen) with RCSI/snapshot added as row (f); §5.2 rewritten as a requirement-driven selection rationale — five selection criteria, selected strategy mapped to each, each rejected candidate tied to the criterion it fails (incl. `TABLOCKX` one-liner); no technical facts changed. |
-| 3.1 | 2026-08-08 | Alignment with Task 09 v2.5 (data-driven usage policy): W1 (§7.1) switched from the hardcoded eligible-type set to soft gates 1+4 (space_type_allowed_purpose membership, max_hours cap) with `@instant_accepted = 0` pending-fallback (A09-6); DD5 decision row added; §6.3 note "soft failures are not codes"; §9 signature gains `@instant_accepted OUT`; §10 adds T11 (soft-gate fallback) and T12 (fallback-vs-instant overlap); §11 assumption updated (seed data); no other sections changed. |
-| 3.2 | 2026-08-08 | Review-round fix: closed the NR2 approval deadlock — W2 (§7.2) gained the ack-set repair step (step 5) so the `trg_booking_approvals_check_space` completeness gate can never block an approvable booking; DD6 decision row; §9 procedure-2 note; §10 adds T13; W1 step 7 code column clarified (`51004` only on trigger-rejected rows). No design-strategy change. |
+| 1.0 | 2026-08-06 | Initial design: three write paths (instant submit, staff approval, escalation/downgrade) with the per-space app lock strategy. |
+| 2.0 | 2026-08-06 | Scope expanded to four write paths: `usp_maintenance_report` (ticket creation) closes K5; T9 added; error-code and lock contract clarified. |
+| 2.5 | 2026-08-06 | Review: error-contract softened to cause-family codes (`51001` = generic bucket); T10 (staff-vs-staff) added; lock-granularity rationale + volume grounding (§6.1/§11); raw-DML closure via `DENY` + `GRANT EXECUTE`. |
+| 3.0 | 2026-08-08 | Review: §5.1 comparison condensed to 3 columns; §5.2 rewritten as requirement-driven selection; no design change. |
+| 3.1 | 2026-08-08 | Task 09 v2.5 alignment: data-driven usage policy — soft gates 1+4 (junction membership, `max_hours` cap) with `@instant_accepted = 0` pending fallback; DD5; T11/T12. |
+| 3.2 | 2026-08-08 | Review fix: W2 ack-set repair closes the NR2 approval deadlock (DD6); T13; W1 step-7 wording. No strategy change. |
+| 3.3 | 2026-08-08 | Task 09 v2.6 / Task 10 rev 5 alignment: duration cap removed — soft gate = check 1 (purpose) only; hard gates checks 2–5; §6.3 heading → cause-family; G6 conflict→scenario trace added. No strategy/code/scope change. |

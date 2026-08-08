@@ -1,0 +1,33 @@
+Task 11 — Static Verification Log (doc-only trim run: revision log condensed)
+=============================================================================
+File     : logs/eval/task11/2026-08-08-1754-11-concurrency-design-check.log
+Task     : 11 — Concurrency Design
+Group    : G05
+Run mode : documentation-only trim of Section 12 (revision log) in rev 3.3 —
+           condensed to one-line rows; no design content changed
+Date     : 2026-08-08
+Status   : PASS (all checks)
+
+Scope of this run
+-----------------
+- outputs/11-concurrency-design-G05.md: Section 12 rows 1.0, 2.0, 2.5, 3.0,
+  3.1, 3.2, 3.3 condensed to short, clear one-liners. No version bump, no
+  content change (documentation-only trim; skill: no audit rows for
+  formatting runs).
+- No changes to design-decisions.md (no new decision).
+
+Gate checks
+-----------
+G1 (headings): 12 unique section headings, no duplicates — PASS
+G2 (no run/CLI tokens): scan for run/reset/superseded/regenerate/timestamps
+  found only legit "Task 10 rev 5" references — PASS
+G3 (no docs/ citations): unaffected by trim — PASS
+G4 (cross-references): §12 is terminal, no downstream refs — PASS
+G5/G6/G7 (error codes, conflict traces, granularity/volume): unaffected —
+  PASS
+
+Artifacts
+---------
+- outputs/11-concurrency-design-G05.md (rev 3.3, §12 trimmed)
+- logs/trajectory/task11/2026-08-08-1754-trajectory.md
+- Prior run 2026-08-08-1748 log + trajectory marked superseded_by this run.
