@@ -113,10 +113,75 @@ availability again inside the protected transaction. Consequently, two
 conflicting confirmations cannot both commit.
 
 \subsection{Cause and Chosen Control}
-Explain why the conflict is possible under the relevant isolation level. Then
-describe the implemented control, such as row or range locks, transaction
-isolation, a database constraint, or optimistic concurrency. Justify why the
-control is correct and discuss its performance trade-offs.
+
+\subsubsection{Cause}
+
+The race occurs under the default READ COMMITTED isolation level
+because a transaction cannot observe another transaction's uncommitted rows.
+Two writers can therefore validate the same availability state before either
+commits. The existing triggers execute within their writer's transaction and
+cannot validate against an invisible competitor, while the filtered unique
+index rejects only identical start times. Since no common serialization point
+spans the check--write interval, all confirmation-related write paths require
+one.
+
+\subsubsection{Application-Lock Protocol}
+
+The implementation uses a transaction-owned SQL Server application lock. After
+starting a transaction, each write procedure calls
+\textbf{sys.sp\_getapplock} with the following configuration:
+
+\begin{itemize}
+    \item Resource: \textbf{space\_booking:<space\_id>};
+    \item Mode: \textbf{Exclusive};
+    \item Owner: \textbf{Transaction};
+    \item Timeout: 5 seconds.
+\end{itemize}
+
+The lock is released automatically when the transaction commits or rolls back.
+The procedures \textbf{usp\_booking\_instant\_submit},
+\textbf{usp\_booking\_approve},
+\textbf{usp\_maintenance\_set\_impact\_level}, and
+\textbf{usp\_maintenance\_report} request the same resource for a given space.
+This serializes instant approvals, staff approvals, and booking--maintenance
+interactions through one protocol. Maintenance reporting acquires the lock only
+when the new ticket begins as \textbf{out-of-service}; an advisory ticket does
+not block the interval and instead creates an acknowledgement requirement.
+
+\subsubsection{Invariant Revalidation and Failure Handling}
+
+The lock protects the critical section, but correctness depends on revalidation
+inside it. Immediately before writing, each procedure rereads its target data
+and checks confirmed-booking overlap (BR1), out-of-service maintenance overlap
+(BR4), space status (BR2), capacity (BR3), and acknowledgement completeness
+(NR2). A failed check rolls back the transaction and returns a deterministic
+result code. Existing triggers and the filtered unique index remain as
+defense-in-depth controls.
+
+Lock-acquisition failures are returned to the caller rather than silently
+retried. A timeout returns \texttt{51005}, a cancelled request returns
+\texttt{51006}, and both are retryable. A deadlock victim returns
+\texttt{51007}; in this case, the caller must restart the entire transaction.
+
+\subsubsection{Design Rationale and Trade-offs}
+
+The application lock is valid under READ COMMITTED and requires no
+schema change. In contrast, SERIALIZABLE key-range locking or UPDLOCK / HOLDLOCK range reads are reliable only when every
+writer locks the same predicate range. The four write paths use different
+interval operations, making this approach plan-sensitive and vulnerable to a
+range-boundary error that could reopen K3 or K5. Optimistic concurrency would
+require version columns excluded from the approved design, while triggers alone
+cannot serialize concurrent writers under READ COMMITTED.
+
+The lock resource is keyed by space rather than by space and day. A daily key
+would require a multi-day booking to acquire several locks in a fixed order,
+creating additional lock-ordering and cross-midnight risks. The per-space key
+avoids these cases but serializes all writers for a popular space. This cost is
+acceptable for the expected workload: Task~14 generates more than 100{,}000
+bookings across three academic years, corresponding to tens of writes per day
+for the busiest space, and each critical section completes well within the
+five-second timeout. If production monitoring later identifies material
+contention, a per-day resource key remains the documented tuning option.
 
 \subsection{Concurrent Test Results}
 Document the test setup, session ordering, expected outcome, and actual result.
