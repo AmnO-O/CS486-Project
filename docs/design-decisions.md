@@ -793,6 +793,92 @@ K1–K5; recorded K5 decision (2026-08-05); `outputs/11-concurrency-design-G05.m
 
 ---
 
+### Decision: Phase 2 revision (Task 09 v2.5) — data-driven usage policy: drop `usage_policy`, add `spaces.max_hours`, new `space_type_allowed_purpose`
+
+**Task:** 9 (Updated ERD + Logical Design — revision v2.5)
+**Date:** 2026-08-07
+
+**Problem:** Two design debts surfaced during Task 09 review (Area 2, instant booking):
+1. The Phase-1 `spaces.usage_policy` free-text attribute (decision 2026-06-15) is **not
+   read by any enforcement logic** — no trigger, constraint, or instant-policy test
+   consumes the text — and its name collides with the actual "usage policy" = the
+   instant-booking eligibility test (U1). It is a source of confusion, not of behavior.
+   Note: the Task 14 generator still *writes* it
+   (`outputs/14-data-generator-G05/generate.py` — headers + row builder), so the drop is
+   not free — the generator must remove the column in lockstep with the Task 10 migration.
+2. The instant usage-policy test (NR5 / U1) currently encodes only criteria that are
+   **hardcoded or already enforced** (eligible `space_type` set, requester active,
+   BR1/BR3/BR4). It lacks two criteria that ought to be data-driven: (i) the booking
+   **purpose** must be permitted for the booking's `space_type`, and (ii) the requested
+   **duration** must not exceed a per-space cap. Without them, each school policy change
+   is a code change, and purpose/cap cannot be validated at instant-approval time.
+
+**Options considered:**
+- Purpose policy **per space_type vs per space**: per-space_type junction table (one row
+  per allowed `(space_type, purpose)` pair; uniform rule; matches the requirement wording
+  "for each space_type, which purposes are allowed") vs per-space junction (per-room
+  flexibility, but contradicts the per-type wording and inflates the seed surface).
+  Chose **per space_type**, resolved at runtime via `JOIN spaces` to get the booking's type.
+- Duration cap **per space vs per type**: column `spaces.max_hours` (per-space granularity,
+  consistent with `capacity`/`current_status`; NULL = no cap; no new table) vs a
+  `space_type_policy` table (uniform per type). Chose **per-space column**: a cap is an
+  operating property of an individual room; NULL avoids inventing values for legacy rows
+  during the data-preserving migration.
+- **Keep vs drop** the free-text column: keep as "informational only" (dead weight,
+  name collision remains) vs drop. Chose **drop** — this reverses the 2026-06-15 decision.
+- Hardcoded eligible set vs data-defined eligibility: keep the extra conjunct
+  `space_type IN ('classroom',...)` vs let **junction membership** define instant
+  eligibility. Chose data-defined (single source of truth); Task 10 seeds exactly the
+  four previously approved types, so the effective eligible set is unchanged.
+- Enforce the new criteria on **instant only** vs on **all** bookings. Chose **instant
+  only**: staff approval remains purpose/duration-agnostic (staff judgment is the fallback).
+
+**Decision:**
+- **Drop** `spaces.usage_policy` (free-text NVARCHAR(MAX)) — the 2026-06-15 "usage policy
+  as free-text" decision is **superseded** by this structured, data-driven test.
+- **Add** `spaces.max_hours DECIMAL(5,2) NULL` — max single-booking duration
+  (hours) for that space; `CHECK (max_hours > 0)`; `NULL` = no limit. This
+  **amends** the 2026-08-03 "keep `spaces` unchanged" decision *only for this column* —
+  the `current_status` derivation/recompute part of that decision stands.
+- **Add** a new junction table `space_type_allowed_purpose` with composite PK
+  `(space_type, purpose)`; one row per allowed pair; domain CHECKs mirror
+  `spaces.space_type` and `bookings.purpose`; **soft reference** to `spaces.space_type`
+  (no FK — no `space_types` dimension table is introduced). Instant eligibility is
+  **data-defined**: a space type is instant-eligible if rows exist for it.
+- **Revised instant usage-policy test (U1)** — checks 1–6:
+  1. `(space_type, purpose) ∈ space_type_allowed_purpose` (soft) —
+     resolves the booking's `space_id → space_type` via JOIN;
+  2. requester `users.account_status = 'active'` (hard, A09-3);
+  3. `expected_participants ≤ spaces.capacity` (hard — BR3);
+  4. `duration ≤ max_hours*60 OR max_hours IS NULL` (soft);
+  5. no overlapping confirmed booking (hard — BR1);
+  6. no overlapping active `out-of-service` maintenance (hard — BR4).
+- **Soft vs hard disposition:** a failed **soft** gate (1 or 4) does **not** reject the
+  booking — it is created `pending` and routed to the staff-approval workflow
+  (`@instant_accepted = 0`). A failed **hard** gate keeps Phase-1 trigger rejection
+  semantics. The procedure contract is Task 11; implementation is Task 12.
+
+**Impact:** Phase-2 schema gains `spaces.max_hours` and `space_type_allowed_purpose`,
+and loses `usage_policy`. Task 10 migration creates/seeds the junction, adds the column,
+and drops the text column (with rollback mirror). The instant-approval entry point
+(`usp_booking_instant_submit`) reads the junction + `max_hours` (Task 11/12).
+The data generator (Task 14) seeds per-space caps and generates purposes/durations that
+conform (plus a small share that exercise the pending-fallback). Task 09 v2.5,
+registries, and the U1 resolution are updated accordingly. Phase-1 outputs (03/05/06/07)
+remain frozen — the removal is a Phase-2 delta via the migration. This revision also
+**widens the Phase-2 unfreeze scope**: `spaces` is added to the unfrozen set, beyond the
+kickoff scope of 2026-08-02 (`maintenance`, `bookings`) — recorded explicitly, not as an
+implicit amendment.
+
+**Ratified by the group on 2026-08-08** (post-review): the two data-driven criteria —
+purpose membership + per-space duration cap — are confirmed as the intended reading of
+the (underspecified) "usage policy" in `docs/project_phase2_description.md` §1.2.
+
+**Requirement reference:** `docs/project_phase2_description.md` §1.2 (NR5, usage policy);
+Task 08 U1 (revised); decision 2026-06-15 (superseded); decision 2026-08-03 (amended).
+
+---
+
 ### Decision: U4 — semester reporting windows and analytical-query semantics
 
 **Task:** 16 (Analytical Queries)
@@ -839,10 +925,12 @@ semantics when measuring either report.
 reports); Task 08 C3; Task 09 §4 / Area 3.
 
 ---
+
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---| 
+| 2026-08-07 | Phase 2 Task 09 v2.5 — usage policy now data-driven: `spaces.usage_policy` free-text dropped (2026-06-15 decision superseded); `spaces.max_hours` added (per-space duration cap, NULL = unlimited, amends 2026-08-03 spaces-unchanged decision); new `space_type_allowed_purpose` junction (data-defined instant eligibility, seeded for the four eligible types); instant test extended to checks 1–6 with soft (purpose/cap) → pending-fallback vs hard (capacity/overlap/out-of-service) → reject | Agent | Task 09 |
 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
 | 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |
 | 2026-08-02 | Phase 2 kickoff — schema unfrozen for affected tables (`bookings`, `maintenance`) via `🔓 P2` markers; all other Phase 1 tables remain frozen | Agent | Task 08 |
@@ -857,4 +945,3 @@ reports); Task 08 C3; Task 09 §4 / Area 3.
 ---
 
 _This document is a living artifact — updated throughout the pipeline as design decisions are made or revised. The decision log is considered locked after SCHEMA FREEZE (end of Task 4); subsequent tasks may append revision entries for implementation-driven adjustments._
-

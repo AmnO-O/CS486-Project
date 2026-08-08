@@ -15,9 +15,12 @@ GO
 --   2. restores the three Phase 1 trigger definitions
 --      (trg_bookings_check_maintenance, trg_booking_approvals_check_space,
 --      trg_maintenance_completion_space_status) from the Phase 1 baseline,
---   3. drops the two new tables,
---   4. drops maintenance.impact_level (column + its DF/CK constraints),
---   5. removes the reserved system approver seed row (-1) and any instant
+--   3. drops the three new tables (incl. space_type_allowed_purpose),
+--   4. drops maintenance.impact_level and spaces.max_hours (column + DF/CK),
+--   5. restores spaces.usage_policy NVARCHAR(MAX) NULL (Phase 1 free-text
+--      column dropped by the migration — re-added empty; its values were
+--      never read by any enforcement logic, see migration header D9),
+--   6. removes the reserved system approver seed row (-1) and any instant
 --      approvals referencing it (plus the School Administration department
 --      only if it was created by the migration and is still unreferenced).
 --
@@ -31,7 +34,9 @@ GO
 -- ============================================================
 IF OBJECT_ID(N'dbo.maintenance_impact_history', N'U') IS NULL
    AND OBJECT_ID(N'dbo.booking_advisory_acknowledgement', N'U') IS NULL
+   AND OBJECT_ID(N'dbo.space_type_allowed_purpose', N'U') IS NULL
    AND COL_LENGTH(N'dbo.maintenance', N'impact_level') IS NULL
+   AND COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
 BEGIN
     PRINT 'Rollback not needed: no Phase 2 migration objects found.';
 END
@@ -63,6 +68,10 @@ IF OBJECT_ID(N'dbo.trg_booking_advisory_acknowledgement_updated_at', N'TR') IS N
     DROP TRIGGER dbo.trg_booking_advisory_acknowledgement_updated_at;
 GO
 
+IF OBJECT_ID(N'dbo.trg_space_type_allowed_purpose_updated_at', N'TR') IS NOT NULL
+    DROP TRIGGER dbo.trg_space_type_allowed_purpose_updated_at;
+GO
+
 IF OBJECT_ID(N'dbo.trg_bookings_check_maintenance', N'TR') IS NOT NULL
     DROP TRIGGER dbo.trg_bookings_check_maintenance;
 GO
@@ -76,7 +85,7 @@ IF OBJECT_ID(N'dbo.trg_maintenance_completion_space_status', N'TR') IS NOT NULL
 GO
 
 -- ============================================================
--- 2. Drop the two new tables (child-first: ack references maintenance)
+-- 2. Drop the three new tables (child-first: ack references maintenance)
 -- ============================================================
 IF OBJECT_ID(N'dbo.booking_advisory_acknowledgement', N'U') IS NOT NULL
     DROP TABLE dbo.booking_advisory_acknowledgement;
@@ -84,6 +93,10 @@ GO
 
 IF OBJECT_ID(N'dbo.maintenance_impact_history', N'U') IS NOT NULL
     DROP TABLE dbo.maintenance_impact_history;
+GO
+
+IF OBJECT_ID(N'dbo.space_type_allowed_purpose', N'U') IS NOT NULL
+    DROP TABLE dbo.space_type_allowed_purpose;
 GO
 
 -- ============================================================
@@ -102,7 +115,23 @@ IF COL_LENGTH(N'dbo.maintenance', N'impact_level') IS NOT NULL
 GO
 
 -- ============================================================
--- 4. Remove reserved seed rows
+-- 4. Drop spaces.max_hours (CHECK first, then column) and restore the
+--    Phase 1 spaces.usage_policy free-text column
+-- ============================================================
+IF OBJECT_ID(N'dbo.CK_spaces_max_hours', N'C') IS NOT NULL
+    ALTER TABLE dbo.spaces DROP CONSTRAINT CK_spaces_max_hours;
+GO
+
+IF COL_LENGTH(N'dbo.spaces', N'max_hours') IS NOT NULL
+    ALTER TABLE dbo.spaces DROP COLUMN max_hours;
+GO
+
+IF COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NULL
+    ALTER TABLE dbo.spaces ADD usage_policy NVARCHAR(MAX) NULL;
+GO
+
+-- ============================================================
+-- 5. Remove reserved seed rows
 --    a) instant approvals made against the system approver,
 --    b) the system approver user -1,
 --    c) the School Administration department IF the migration created it
@@ -120,7 +149,7 @@ WHERE name = N'School Administration'
 GO
 
 -- ============================================================
--- 5. Restore the Phase 1 trigger definitions (outputs/05 baseline)
+-- 6. Restore the Phase 1 trigger definitions (outputs/05 baseline)
 -- ============================================================
 
 -- BR4 Phase 1: any overlapping unresolved maintenance blocks booking
@@ -209,37 +238,46 @@ PRINT 'ROLLBACK-OK: Phase 2 migration reversed (Phase 1 schema restored).';
 GO
 
 -- ============================================================
--- 6. Validation: Phase 1 objects are back
+-- 7. Validation: Phase 1 objects are back
 -- ============================================================
-SELECT 'R6.1 new tables gone' AS check_name,
-       CASE WHEN OBJECT_ID(N'dbo.maintenance_impact_history', N'U') IS NULL
+SELECT 'R7.1 new tables gone' AS action,
+       CASE WHEN OBJECT_ID(N'dbo.space_type_allowed_purpose', N'U') IS NULL
+             AND OBJECT_ID(N'dbo.maintenance_impact_history', N'U') IS NULL
              AND OBJECT_ID(N'dbo.booking_advisory_acknowledgement', N'U') IS NULL
             THEN 'PASS' ELSE 'FAIL' END AS result,
-       'both Phase 2 tables dropped' AS detail;
+       'all Phase 2 tables dropped' AS detail;
 GO
 
-SELECT 'R6.2 impact_level gone' AS check_name,
+SELECT 'R7.2 impact_level gone' AS check_name,
        CASE WHEN COL_LENGTH(N'dbo.maintenance', N'impact_level') IS NULL THEN 'PASS' ELSE 'FAIL' END AS result,
-       'column + DF/CK dropped' AS detail;
+       'maintenance.impact_level + DF/CK dropped' AS detail;
 GO
 
-SELECT 'R6.3 Phase 1 triggers restored' AS check_name,
+SELECT 'R7.3 spaces restored' AS check_name,
+       CASE WHEN COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
+             AND COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NOT NULL
+            THEN 'PASS' ELSE 'FAIL' END AS result,
+       'max_hours dropped; usage_policy column restored' AS detail;
+GO
+
+SELECT 'R7.4 Phase 1 triggers restored' AS check_name,
        CASE WHEN
             OBJECT_ID(N'dbo.trg_bookings_check_maintenance', N'TR') IS NOT NULL
         AND OBJECT_ID(N'dbo.trg_booking_approvals_check_space', N'TR') IS NOT NULL
         AND OBJECT_ID(N'dbo.trg_maintenance_completion_space_status', N'TR') IS NOT NULL
         AND OBJECT_ID(N'dbo.trg_maintenance_recompute_space_status', N'TR') IS NULL
         AND OBJECT_ID(N'dbo.trg_booking_advisory_ack_validate', N'TR') IS NULL
+        AND OBJECT_ID(N'dbo.trg_space_type_allowed_purpose_updated_at', N'TR') IS NULL
             THEN 'PASS' ELSE 'FAIL' END AS result,
        '3 Phase 1 triggers recreated, Phase 2 triggers dropped' AS detail;
 GO
 
-SELECT 'R6.4 system approver gone' AS check_name,
+SELECT 'R7.5 system approver gone' AS check_name,
        CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.users WHERE user_id = -1) THEN 'PASS' ELSE 'FAIL' END AS result,
        'user_id = -1 removed' AS detail;
 GO
 
-SELECT 'R6.5 no instant approvals remain' AS check_name,
+SELECT 'R7.6 no instant approvals remain' AS check_name,
        CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.booking_approvals WHERE approver_id = -1) THEN 'PASS' ELSE 'FAIL' END AS result,
        'booking_approvals rows referencing -1 removed' AS detail;
 GO

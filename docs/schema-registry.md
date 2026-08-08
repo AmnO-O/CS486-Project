@@ -26,7 +26,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 |---|---|---|---|---|
 | 1 | departments | entity | 🔒 | Departments |
 | 2 | users | entity | 🔒 | Users |
-| 3 | spaces | entity | 🔒 | Spaces |
+| 3 | spaces | entity | 🔓 P2 (v2.5) | Spaces |
 | 4 | facilities | entity | 🔒 | Facilities |
 | 5 | space_facilities | junction | 🔒 | Spaces ↔ Facilities (R6) |
 | 6 | bookings | entity | 🔓 P2 | Bookings |
@@ -35,6 +35,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | 9 | maintenance | entity | 🔓 P2 | Maintenance |
 | 10 | maintenance_impact_history | entity | 🔓 P2 (new) | Maintenance_Impact_History |
 | 11 | booking_advisory_acknowledgement | entity | 🔓 P2 (new) | Booking_Advisory_Acknowledgement |
+| 12 | space_type_allowed_purpose | entity | 🔓 P2 (new — Task 09 v2.5) | Space_Type_Allowed_Purpose |
 
 > Status legend: 🔒 = Phase 1 locked; 🔓 P2 = unfrozen, Phase-2 re-design pending Task 09/10.
 
@@ -51,6 +52,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 9. maintenance
 10. maintenance_impact_history
 11. booking_advisory_acknowledgement
+12. space_type_allowed_purpose
 
 ---
 
@@ -103,7 +105,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ### spaces
 
-**Status:** 🔒 locked
+**Status:** 🔓 P2 — unfrozen (Task 09 v2.5: `max_hours` added, `usage_policy` dropped)
 **Maps from entity:** Spaces
 **Primary key:** space_id (surrogate)
 
@@ -119,8 +121,8 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | floor | NVARCHAR(50) | NO | — | — | Free-text (Q5) |
 | room_number | NVARCHAR(50) | NO | — | — | |
 | capacity | INT | NO | — | CHECK (capacity > 0) | |
-| current_status | VARCHAR(50) | NO | — | CHECK (current_status IN ('available','in_use','under_maintenance','temporarily_closed','retired')), DEFAULT 'available' | |
-| usage_policy | NVARCHAR(MAX) | YES | — | — | Free-text (Q2) |
+| current_status | VARCHAR(50) | NO | — | CHECK (current_status IN ('available','in_use','under_maintenance','temporarily_closed','retired')), DEFAULT 'available' | Recomputed per Area-1 design (v2.0) |
+| max_hours | DECIMAL(5,2) | YES | — | CHECK (max_hours > 0) | v2.5 — max single-booking duration (hours) for instant eligibility; NULL = no cap |
 | created_at | DATETIME2 | NO | — | DEFAULT GETDATE() | |
 | updated_at | DATETIME2 | NO | — | DEFAULT GETDATE() | |
 
@@ -351,6 +353,27 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ---
 
+### space_type_allowed_purpose
+
+**Status:** 🔓 P2 (new — Task 09 v2.5, Area 2)
+**Maps from entity:** Space_Type_Allowed_Purpose
+**Primary key:** (space_type, purpose) (composite)
+
+**Columns:**
+
+| Column | Type | Nullable | Key | Constraint / Default | Notes |
+|--------|------|----------|-----|---------------------|-------|
+| space_type | VARCHAR(50) | NO | PK | CHECK (space_type IN ('auditorium','classroom','computer_lab','project_lab','meeting_room','student_workspace')) | Domain mirrors spaces.space_type (soft reference — no FK) |
+| purpose | VARCHAR(50) | NO | PK | CHECK (purpose IN ('lecture','examination','seminar','workshop','meeting','student_activity','administrative_event')) | Domain mirrors bookings.purpose |
+| created_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp (BR12) |
+| updated_at | DATETIME2 | NO | — | DEFAULT GETDATE() | Audit timestamp (BR12) |
+
+**Foreign keys:** None — soft value reference; `space_type` pairs are consumed by the instant-approval test (procedure logic, Task 11/12).
+
+**3NF proof:** PK = full pair `(space_type, purpose)`; non-key columns (`created_at`, `updated_at`) depend only on the full pair; neither subset determines a non-key attribute → no partial dependency, no transitive dependency → 3NF.
+
+---
+
 ## Indexes
 
 | Index | Table | Column(s) | Type |
@@ -392,6 +415,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | UQ_booking_advisory_ack_booking_maintenance | booking_advisory_acknowledgement | booking_id, maintenance_id | Unique non-clustered |
 | idx_booking_advisory_ack_maintenance | booking_advisory_acknowledgement | maintenance_id | Non-clustered |
 | idx_booking_advisory_ack_acknowledged_by | booking_advisory_acknowledgement | acknowledged_by | Non-clustered |
+| PK_space_type_allowed_purpose | space_type_allowed_purpose | space_type, purpose | Clustered |
 
 ---
 
@@ -422,7 +446,7 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 | NR2 | Advisory acknowledgement recorded with booking | `booking_advisory_acknowledgement` table + insert trigger | Database | ✅ Enforced (Task 09) |
 | NR3 | Impact-level escalation/downgrade history | `maintenance_impact_history` + trigger on `maintenance.impact_level` change | Database | ✅ Enforced (Task 09) |
 | NR4 | Affected approved bookings on escalation | Derived query (report #4, Area 3) from `booking_advisory_acknowledgement` ↔ `maintenance` | Query | ✅ (Area 3) |
-| NR5 | Instant (auto) booking for eligible space types | reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (`CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END`); eligible types `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | Database + app | ✅ Enforced (Task 09 design; triggers Task 10) |
+| NR5 | Instant (auto) booking for eligible space types | reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (`CASE WHEN approver_id = -1 THEN 'instant' ELSE 'staff' END`); usage-policy test (Task 09 v2.5) = `(space_type, purpose) ∈ space_type_allowed_purpose` (data-defined eligible set; seeded for `{classroom, computer_lab, project_lab, meeting_room}`) ∧ requester `account_status='active'` ∧ expected_participants ≤ capacity (BR3) ∧ duration ≤ `spaces.max_hours` (NULL = unlimited) ∧ no overlapping confirmed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4); soft-gate (purpose/cap) failures → `pending` fallback | Database + app | ✅ Enforced (Task 09 v2.5 design; procedure Task 11/12) |
 | NR6 | No-overlap invariant holds under concurrency (both pathways) | Enforcement mechanism designed in Task 11 around `uq_bookings_active_overlap` + `trg_bookings_prevent_overlap` | Database (Task 11) | 🔄 Task 11 |
 
 **Note:** See `outputs/03-logical-design-G05.md` §7 for trigger implementation details.
@@ -442,4 +466,4 @@ For conceptual entity/attribute definitions see `docs/entity-registry.md`.
 
 ---
 
-*Last updated: 2026-08-03 — Task 09 (Areas 2–3): reserved system user `-1`; instant/staff origin **derived** from `approver_id = -1` (no stored origin column — keeps 3NF); NR5/NR6; Area 3 reporting confirmed no-schema-change. Area 1 additions (`impact_level`, `maintenance_impact_history`, `booking_advisory_acknowledgement`) included. Per-table status markers for `bookings`/`maintenance` aligned to the 🔓 P2 inventory markers (review fix). Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*
+*Last updated: 2026-08-07 — Task 09 v2.5 (Area 2): `spaces.usage_policy` dropped; `spaces.max_hours` added (per-space instant-booking cap, NULL = no cap); new table `space_type_allowed_purpose` (data-defined instant usage policy, soft value reference); NR5 usage-policy test updated to checks 1–6 with soft-gate `pending` fallback. Previous: reserved system user `-1`, derived instant/staff origin, Area-3 no-schema-change. Remaining Phase 2 work: Task 10 migration, Task 11 concurrency design.*

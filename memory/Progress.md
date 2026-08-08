@@ -25,12 +25,12 @@ description; statuses below reflect the current task state.
 | Task | Deliverable | Output | Status | Depends on |
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
-| Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved | Task 08 |
-| Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ✅ Approved (2026-08-04) | Task 09 |
-| Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | 🔄 In progress | Task 09 |
+| Task 09 | Updated ERD + logical design (+ 3NF re-check) | outputs/09-updated-erd-and-logical-design-G05.md | Approved (v2.5 revision 2026-08-07) | Task 08 |
+| Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | Approved (2026-08-08, v2.5 rev4) | Task 09 |
+| Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | In progress | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
-| Task 14 | Data generator (≥100k bookings) | `outputs/14-data-generator-G05/` | ✅ Approved (2026-08-07) | Task 10 |
+| Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | Approved (2026-08-07) | Task 10 |
 | Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | ⬜ | Task 14, Task 16 |
 | Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ⬜ | Task 14 |
 | — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ⬜ | All tasks |
@@ -92,7 +92,7 @@ _(All resolved — no open questions remain.)_
 | # | Question | Resolution | Date |
 |---|---|---|---|
 | Q1 | Rejection reason — separate column or part of decision note? | Separate `rejection_reason` column | 2026-06-15 |
-| Q2 | Usage policy — free text or coded rules? | Free-text `NVARCHAR(MAX)` | 2026-06-15 |
+| Q2 | Usage policy - free text or coded rules? | Free-text decision superseded by Task 09 v2.5: data-driven space_type_allowed_purpose + spaces.max_hours; usage_policy dropped | 2026-08-07 |
 | Q3 | Maintenance-to-booking interaction — can a space be booked after maintenance is resolved but before status is updated? | Auto-trigger on maintenance resolution + cross-check trigger on booking insert | 2026-06-15 (revised) |
 | Q4 | No-show detection — automatic or manual? | Automatic scheduled job | 2026-06-15 (revised) |
 | Q5 | Building/floor — reference tables or varchar fields? | Free-text `NVARCHAR` fields | 2026-06-15 |
@@ -110,8 +110,8 @@ unresolved question (see AGENTS.md)._
 |---|---|---|---|---|
 | U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligible `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | 2026-08-03 |
 | U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ✅ New table `booking_advisory_acknowledgement` (one row per (booking, advisory)) | 2026-08-03 |
-| U3 | Escalation → pending vs only approved | Task 11 | ✅ Only approved bookings; escalation performs no booking DML, pending bookings stay pending and later approval fails `51002` | 2026-08-04 |
-| U4 | "Semester" reporting window definition | Task 16 | ⬜ pending | — |
+| U3 | Escalation - pending vs only approved | Task 11 | Approved bookings only; escalation performs no booking DML; pending bookings stay pending and later approval fails 51002 | 2026-08-04 |
+| U4 | Semester reporting window definition | Task 16 | Semester 1 [September 1, February 1); Semester 2 [February 1, July 1); summer excluded; Q3 clips duration; Q4 uses start inside window; Monday = 1 | 2026-08-07 |
 | U5 | Space-status derivation from maintenance levels | Task 09 | ✅ `spaces` unchanged; `current_status` recomputed on maintenance INSERT/UPDATE/resolve via priority rule | 2026-08-03 |
 
 ---
