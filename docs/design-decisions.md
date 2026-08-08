@@ -933,14 +933,14 @@ reports); Task 08 C3; Task 09 §4 / Area 3.
 
 The per-space duration cap added in v2.5 is **removed** (no column, no duration gate). Instant usage-policy test reverts to **checks 1–5** with purpose membership
 as the sole soft gate (A09-6 pending fallback). Supersedes only the duration-cap part of the 2026-08-07 v2.5 decision.
-Downstream: Tasks 10 (rev 5), 11 (rev 3.2), 12 (rev 3), 13 shall regenerate against checks 1–5 (see `outputs/09` v2.6 revision log).
+Downstream: Tasks 10 (rev 5), 11 (rev 3.3), 12 (rev 3), 13 shall regenerate against checks 1–5 (see `outputs/09` v2.6 revision log).
 
 ---
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---| 
-| 2026-08-08 | Task 09 **v2.6** — per-space duration cap dropped (column + CHECK); usage-policy test back to **checks 1–5** (soft gate = purpose only; no duration gate); downstream: 10 (rev 5), 11 (rev 3.2), 12 (rev 3), 13 | Agent | Task 09
+| 2026-08-08 | Task 09 **v2.6** — per-space duration cap dropped (column + CHECK); usage-policy test back to **checks 1–5** (soft gate = purpose only; no duration gate); downstream: 10 (rev 5), 11 (rev 3.3), 12 (rev 3), 13 | Agent | Task 09
 | 2026-08-07 | Phase 2 Task 09 v2.5 — usage policy now data-driven: `spaces.usage_policy` free-text dropped (2026-06-15 decision superseded); `spaces.max_hours` added (per-space duration cap, NULL = unlimited, amends 2026-08-03 spaces-unchanged decision); new `space_type_allowed_purpose` junction (data-defined instant eligibility, seeded for the four eligible types); instant test extended to checks 1–6 with soft (purpose/cap) → pending-fallback vs hard (capacity/overlap/out-of-service) → reject | Agent | Task 09 |
 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |
 | 2026-08-03 | Phase 2 — keep `spaces` unchanged; maintenance is the booking authority; recompute `current_status` on maintenance changes (priority rule) | Agent | Task 09 |

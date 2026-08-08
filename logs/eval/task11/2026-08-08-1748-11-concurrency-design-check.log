@@ -1,0 +1,90 @@
+Task 11 — Static Verification Log (revision run: v2.6 alignment, rev 3.2 -> 3.3)
+================================================================================
+File     : logs/eval/task11/2026-08-08-1748-11-concurrency-design-check.log
+Task     : 11 — Concurrency Design
+Group    : G05
+Run mode : revision of rev 3.2 (outputs/11-concurrency-design-G05.md) —
+           aligned to Task 09 v2.6 and Task 10 migration rev 5
+Date     : 2026-08-08
+Status   : PASS (all checks)
+
+Sources re-read this run
+------------------------
+- AGENTS.md, docs/README.md, memory/MEMORY.md
+- memory/Progress.md, memory/ActiveContext.md (task gates, open questions)
+- docs/design-decisions.md (Task 09 v2.6 decision, 2026-08-08; K5 scope-4
+  entry; v2.6 downstream flag rows)
+- .opencode/skills/db-design-pipeline/db-design-pipeline/SKILL.md
+- .opencode/skills/db-design-pipeline/11-concurrency-design/SKILL.md
+  (G1-G7 gates, P1-P5 principles)
+- outputs/08-requirement-change-analysis-G05.md (K1-K5 inventory)
+- outputs/09-updated-erd-and-logical-design-G05.md (v2.6: checks 1-5,
+  soft gate = purpose membership only, no duration gate)
+- outputs/10-schema-migration-G05.sql (rev 5: no max_hours column) +
+  outputs/10-schema-migration-G05-rollback.sql
+- outputs/11-concurrency-design-G05.md (baseline rev 3.2)
+
+Upstream delta applied (Task 09 v2.6 / Task 10 rev 5)
+------------------------------------------------------
+- DD5 row: soft gate = instant check 1 only (purpose membership);
+  v2.5 duration-cap soft gate removed upstream (v2.6 note added).
+- Section 6.3: heading reworded "1:1 codes" -> "cause-family codes";
+  soft-gate note now checks 1 (purpose) only; explicit "v2.5 duration-cap
+  gate no longer exists" statement.
+- Section 7.1 W1: step 2 fast-path soft hint = check 1 (junction
+  membership) only, no max_hours; step 4 re-runs the soft gate (check 1)
+  post-lock; "Soft vs hard" note references Task 09 v2.6 A09-6, check 1.
+- Section 9: procedure-1 soft gate = check 1 (junction), hard gates
+  renumbered checks 2-5 (account active, capacity/BR3, BR1, BR4);
+  return-code line "one per cause-family" (P3).
+- Section 10 T11: purpose-only soft-gate failure; duration sub-case
+  removed (no second sub-case exists in v2.6). G6 conflict->trace note
+  added with same-path homogeneous-pairing rationale (W3-vs-W3,
+  W4-vs-W4 redundant by design).
+- Section 11 assumption: `spaces.max_hours` removed (A09-8); junction
+  seeded for four approved types (A09-7).
+- Section 12 revision log: row 3.3 appended.
+- Left unchanged: strategy (applock), 4 entry points, codes
+  51001-51009, K1-K5 inventory, §6.1 granularity/volume argument.
+
+Checks
+------
+[PASS] G1: heading scan on rewritten file -> `## 1.` .. `## 12.` each once,
+       in order, no duplicates/gaps (Select-String `^## [0-9]+\.`: 12 rows)
+[PASS] G2: forbidden-token scan (--create/--mode/--max_concurrency/
+       user-ratified/this turn/regeneration/overwrite/agent negotiation)
+       -> no matches
+[PASS] G3: citation scan -> no `docs/` references in the deliverable;
+       only deliverable-set outputs (05/08/09/10) referenced
+[PASS] G4: cross-reference spot checks -> §4.1, §4.2, §4.4, §5.1, §5.2,
+       §6.1, §6.3, §7.1-7.5, §8, §9, §10, §11 all resolve against the
+       12 canonical headings and existing sub-sections
+[PASS] G5: error-code claim vs workflow mapping — the two remaining
+       "1:1" hits (sp_getapplock return->code 51005/51006/51007 and
+       §5.3 fragment) are genuinely 1:1 per P4 and are labeled as such;
+       §6.3 table + §7 step tables use only 51001-51009 with the bucket
+       label on 51001 and cause-family wording; no "one cause per code"
+       overclaim remains (heading now "cause-family codes")
+[PASS] G6: conflict->scenario trace present (K1->T1/T10, K2->T2,
+       K3->T3a/b/T4, K4->T8+outcome assertions, K5->T9);
+       homogeneous pairings instant-vs-instant (T1), staff-vs-staff
+       (T10) covered; escalation-vs-escalation / ticket-vs-ticket
+       explicitly explained as redundant by design
+[PASS] G7: lock-granularity rationale + volume grounding under the
+       per-space key space_booking:&lt;space_id&gt; present in §6.1
+       and §11 (Task 14 >=100k bookings over 3 academic years => tens of
+       writes/day per busy space vs 5 s timeout); finer key discussed
+[PASS] entry-point count == 4, matching §9 handoff (instant submit,
+       staff approval, escalation/downgrade, ticket creation)
+[PASS] no full runnable SQL implementation/test scripts embedded
+       (shape fragments only, as designed)
+[PASS] no upstream files modified: outputs/08, 09, 10, registries
+       untouched; docs/design-decisions.md reconciled only — the two
+       Task-09-v2.6 rows' downstream label updated to "11 (rev 3.3)"
+       (stale "rev 3.2" wording replaced, no new row appended)
+[PASS] prior task11 logs superseded: 2026-08-08-1605 and
+       2026-08-08-1647 eval + trajectory rows marked superseded
+       (superseded_by chain), new 2026-08-08-1748 files written
+
+No SQL compile step: Task 11 is a Markdown design document.
+Verification: source re-read + G1-G7 scans recorded above.

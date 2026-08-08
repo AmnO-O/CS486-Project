@@ -105,3 +105,8 @@ Checks
 No SQL compile step: Task 11 is a Markdown design document by definition.
 Verification performed by source re-read + heading/token/citation scans of the
 deliverable.
+
+---------------------------------------------------------------------------
+SUPERSEDED BY: logs/eval/task11/2026-08-08-1605-11-concurrency-design-check.log
+(revision run 2026-08-08 — Task 09 v2.6 / Task 10 rev 5 alignment, rev 3.3).
+Kept for history; do not treat as current verification state.
