@@ -1,0 +1,50 @@
+CS486 G05 - Task 16 (analytical queries) execution/verification log
+Run at: 2026-08-08 06:55 (+07)
+Artifact: outputs/16-analytical-queries-G05.sql
+
+ENVIRONMENT
+  SQL Server: localhost\SQL1
+  Authentication: Windows Authentication (-E)
+  Scratch DB: CS486_G05_T14
+  Dataset: 120000 bookings, 2 maintenance_impact_history rows,
+           45431 booking_advisory_acknowledgement rows
+
+STATIC CHECKS
+  [PASS] Required Q1-Q5 markers exist exactly once each
+  [PASS] Five independently executable GO-terminated query batches
+  [PASS] No schema/index/procedure/trigger DDL or Task 15 measurements
+  [PASS] Q1 uses confirmed non-deleted booking interval overlap
+  [PASS] Q2 uses relational division for every requested facility, excludes
+         confirmed booking conflicts and active out-of-service maintenance,
+         and allows advisory maintenance
+  [PASS] Q3 clips requested booking duration to [semester_start, semester_end)
+  [PASS] Q4 sets DATEFIRST 1; weekday numbering is Monday=1
+  [PASS] Q5 reads advisory-to-out-of-service history events rather than the
+         maintenance current impact level, requires the matching acknowledgement,
+         and does not mutate bookings
+
+LIVE SQL SERVER VALIDATION
+  [PASS] Direct sqlcmd execution of outputs/16-analytical-queries-G05.sql
+         completed without T-SQL errors on CS486_G05_T14
+  [INFO] Supplied example inputs returned:
+         Q1 booking conflicts = 0
+         Q2 available spaces = 2
+         Q3 spaces returned = 120
+         Q3 confirmed booking intervals in selected semester = 901
+         Q4 weekday/hour buckets = 66
+         Q5 affected confirmed bookings = 655
+         Q5 duplicate (history_id, booking_id) pairs = 0
+
+SELF-DETECTED ISSUES AND FIXES
+  1. The first Q2 draft had an AND/OR precedence issue around its required-facility
+     predicate. Replaced with a relational-division EXISTS predicate.
+  2. The first Q5 draft referenced an undeclared escalation-time alias and had a
+     leftover malformed PRINT batch. Rebuilt Q5 from maintenance_impact_history,
+     booking_approvals, bookings, and acknowledgement rows; removed the bad batch.
+  3. sqlcmd output redirection intermittently produced an ODBC TLS connection error.
+     A direct sqlcmd run with the same Windows-authentication connection succeeded;
+     SQL validation evidence above is from that successful direct run.
+
+BLOCKERS / RESIDUAL RISK
+  - None. Q1/Q2 sample inputs are intentionally adjustable declarations; zero or few
+    result rows reflect the supplied example window, not a query failure.

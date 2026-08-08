@@ -20,17 +20,17 @@
 **Phase 2 extends the Phase 1 baseline to a 16-task pipeline.** Source of truth:
 `docs/project_phase2_description.md`. The schema is **unfrozen** for Phase-2 re-design
 (see `docs/design-decisions.md`). Deliverables below follow §3.2 of the Phase 2
-description; all are ⬜ until their task runs.
+description; statuses below reflect the current task state.
 
 | Task | Deliverable | Output | Status | Depends on |
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
 | Task 09 | Updated ERD + logical design (+ 3NF re-check) | `outputs/09-updated-erd-and-logical-design-G05.md` | ✅ Approved | Task 08 |
 | Task 10 | Schema migration | `outputs/10-schema-migration-G05.sql` | ✅ Approved (2026-08-04) | Task 09 |
-| Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | ⬜ | Task 09 |
+| Task 11 | Concurrency design | `outputs/11-concurrency-design-G05.md` | 🔄 In progress | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
-| Task 14 | Data generator (≥100k bookings) | `outputs/14-data-generator-G05/` | ⬜ | Task 10 |
+| Task 14 | Data generator (≥100k bookings) | `outputs/14-data-generator-G05/` | ✅ Approved (2026-08-07) | Task 10 |
 | Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | ⬜ | Task 14, Task 16 |
 | Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ⬜ | Task 14 |
 | — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ⬜ | All tasks |
@@ -110,7 +110,7 @@ unresolved question (see AGENTS.md)._
 |---|---|---|---|---|
 | U1 | Instant-booking eligible space types / usage-policy test | Task 09 | ✅ Eligible `{classroom, computer_lab, project_lab, meeting_room}`; test = space_type eligible ∧ requester account active ∧ expected_participants ≤ capacity (BR3) ∧ no overlapping approved/checked_in/completed booking (BR1) ∧ no overlapping out-of-service maintenance (BR4) | 2026-08-03 |
 | U2 | Advisory-ack storage (attribute vs new table) | Task 09 | ✅ New table `booking_advisory_acknowledgement` (one row per (booking, advisory)) | 2026-08-03 |
-| U3 | Escalation → pending vs only approved | Task 11 | ⬜ pending | — |
+| U3 | Escalation → pending vs only approved | Task 11 | ✅ Only approved bookings; escalation performs no booking DML, pending bookings stay pending and later approval fails `51002` | 2026-08-04 |
 | U4 | "Semester" reporting window definition | Task 16 | ⬜ pending | — |
 | U5 | Space-status derivation from maintenance levels | Task 09 | ✅ `spaces` unchanged; `current_status` recomputed on maintenance INSERT/UPDATE/resolve via priority rule | 2026-08-03 |
 

@@ -793,6 +793,52 @@ K1–K5; recorded K5 decision (2026-08-05); `outputs/11-concurrency-design-G05.m
 
 ---
 
+### Decision: U4 — semester reporting windows and analytical-query semantics
+
+**Task:** 16 (Analytical Queries)
+**Date:** 2026-08-07
+
+**Problem:** Phase 2 requires semester-based reports, but the requirement does not
+specify the semester boundaries, treatment of summer, or how booking intervals that
+cross a reporting boundary contribute to the results. Q3 and Q4 cannot be made
+reproducible without one shared reporting-window definition.
+
+**Options considered:**
+- **Option A: Institution-style fixed academic windows** — deterministic and easy to
+  parameterize; requires an explicit project convention for semester boundaries.
+- **Option B: Arbitrary caller-supplied six-month windows** — flexible, but does not
+  define what the project means by a semester and can produce incomparable reports.
+
+**Decision:** We chose **Option A** with the following project convention:
+
+- Semester 1: September 1 at 00:00 through February 1 at 00:00 of the following
+  calendar year.
+- Semester 2: February 1 at 00:00 through July 1 at 00:00 of the same calendar year.
+- Summer: July 1 through September 1; excluded from semester reports.
+- Every reporting window is represented as the half-open interval
+  **`[semester_start, semester_end)`**. The end timestamp is excluded.
+- Q3 (total approved booking hours per space) includes confirmed bookings whose
+  requested interval overlaps the semester window. Duration is based on
+  `requested_start_time`/`requested_end_time`, clipped to the intersection with the
+  semester window.
+- Q4 (approved bookings by weekday and hour) includes confirmed bookings whose
+  `requested_start_time` falls inside the semester window. Weekday numbering is
+  deterministic with Monday = 1; the hour bucket is the hour of
+  `requested_start_time`.
+- Confirmed statuses for both reports are `approved`, `checked_in`, and `completed`;
+  soft-deleted bookings (`is_deleted = 1`) are excluded.
+
+**Impact:** Task 16 Q3 and Q4 use declared `@semester_start` and `@semester_end`
+parameters with the same half-open-window convention. Q3 reports the usable portion
+of a cross-boundary booking rather than attributing hours outside the semester. Q4
+reports the booking's requested start weekday/hour, so a booking is counted in the
+semester in which it begins. Task 15 must use the same parameter values and window
+semantics when measuring either report.
+
+**Requirement reference:** `docs/project_phase2_description.md` §1.3 (semester
+reports); Task 08 C3; Task 09 §4 / Area 3.
+
+---
 ## Revision log
 
 | Date | Change | By | Task |
@@ -811,3 +857,4 @@ K1–K5; recorded K5 decision (2026-08-05); `outputs/11-concurrency-design-G05.m
 ---
 
 _This document is a living artifact — updated throughout the pipeline as design decisions are made or revised. The decision log is considered locked after SCHEMA FREEZE (end of Task 4); subsequent tasks may append revision entries for implementation-driven adjustments._
+
