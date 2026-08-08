@@ -11,7 +11,13 @@ GO
 -- Baseline : outputs/05-db-definition-G05.sql (Phase 1, Task 05, SCHEMA FREEZE)
 --            + outputs/06-sample-data-G05.sql (existing data context)
 -- Target   : docs/schema-registry.md + outputs/09-updated-erd-and-logical-design-G05.md
---            (Task 09 v2.5, approved 2026-08-07) + docs/design-decisions.md
+--            (Task 09 v2.6, approved 2026-08-08) + docs/design-decisions.md
+--
+-- REVISION v5 (2026-08-08): Task 09 v2.6 removed the v2.5 per-space duration
+-- cap (spaces.max_hours column + CK_spaces_max_hours). This revision NO
+-- LONGER adds the cap column, and the companion rollback has no drop step
+-- for it — the net spaces delta is the usage_policy drop + the new junction
+-- table only (docs/design-decisions.md, 2026-08-08; Task 09 §B.2.3/§B.2.5).
 --
 -- DATA-PRESERVATION PROMISE
 --   - No Phase 1 table is dropped or rebuilt; no booking/maintenance row is
@@ -19,8 +25,8 @@ GO
 --   - All existing maintenance rows are backfilled to impact_level
 --     'out-of-service' (registry default, A09-1) so legacy rows keep their
 --     Phase 1 blocking behavior.
---   - All changes are additive/removal-minimal: 2 new columns (impact_level,
---     max_hours), 3 new tables, 4 new indexes, 9 triggers (6 new + 3
+--   - All changes are additive/removal-minimal: 1 new column (impact_level),
+--     3 new tables, 4 new indexes, 9 triggers (6 new + 3
 --     replaced), 1 reserved seed row (system approver -1), 18 junction seed
 --     rows (space_type_allowed_purpose), plus a one-time recompute of
 --     spaces.current_status under the new trigger-maintained semantics
@@ -34,10 +40,12 @@ GO
 --   PK/FK/UQ/CK/DF, indexes and triggers all match docs/schema-registry.md
 --   for every Phase 1 object. The only registry entries absent from the
 --   baseline are the Phase 2 targets implemented below (impact_level, the
---   three new tables and their indexes, spaces.max_hours, the reserved users
+--   three new tables and their indexes, the reserved users
 --   row user_id = -1) and the one dropped column (spaces.usage_policy, which
 --   the registry no longer lists). No mismatch found -> migration is
---   generated on a verified baseline.
+--   generated on a verified baseline. Note (v2.6): spaces.max_hours is NOT
+--   a target — the v2.5 duration cap was removed, so no cap column is
+--   created by this migration.
 --
 -- DESIGN DECISION MAPPING (docs/design-decisions.md, Task 09)
 --   1. Advisory-ack uniqueness shape: ONE composite UNIQUE constraint
@@ -50,15 +58,15 @@ GO
 --   3. spaces.current_status stays trigger-maintained: replaced
 --      trg_maintenance_completion_space_status with
 --      trg_maintenance_recompute_space_status (INSERT/UPDATE, priority rule);
---      spaces schema changes are limited to v2.5 (max_hours add, usage_policy
---      drop) — the current_status derivation part is unchanged.
---   4. (v2.5) Data-driven usage policy: spaces.max_hours DECIMAL(5,2) NULL
---      CHECK (max_hours > 0) added; spaces.usage_policy NVARCHAR(MAX) free
---      text dropped (2026-06-15 decision superseded); new junction table
+--      the current_status derivation part is unchanged.
+--   4. (v2.6) Data-driven usage policy: spaces.usage_policy NVARCHAR(MAX)
+--      free text dropped (2026-06-15 decision superseded); new junction table
 --      space_type_allowed_purpose (composite PK (space_type, purpose), domain
 --      CHECKs mirroring spaces.space_type and bookings.purpose, soft value
 --      reference — no FK), seeded with the reference rows of Task 09 §B.2.4
---      for {classroom, computer_lab, project_lab, meeting_room}.
+--      for {classroom, computer_lab, project_lab, meeting_room}. The v2.5
+--      per-space duration cap (max_hours + CHECK) was REMOVED in v2.6 — no
+--      duration gate exists; this migration must NOT create the cap column.
 --
 -- TRIGGER BEHAVIOR MAPPING (Task 09 "trigger behavior — Task 10")
 --   - trg_bookings_check_maintenance   (replaced): blocks only overlapping
@@ -192,22 +200,16 @@ END
 GO
 
 -- ============================================================
--- 2b. spaces v2.5 changes:
---     - ADD max_hours DECIMAL(5,2) NULL, CHECK (max_hours > 0) (NULL = no cap)
+-- 2b. spaces v2.6 change:
 --     - DROP usage_policy NVARCHAR(MAX) free text (2026-06-15 decision
---       superseded by Task 09 v2.5; values are not read by any enforcement
---       logic — checked against outputs/05 for index/trigger dependencies
---       first: none exist).
---     Idempotent both ways.
+--       superseded by Task 09 v2.5, retained in v2.6; values are not read
+--       by any enforcement logic — checked against outputs/05 for
+--       index/trigger dependencies first: none exist).
+--     NOTE (v2.6): the v2.5 per-space duration cap (max_hours column +
+--       CK_spaces_max_hours) is NOT added — Task 09 v2.6 removed it, so the
+--       net spaces schema delta is the usage_policy drop only.
+--     Idempotent.
 -- ============================================================
-IF COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
-BEGIN
-    ALTER TABLE dbo.spaces
-        ADD max_hours DECIMAL(5,2) NULL
-            CONSTRAINT CK_spaces_max_hours CHECK (max_hours > 0);
-END
-GO
-
 IF COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NOT NULL
 BEGIN
     ALTER TABLE dbo.spaces DROP COLUMN usage_policy;
@@ -319,7 +321,7 @@ GO
 -- ============================================================
 -- 7. Guarded seed rows
 --    a) Reserved system approver user_id = -1 (NR5, decision point 2).
---       FK department: School Reservation if present, else the lowest
+--       FK department: School Administration if present, else the lowest
 --       department_id; if the baseline has no departments at all, create
 --       School Administration (guarded canonical row).
 --    b) space_type_allowed_purpose reference rows (Task 09 §B.2.4) — guarded
@@ -345,7 +347,7 @@ BEGIN
 END
 GO
 
--- space_type_allowed_purpose reference rows (Task 09 8.B.2.4, 4-types v2.5)
+-- space_type_allowed_purpose reference rows (Task 09 §B.2.4, 4-types v2.5)
 -- Guarded per (space_type, purpose) pair so re-runs and partial user edits
 -- never duplicate or silently drop reference data.
 INSERT INTO dbo.space_type_allowed_purpose (space_type, purpose)
@@ -719,13 +721,13 @@ SELECT '10.2 impact_level' AS check_name,
        'column+DF+CK present, NOT NULL default out-of-service' AS detail;
 GO
 
--- 10.3 v2.5 spaces changes: max_hours added + its CHECK; usage_policy dropped
-SELECT '10.3 spaces v2.5' AS check_name,
-       CASE WHEN COL_LENGTH(N'dbo.spaces', N'max_hours') IS NOT NULL
-             AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.spaces') AND name = N'CK_spaces_max_hours')
-             AND COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NULL
+-- 10.3 spaces v2.6: usage_policy dropped; NO max_hours column (cap removed)
+SELECT '10.3 spaces v2.6' AS check_name,
+       CASE WHEN COL_LENGTH(N'dbo.spaces', N'usage_policy') IS NULL
+             AND COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
+             AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.spaces') AND name = N'CK_spaces_max_hours')
             THEN 'PASS' ELSE 'FAIL' END AS result,
-       'max_hours present with CK; usage_policy removed' AS detail;
+       'usage_policy removed; duration-cap column absent (v2.6)' AS detail;
 GO
 
 -- 10.4 legacy maintenance rows backfilled (none may be NULL)
@@ -801,7 +803,7 @@ SELECT '10.9 system approver' AS check_name,
 GO
 
 -- 10.10 space_type_allowed_purpose seed coverage: exactly the 18 approved
---      (space_type, purpose) pairs of Task 09 2.B.2.4, and none outside them
+--      (space_type, purpose) pairs of Task 09 §B.2.4, and none outside them
 SELECT '10.10 seed' AS check_name,
        CASE WHEN
             (SELECT COUNT(*) FROM dbo.space_type_allowed_purpose) = 18
@@ -831,11 +833,11 @@ WHERE s.current_status NOT IN ('retired','temporarily_closed')
   AND s.current_status <> 'under_maintenance';
 GO
 
--- 10.12 Semantics smoke checks (advisory/out-of-service + ack + history + v2.5
+-- 10.12 Semantics smoke checks (advisory/out-of-service + ack + history +
 --       junction). Self-contained: every sub-test runs inside its own
 --       transaction that is always rolled back. Expected-error sub-tests are
 --       isolated per skill notes. Skips gracefully if no baseline spaces/users.
---       v2.5 extra: bundle a junction-domain smoke (a space_type outside the
+--       Extra: bundle a junction-domain smoke (a space_type outside the
 --       spaces.space_type domain must be rejected by CK).
 IF NOT EXISTS (SELECT 1 FROM dbo.spaces) OR NOT EXISTS (SELECT 1 FROM dbo.users WHERE account_status = 'active' AND user_id <> -1)
 BEGIN
