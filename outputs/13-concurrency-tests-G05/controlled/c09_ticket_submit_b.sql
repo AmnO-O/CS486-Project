@@ -1,8 +1,13 @@
 -- ============================================================
 -- T13 CONTROLLED c09 session B (K5/T9)
--- Order-1: instant submit overlapping the order-1 OOS ticket -> 51002.
--- Order-2: instant submit on W5b BEFORE its ticket exists -> rc=0
--- (the K5 submit-wins branch).
+-- Order-1: instant submit overlapping A's order-1 ticket (created at
+--          ~+0 s, start W5-1h, NULL completion) -> 51002 (BR4).
+-- Order-2: A deletes T1 at ~+6 s; on the now-clean window B confirms
+--          first (~+8 s) -> rc=0/instant=1 (submit-wins). A's T2
+--          (~+10 s) then lands over the confirmed booking: rc=0
+--          (ticket creation does no booking DML), and the booking
+--          carries zero ack rows (acks are written only on the
+--          submit/approve paths, never by report #4).
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -12,7 +17,7 @@ DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requeste
 DECLARE @w5 DATETIME2 = DATEADD(day, 680, SYSDATETIME());
 DECLARE @bk INT, @ok BIT, @rc INT, @msg NVARCHAR(500);
 
--- Order-1: submit overlapping the order-1 ticket.
+-- Order-1: overlapping A's T1 window.
 WAITFOR DELAY '00:00:02';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s5, @requester_id = @rq, @purpose = 'meeting',
@@ -26,8 +31,8 @@ IF @rc = 51002
 ELSE
     PRINT 'FAIL c09-B: expected 51002, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null');
 
--- Order-2: submit wins on W5b (ticket not yet created there).
-WAITFOR DELAY '00:00:01';
+-- Order-2: A deletes T1 at ~+6 s, T2 arrives only at ~+10 s.
+WAITFOR DELAY '00:00:06';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s5, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 10,
@@ -41,17 +46,19 @@ ELSE
     PRINT 'FAIL c09-B: expected 0/1, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null')
         + ' instant=' + ISNULL(CAST(@ok AS VARCHAR(1)),'null');
 
--- Wait for A's order-2 ticket, then confirm the booking is untouched
--- and carries NO acknowledgement (report #4 scope note — the K5
--- submit-wins booking is not discoverable through the escalation
--- ack join).
-WAITFOR DELAY '00:00:03';
+-- A's T2 created at ~+10 s; then verify no booking DML and zero acks.
+WAITFOR DELAY '00:00:05';
+DECLARE @st VARCHAR(50) = (SELECT status FROM dbo.bookings WHERE booking_id = @bk);
 DECLARE @ack_cnt INT = (SELECT COUNT(*) FROM dbo.booking_advisory_acknowledgement
                         WHERE booking_id = @bk);
-IF @ack_cnt = 0
-    PRINT 'PASS c09-B: submit-wins booking has zero ack rows (outside report #4 scope, per Task 11 §7.4).';
+IF @st = 'approved'
+    PRINT 'PASS c09-B: booking still approved (ticket creation did no DML).';
 ELSE
-    PRINT 'c09-B: note: ' + CAST(@ack_cnt AS VARCHAR(5)) + ' ack row(s) present.';
+    PRINT 'FAIL c09-B: booking status = ' + ISNULL(@st,'null');
+IF @ack_cnt = 0
+    PRINT 'PASS c09-B: zero ack rows on the submit-wins booking.';
+ELSE
+    PRINT 'FAIL c09-B: ' + CAST(@ack_cnt AS VARCHAR(5)) + ' ack row(s) present.';
 
 -- Cleanup: remove the confirmed booking (approvals cascade).
 IF @bk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @bk)
