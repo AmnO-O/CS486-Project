@@ -1,0 +1,70 @@
+Task 12 CONCURRENCY IMPLEMENTATION — REVISION 3 (rev3) compile + smoke evidence
+Date/time (UTC+7): 2026-08-08-2000
+Database: SQL Server (localhost), scratch DB CS486_G05_Task12_Rev3 (recreated)
+
+REVISION DRIVER: Task 09 v2.6 / Task 10 rev5 / Task 11 v3.4 were revised upstream.
+  - Task 09 v2.6 dropped the v2.5 per-space duration cap (spaces.max_hours).
+  - Task 10 rev5 migration no longer creates the cap column (10.3 PASS: column
+    absent in the scratch DB).
+  - Task 11 v3.3/v3.4: instant soft gate = check 1 ONLY (purpose membership in
+    space_type_allowed_purpose); no duration gate anywhere.
+  The previous Task 12 body still referenced check 1+4 (junction membership +
+    max_hours cap) and preflight 0.2 demanded COL_LENGTH(spaces.max_hours),
+    which would have FAILED against the approved rev5 schema -> revise.
+
+REVISION 3 CHANGES (vs rev2):
+  1. Header: upstream refs updated to Task 10 rev5 / Task 11 v3.4 / Task 09 v2.6;
+     revision note added.
+  2. Preflight 0.2: dropped the now-invalid spaces.max_hours existence demand;
+     now checks impact_level + completion_time + bookings.status +
+     spaces.current_status (all present).
+  3. New preflight 0.2b: THROW 52015 if spaces.max_hours IS NOT NULL (stale v2.5
+     schema guard — the v2.6 contract has no cap column).
+  4. usp_booking_instant_submit: removed @max_hours / @duration_min / @cap_ok and
+     the check-1+4 soft-gate logic; post-lock soft-gate recompute is now check 1
+     only (@instant_accepted := purpose_allowed). Comments updated to v2.6.
+  No other contract change (W2/W3/W4, lock handling, result codes 51001-51009,
+  N6 explicitness, SESSION_CONTEXT ownership unchanged).
+
+Chain: 05-db-definition -> 06-sample-data -> 10-schema-migration -> 12-concurrency-implementation
+All batches run with sqlcmd -b (exit on error). Server: localhost, -E.
+
+Run 1 (fresh DB) — selected lines:
+  T12-PREFLIGHT-OK
+  T12-PROCEDURES-CREATED
+  SMOKE entry points exist: usp_booking_instant_submit(10), usp_booking_approve(7),
+                             usp_maintenance_report(8), usp_maintenance_set_impact_level(5)
+  PASS S1   instant submit auto-approved (rc=0, instant=1)
+  PASS S2   overlap rejected 51003 (BR1)
+  PASS S3a  OOS ticket created (W4, rc=0)
+  PASS S3b  booking against OOS ticket rejected 51002 (BR4)
+  PASS S4   purpose not eligible -> pending fallback (rc=0, instant=0)
+  PASS S5   staff approval succeeded (rc=0)
+  PASS S5b  rejection without reason refuses 51001 (BR7)
+  PASS S6a  advisory ticket created (no-lock path)
+  PASS S6b  escalation recorded with SESSION_CONTEXT attribution (NR3)
+  PASS S6c  no-op same-level returns 0, no new history row
+  PASS S6d  downgrade back to advisory (rc=0)
+  PASS invariant: zero overlapping confirmed bookings on the smoke space
+  SMOKE-OK
+
+Run 2 (idempotency re-run, N8): T12-PREFLIGHT-OK + identical smoke PASS set again.
+Post-run audit: future bookings 0; smoke maintenance 0; impact history 0;
+ack_rows 0; procedures = 4 (CREATE OR ALTER refreshed, no duplicates).
+
+Task 11 contract re-audited against v3.4:
+  - Entry points: exactly the 4 §9 procedures, none extra, none dropped.
+  - Lock: space_booking:<space_id>, Exclusive, Transaction-owned, 5 s;
+    -1/2/-3 -> 51005/51006/51007; -999 -> THROW 52999 (expect -999 impossible);
+    1205 caught -> 51007.
+  - Result codes: 0 / 51001..51009 one-per-cause-family; BR4 -> 51002, BR1 ->
+    51003, NR2 -> 51004, BR2 -> 51008, BR3 -> 51009.
+  - Soft gate v2.6 = check 1 (junction) only -> pending fallback (rc 0,
+    @instant_accepted = 0); hard gates checks 2-5 -> deterministic codes.
+  - Post-lock authoritative re-reads before every write; READ COMMITTED unchanged.
+  - BR2 eligibility requires space not retired/temporarily_closed (51008).
+  - No schema change: script creates/alters procedures only; no table/column/
+    index/trigger changes (verified: no CREATE/ALTER TABLE, no DROP, no
+    CREATE INDEX in the script).
+  - No Task 13 (two-session) scripts, no data-generator, no index timing, no
+    analytical queries in this file.

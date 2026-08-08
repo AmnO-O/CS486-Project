@@ -8,12 +8,20 @@ GO
 -- Task 12: Phase 2 Concurrency Implementation (entry points)
 -- Target: SQL Server 2019+ (T-SQL)
 --
+-- REVISION 3 (2026-08-08): aligned with Task 09 v2.6 / Task 10 rev5 / Task 11 v3.4 —
+--   the v2.5 per-space duration cap (spaces.max_hours) was REMOVED upstream, so the
+--   instant soft gate is now check 1 ONLY (purpose membership in
+--   space_type_allowed_purpose); there is no duration gate anywhere (W1 step 2/4,
+--   preflight 0.2, comments). No other contract change.
+--
 -- Upstream files implemented:
---   - outputs/10-schema-migration-G05.sql   (approved 2026-08-08, rev4 — Phase 2 schema)
---   - outputs/11-concurrency-design-G05.md  (approved 2026-08-08 — the implementation
---     contract: workflows W1..W4, Section 6.3 result codes, Section 9 Task 12 handoff)
---   - docs/design-decisions.md              (Task 11 revision v2.0: 4 entry points;
---     K5 closed via usp_maintenance_report)
+--   - outputs/10-schema-migration-G05.sql   (approved 2026-08-08, rev5 — Phase 2 schema,
+--     Task 09 v2.6: no max_hours column, junction space_type_allowed_purpose seeded)
+--   - outputs/11-concurrency-design-G05.md  (approved 2026-08-08, v3.3/v3.4 — the
+--     implementation contract: workflows W1..W4, Section 6.3 result codes,
+--     Section 9 Task 12 handoff)
+--   - docs/design-decisions.md              (Task 11 revision v3.4: 4 entry points;
+--     K5 closed via usp_maintenance_report; Task 09 v2.6 decision 2026-08-08)
 --   - docs/tech-stack.md                    (SQL Server 2019+, T-SQL naming conventions)
 --
 -- SELECTED STRATEGY (Task 11 Section 5.2 / Section 6):
@@ -81,12 +89,23 @@ BEGIN
 END
 GO
 
--- 0.2 Required Phase 2 columns exist
+-- 0.2 Required Phase 2 columns exist (Task 09 v2.6: NO max_hours — the v2.5
+--     duration cap was removed; the only data-driven instant gate is the junction)
 IF COL_LENGTH(N'dbo.maintenance', N'impact_level') IS NULL
-   OR COL_LENGTH(N'dbo.spaces', N'max_hours') IS NULL
+   OR COL_LENGTH(N'dbo.maintenance', N'completion_time') IS NULL
    OR COL_LENGTH(N'dbo.bookings', N'status') IS NULL
+   OR COL_LENGTH(N'dbo.spaces', N'current_status') IS NULL
 BEGIN
-    THROW 52011, 'Task 12 preflight: required column missing (impact_level / max_hours / status).', 1;
+    THROW 52011, 'Task 12 preflight: required column missing (impact_level / completion_time / bookings.status / spaces.current_status).', 1;
+END
+GO
+
+-- 0.2b v2.6 assumption check: the duration-cap column must NOT exist. If
+--      spaces.max_hours is present, the database was migrated with the v2.5
+--      migration, not Task 10 rev5 — the soft-gate contract would differ.
+IF COL_LENGTH(N'dbo.spaces', N'max_hours') IS NOT NULL
+BEGIN
+    THROW 52015, 'Task 12 preflight: spaces.max_hours exists — this is the v2.5 schema. Re-run outputs/10-schema-migration-G05.sql rev5 (Task 09 v2.6 has no duration cap).', 1;
 END
 GO
 
@@ -128,7 +147,8 @@ GO
 -- ============================================================
 -- 1. ENTRY POINT: dbo.usp_booking_instant_submit (Task 11 W1)
 --    Instant booking submission with optional auto-approval.
---    Soft gates (junction membership, duration cap) only demote to
+--    Soft gate (Task 09 v2.6 check 1 ONLY — purpose membership in
+--    space_type_allowed_purpose; NO duration gate) only demotes to
 --    pending (@instant_accepted = 0, not an error); hard gates
 --    (BR2/BR3/BR1/BR4/requester active) return deterministic codes.
 -- ============================================================
@@ -156,12 +176,9 @@ BEGIN
     DECLARE @lock_resource NVARCHAR(128);
     DECLARE @space_type VARCHAR(50);
     DECLARE @capacity INT;
-    DECLARE @max_hours DECIMAL(5,2);
-    DECLARE @duration_min INT;
     DECLARE @space_closed BIT = 0;
     DECLARE @requester_active BIT = 0;
     DECLARE @purpose_allowed BIT = 0;
-    DECLARE @cap_ok BIT = 0;
 
     BEGIN TRY
         -- W1 step 1: input validation (lock-free, deterministic 51001)
@@ -185,11 +202,12 @@ BEGIN
             RETURN;
         END
 
-        -- W1 step 2: fast-path soft hints (Task 09 v2.5 checks 1 + 4).
+        -- W1 step 2: fast-path soft hint (Task 09 v2.6 check 1 — purpose
+        -- membership ONLY; the v2.5 duration-cap gate was removed upstream, so
+        -- there is no duration check here).
         -- Advisory only; the authoritative decision is recomputed later under the lock.
         SELECT @space_type = s.space_type,
                @capacity   = s.capacity,
-               @max_hours  = s.max_hours,
                @space_closed = CASE WHEN s.current_status IN ('retired','temporarily_closed') THEN 1 ELSE 0 END
         FROM dbo.spaces s
         WHERE s.space_id = @space_id;
@@ -211,7 +229,7 @@ BEGIN
             RETURN;
         END
 
-        SET @duration_min = DATEDIFF(MINUTE, @requested_start_time, @requested_end_time);
+        -- No duration gate exists in Task 09 v2.6 (v2.5 max_hours cap removed upstream).
 
         -- W1 step 3: transaction + per-space application lock (serialization point)
         SET @lock_resource = N'space_booking:' + CONVERT(NVARCHAR(12), @space_id);
@@ -251,10 +269,9 @@ BEGIN
         END
 
         -- W1 step 4: post-lock authoritative re-checks (BR2/BR3/requester,
-        -- and re-run of the soft gates on the fresh read)
+        -- and re-run of the soft gate on the fresh read)
         SELECT @space_type  = s.space_type,
                @capacity    = s.capacity,
-               @max_hours   = s.max_hours,
                @space_closed = CASE WHEN s.current_status IN ('retired','temporarily_closed') THEN 1 ELSE 0 END
         FROM dbo.spaces s
         WHERE s.space_id = @space_id;
@@ -292,13 +309,13 @@ BEGIN
             RETURN;
         END
 
-        -- soft gates recomputed from the authoritative row (checks 1 + 4)
+        -- soft gate recomputed from the authoritative row (Task 09 v2.6 check 1
+        -- only — purpose membership; no duration gate exists)
         SET @purpose_allowed = CASE WHEN EXISTS (
                 SELECT 1 FROM dbo.space_type_allowed_purpose p
                 WHERE p.space_type = @space_type AND p.purpose = @purpose
             ) THEN 1 ELSE 0 END;
-        SET @cap_ok = CASE WHEN (@max_hours IS NULL OR @duration_min <= @max_hours * 60) THEN 1 ELSE 0 END;
-        SET @instant_accepted = CASE WHEN @purpose_allowed = 1 AND @cap_ok = 1 THEN 1 ELSE 0 END;
+        SET @instant_accepted = @purpose_allowed;
 
         -- W1 step 5: BR1 re-check (confirmed bookings, interval overlap)
         IF EXISTS (
