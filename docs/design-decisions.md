@@ -936,6 +936,32 @@ as the sole soft gate (A09-6 pending fallback). Supersedes only the duration-cap
 Downstream: Tasks 10 (rev 5), 11 (rev 3.3), 12 (rev 3), 13 shall regenerate against checks 1–5 (see `outputs/09` v2.6 revision log).
 
 ---
+
+### Decision: Task 13 — FULL baseline scope (no baseline exclusion)
+
+**Task:** 13 (Concurrency Tests — generation round) · **Date:** 2026-08-08
+
+The comparison suite ships a complete `baseline/` twin for every race family
+covered by the `controlled/` set — no conflict family is delivered without its
+raw twin. This includes two families a narrower reading might have skipped:
+- T5 lock-blocking baseline (`b05`): raw no-applock session B blocks
+  unboundedly behind session A's long transaction — expected outcome is
+  "blocked until A commits" (no 51005/retry contract), demonstrating the
+  timeout+retry contract (T5/T7) exists only in the controlled path.
+- staff-vs-staff same-conflict baseline (`b10`): the same-space approval race
+  through two staff sessions, raw — both cast "passing" pre-checks and one
+  real-world double approval would materialize; the controlled twin asserts
+  first-approval rc=0 / second 51003.
+
+This keeps the README coverage matrix closed (each conflict row → bNN + cNN)
+and lets the methodology claim (control fixes what raw breaks) be demonstrated,
+not asserted. Exclusions recorded as NONE this run.
+
+**Impact:** `outputs/13-concurrency-tests-G05/` contains b01/b02/b03/b05/b09/b10
++ c01..c13 (+c03b submit-wins order); run_all.sh executes baseline pairs first,
+then controlled pairs, then the invariant audit.
+
+---
 ## Revision log
 
 | Date | Change | By | Task |
