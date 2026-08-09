@@ -54,24 +54,24 @@ instant-booking sessions targeting space $S_1$ from 10:00 to 12:00.
 \FloatBarrier
 
 At step~4, session A's write remains uncommitted and is therefore not visible
-to session B under the default \texttt{READ COMMITTED} isolation level. Both
+to session B under the default READ COMMITTED isolation level. Both
 transactions pass the availability rule (BR1) and maintenance rule (BR4), then
 commit overlapping approved bookings on $S_1$, violating BR1 and NR6.
 
 The interval between the availability check and the confirmation write is the
 \emph{race window}. Because no lock spans this interval, neither existing
 backstop fully closes it. The trigger
-\texttt{trg\_bookings\_prevent\_overlap} cannot validate against a competing
+\textbf{trg\_bookings\_prevent\_overlap} cannot validate against a competing
 row that is not yet visible, while the filtered unique index
-\texttt{uq\_bookings\_active\_overlap} prevents only identical start times.
+\textbf{uq\_bookings\_active\_overlap} prevents only identical start times.
 It does not reject intersecting intervals with different start times, such as
 10:00--12:00 and 11:00--13:00.
 
 The same check--write race occurs across other booking and maintenance paths.
 K2 covers instant submission racing with staff approval. K3 occurs when a
-maintenance record is escalated to \texttt{out-of-service} during an in-flight
+maintenance record is escalated to \textbf{out-of-service} during an in-flight
 confirmation, while K5 covers insertion of a new maintenance ticket whose
-default impact is \texttt{out-of-service}. K4 is a read-side conflict in which
+default impact is \textbf{out-of-service}. K4 is a read-side conflict in which
 room-finder availability becomes stale before the user acts.
 Table~\ref{tab:conflicts} summarizes the complete conflict inventory.
 

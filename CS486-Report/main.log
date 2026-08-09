@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.8.4)  8 AUG 2026 15:24
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.8.4)  9 AUG 2026 08:16
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -723,65 +723,4 @@ Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
 LaTeX Info: Redefining \url on input line 4805.
 \XeTeXLinkMargin=\dimen307
  (c:/Users/LAPTOP_CUA_NAM/AppData/Roaming/TinyTeX/texmf-dist/tex/generic/bitset/bitset.sty
-Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
- (c:/Users/LAPTOP_CUA_NAM/AppData/Roaming/TinyTeX/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty
-Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO)
-))
-\Fld@menulength=\count340
-\Field@Width=\dimen308
-\Fld@charsize=\dimen309
-Package hyperref Info: Hyper figures OFF on input line 6091.
-Package hyperref Info: Link nesting OFF on input line 6096.
-Package hyperref Info: Hyper index ON on input line 6099.
-Package hyperref Info: backreferencing OFF on input line 6106.
-Package hyperref Info: Link coloring OFF on input line 6111.
-Package hyperref Info: Link coloring with OCG OFF on input line 6116.
-Package hyperref Info: PDF/A mode OFF on input line 6121.
-\Hy@abspage=\count341
-\c@Item=\count342
-\c@Hfootnote=\count343
-)
-Package hyperref Info: Driver (autodetected): hpdftex.
- (c:/Users/LAPTOP_CUA_NAM/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/hyperref/hpdftex.def
-File: hpdftex.def 2026-06-17 v7.01r Hyperref driver for pdfTeX
-\Fld@listcount=\count344
-\c@bookmark@seq@number=\count345
- (c:/Users/LAPTOP_CUA_NAM/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty
-Package: rerunfilecheck 2025-06-21 v1.11 Rerun checks for auxiliary files (HO)
- (c:/Users/LAPTOP_CUA_NAM/AppData/Roaming/TinyTeX/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty
-Package: uniquecounter 2019/12/15 v1.4 Provide unlimited unique counter (HO)
-)
-Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 284.
-)
-\Hy@SectionHShift=\skip115
-) (c:/Users/LAPTOP_CUA_NAM/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/bigfoot/bigfoot.sty
-Package: bigfoot 2015/08/30 2.1 makes footnotes work
-
-
-Package hyperref Warning: Option `hyperfootnotes' has already been used,
-(hyperref)                setting the option has no effect on input line 61.
-
-
-! LaTeX Error: File `manyfoot.sty' not found.
-
-Type X to quit or <RETURN> to proceed,
-or enter new name. (Default extension: sty)
-
-Enter file name: 
-! Emergency stop.
-<read *> 
-         
-l.67 \RequirePackage
-                    {suffix}^^M
-*** (cannot \read from terminal in nonstop modes)
-
- 
-Here is how much of TeX's memory you used:
- 26887 strings out of 469149
- 521125 string characters out of 5457575
- 974055 words of memory out of 5000000
- 55527 multiletter control sequences out of 15000+600000
- 629681 words of font info for 44 fonts, out of 8000000 for 9000
- 14 hyphenation exceptions out of 8191
- 116i,0n,121p,442b,264s stack positions out of 10000i,1000n,20000p,200000b,200000s
-!  ==> Fatal error occurred, no output PDF file produced!
+Package: bitset 2019/12/09 v1.3 Handle bit-vector data
