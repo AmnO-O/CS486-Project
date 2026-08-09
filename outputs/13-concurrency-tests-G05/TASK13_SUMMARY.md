@@ -116,7 +116,27 @@ docker exec -w /tmp/t13 -e PATH="/opt/mssql-tools18/bin:/usr/local/sbin:/usr/loc
 
 ---
 
-### **b) Tái hiện từng Kịch bản Demo Nổi bật (Copy & Paste vào Terminal):**
+### **b) Tái hiện các Kịch bản Baseline (Chưa kiểm soát - RAW DML):**
+
+#### **1. Baseline `b01` (Instant vs Instant Submit — Lỗi Trigger `Msg 50000` & Lock Blocking):**
+```bash
+docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b01_instant_instant_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b01_instant_instant_b.sql & wait)
+```
+*Hiện tượng:* Session B bị treo 4 giây, sau đó nổ lỗi `Msg 50000` từ Trigger `trg_bookings_prevent_overlap` và bị abort batch.
+
+#### **2. Baseline `b02` (Instant Submit vs Staff Approval — Duyệt đè không có AppLock):**
+```bash
+docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b02_instant_vs_staff_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b02_instant_vs_staff_b.sql & wait)
+```
+
+#### **3. Baseline `b03` (Escalation vs In-flight Submit — Leo thang bảo trì không có AppLock):**
+```bash
+docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b03_escalation_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b03_escalation_b.sql & wait)
+```
+
+---
+
+### **c) Tái hiện các Kịch bản Controlled Nổi bật (Task 12 Procedures):**
 
 #### **1. Demo Controlled `c01` (Instant vs Instant Submit — 2 Đơn instant nộp đua nhau):**
 ```bash
