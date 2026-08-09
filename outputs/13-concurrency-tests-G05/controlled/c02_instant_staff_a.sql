@@ -48,7 +48,8 @@ ELSE
     PRINT 'FAIL c02-A: expected 51003, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null')
         + ' msg=' + ISNULL(@msg,'null');
 
--- Cleanup: restore fixture (approval rows removed, bookings back to pending).
+-- Cleanup: restore fixture (approval rows and created instant bookings removed, bookings back to pending).
 DELETE FROM dbo.booking_approvals WHERE booking_id IN (@pb2a, @pb2b);
+DELETE FROM dbo.bookings WHERE space_id = @s2 AND status = 'approved';
 UPDATE dbo.bookings SET status = 'pending' WHERE booking_id IN (@pb2a, @pb2b);
 PRINT 'c02-A: fixture restored.';

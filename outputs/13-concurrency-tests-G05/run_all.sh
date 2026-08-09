@@ -22,6 +22,7 @@ cd "$DIR"
 
 TS="$(date +%Y%m%d-%H%M%S)"
 mkdir -p results
+rm -rf results/*
 
 SQLCMD=(sqlcmd -b -C -I -S "${SQLCMD_SERVER:-localhost}" -d "${SQLCMD_DB:-CampusSpaceDB}")
 if [ -n "${SQLCMD_USER:-}" ]; then SQLCMD+=(-U "$SQLCMD_USER"); fi
@@ -72,19 +73,40 @@ run1 audit_invariant.sql
 echo "== T13 run: teardown =="
 run1 99_cleanup.sql
 
-# Summary
+# Summary & Log Aggregation
 fails=0
 for f in results/${TS}-*.log; do
-    if grep -q 'FAIL' "$f"; then
+    if [ -f "$f" ] && grep -q 'FAIL' "$f"; then
         echo "FAIL present in: $(basename "$f")"
         fails=$((fails+1))
     fi
 done
 
+SUMMARY_FILE="results/SUMMARY.log"
+{
+    echo "============================================================"
+    echo " CS486 G05 Task 13 — AGGREGATED TEST SUITE RUN LOG ($TS)"
+    echo "============================================================"
+    for f in results/${TS}-*.log; do
+        if [ -f "$f" ] && [ "$f" != "$SUMMARY_FILE" ]; then
+            echo ""
+            echo "------------------------------------------------------------"
+            echo " SESSION LOG: $(basename "$f")"
+            echo "------------------------------------------------------------"
+            cat "$f"
+        fi
+    done
+} > "$SUMMARY_FILE"
+
+# Keep only the aggregated master SUMMARY.log
+rm -f results/${TS}-*.log
+
 if [ "$fails" -eq 0 ] && [ "$overall" -eq 0 ]; then
-    echo "T13-SUITE: PASS (all scenario + audit logs clean). Results in results/${TS}-*.log"
+    echo "T13-SUITE: PASS (all scenario + audit logs clean)."
+    echo "Aggregated summary log created at: $SUMMARY_FILE"
     exit 0
 else
     echo "T13-SUITE: FAIL — $fails log(s) with FAIL lines, runner errors: $overall"
+    echo "Aggregated summary log created at: $SUMMARY_FILE"
     exit 1
 fi

@@ -1,0 +1,200 @@
+============================================================
+ CS486 G05 Task 13 — CONCURRENCY SUITE MASTER SUMMARY LOG
+============================================================
+
+------------------------------------------------------------
+ SCENARIO LOG: 00_setup.sql
+------------------------------------------------------------
+Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_prevent_overlap, Line 19
+Overlapping booking exists for this space and time range.
+Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 139
+The transaction ended in the trigger. The batch has been aborted.
+
+------------------------------------------------------------
+ SCENARIO LOG: b01: Baseline Instant vs Instant
+------------------------------------------------------------
+[Session A Output]:
+b01-A: holding confirmed booking 1348 uncommitted at W1.
+b01-A: committed booking 1348.
+FAIL b01-A: expected overlapping-confirmed violation, found Q_BR1=0.
+b01-A: cleanup done.
+[Session B Output]:
+Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_prevent_overlap, Line 19
+Overlapping booking exists for this space and time range.
+Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 21
+The transaction ended in the trigger. The batch has been aborted.
+
+------------------------------------------------------------
+ SCENARIO LOG: b02: Baseline Instant vs Staff
+------------------------------------------------------------
+[Session A Output]:
+b02-A: fiat approval of PB2a held in transaction...
+b02-A: PB2a approval committed.
+b02-A: unexpected — PB2b approval succeeded without control.
+b02-A: no persisted overlap this round (order-1 raced); recorded.
+b02-A: fixture restored.
+[Session B Output]:
+Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_prevent_overlap, Line 19
+Overlapping booking exists for this space and time range.
+Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 22
+The transaction ended in the trigger. The batch has been aborted.
+
+------------------------------------------------------------
+ SCENARIO LOG: b03: Baseline Escalation vs Submit
+------------------------------------------------------------
+[Session A Output]:
+b03-A: escalation held uncommitted...
+b03-A: M3 escalated (out-of-service) after B committed its booking.
+b03-A: no persist overlap recorded this round.
+b03-A: M3 restored to advisory.
+[Session B Output]:
+Msg 547, Level 16, State 1, Server 0684dcc66472, Line 18
+The INSERT statement conflicted with the FOREIGN KEY constraint "FK_bookings_space_id". The conflict occurred in database "CampusSpaceDB", table "dbo.spaces", column 'space_id'.
+
+------------------------------------------------------------
+ SCENARIO LOG: b05: Baseline Blocking
+------------------------------------------------------------
+[Session A Output]:
+b05-A: holding row lock on M3 (no app lock, no timeout contract).
+b05-A: released after 18 s.
+[Session B Output]:
+FAIL b05-B: expected a long silent wait, got 2s.
+b05-B: done.
+
+------------------------------------------------------------
+ SCENARIO LOG: b09: Baseline Ticket vs Submit
+------------------------------------------------------------
+[Session A Output]:
+b09-A: OOS ticket 1096 held uncommitted...
+b09-A: OOS ticket committed after B.obtain:
+b09-A: 0 violations recorded this run.
+b09-A: ticket removed.
+[Session B Output]:
+Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_check_maintenance, Line 29
+Overlapping out-of-service maintenance exists for this space.
+Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 17
+The transaction ended in the trigger. The batch has been aborted.
+
+------------------------------------------------------------
+ SCENARIO LOG: b10: Baseline Staff vs Staff
+------------------------------------------------------------
+[Session A Output]:
+Msg 53010, Level 16, State 1, Server 0684dcc66472, Line 26
+Task 13 b10: PB10a/PB10b fixture missing (run 00_setup.sql).
+[Session B Output]:
+Msg 53010, Level 16, State 1, Server 0684dcc66472, Line 18
+Task 13 b10: PB10b fixture missing.
+
+------------------------------------------------------------
+ SCENARIO LOG: c01: Controlled Instant vs Instant
+------------------------------------------------------------
+[Session A Output]:
+PASS c01-A: instant approved (winner side).
+PASS c01-A: exactly one booking confirmed on the window (race serialized).
+PASS c01-A: audit Q_BR1 = 0 (no overlapping confirmed bookings).
+c01-A: cleanup done.
+[Session B Output]:
+Msg 52999, Level 16, State 1, Server 0684dcc66472, Procedure dbo.usp_booking_instant_submit, Line 123
+usp_booking_instant_submit: invalid sp_getapplock return.
+
+------------------------------------------------------------
+ SCENARIO LOG: c02: Controlled Instant vs Staff
+------------------------------------------------------------
+[Session A Output]:
+PASS c02-A: approve(PB2a) rc=0 (order-1 approve wins).
+PASS c02-A: approve(PB2b) rc=51003 (conflict with confirmed instant).
+c02-A: fixture restored.
+[Session B Output]:
+PASS c02-B: W2A instant submit rc=51003 (approved booking exists).
+PASS c02-B: W2B instant submit rc=0, instant=1 (order-2 submit wins).
+
+------------------------------------------------------------
+ SCENARIO LOG: c03: Controlled Escalation vs Submit
+------------------------------------------------------------
+[Session A Output]:
+PASS c03-A: escalation rc=0 (M3 -> out-of-service).
+c03: M3 restored to advisory (fixture next in c03-B).
+[Session B Output]:
+PASS c03-B: instant submit rc=51002 (BR4: OOS overlap).
+PASS c03-B: PB3 still pending (escalation performs no booking DML, DD1).
+PASS c03-B: approve(PB3) rc=51002 (BR4 on the W2 path).
+c03-B: done (fixture left as-is: PB3 pending, M3 advisory-restored in A).
+
+------------------------------------------------------------
+ SCENARIO LOG: c03b: Controlled Submit Wins vs Escalation
+------------------------------------------------------------
+[Session A Output]:
+PASS c03b-A: escalation rc=0 after the booking was confirmed (DD1: no booking DML).
+c03b-A: M3 restored to advisory.
+[Session B Output]:
+FAIL c03b-B: expected 0/1, got rc=51002
+FAIL c03b-B: expected 51002, got rc=0
+c03b-B: cleanup done.
+
+------------------------------------------------------------
+ SCENARIO LOG: c05: Controlled Timeout & Retry
+------------------------------------------------------------
+[Session A Output]:
+c05-A: holding app lock on space_booking:... for 20 s.
+c05-A: lock released.
+[Session B Output]:
+PASS c05-B: first report rc=51005 (app lock timeout, retryable).
+PASS c05-B: retry rc=0, ticket 1109 created (T7).
+c05-B: cleanup done.
+
+------------------------------------------------------------
+ SCENARIO LOG: c09: Controlled Ticket vs Submit
+------------------------------------------------------------
+[Session A Output]:
+PASS c09-A: order-1 ticket rc=0 (maintenance_id=1112).
+c09-A: order-1 ticket deleted (fixture for order-2 clean).
+PASS c09-A: order-2 ticket rc=0 (ticket creation does no booking DML).
+c09-A: cleanup done.
+[Session B Output]:
+PASS c09-B: order-1 submit rc=51002 (BR4 against ticket).
+PASS c09-B: order-2 submit rc=0/instant=1 (submit-wins branch).
+PASS c09-B: booking still approved (ticket creation did no DML).
+PASS c09-B: zero ack rows on the submit-wins booking.
+c09-B: cleanup done.
+
+------------------------------------------------------------
+ SCENARIO LOG: c10: Controlled Staff vs Staff
+------------------------------------------------------------
+[Session A Output]:
+PASS c10-A: approve(PB10a) rc=0 (first wins).
+c10-A: fixture restored.
+[Session B Output]:
+PASS c10-B: approve(PB10b) rc=51003 (overlap with the first approval).
+c10-B: done (fixture restored in A).
+
+------------------------------------------------------------
+ SCENARIO LOG: c11: Controlled Soft-gate Fallback
+------------------------------------------------------------
+PASS c11: rc=0, @instant_accepted=0 (soft gate -> fallback).
+PASS c11: booking stays pending with NO auto-approval row.
+c11: cleanup done.
+
+------------------------------------------------------------
+ SCENARIO LOG: c12: Controlled Fallback vs Instant
+------------------------------------------------------------
+PASS c12-1: fallback rc=0, instant=0 (pending).
+PASS c12-2: instant rc=0, instant=1 (pending does not block).
+PASS c12-3: approve(fallback) rc=51003 (BR1).
+c12: cleanup done.
+
+------------------------------------------------------------
+ SCENARIO LOG: c13: Controlled Advisory Ack Repair
+------------------------------------------------------------
+PASS c13: approve rc=0 (W2 repaired the missing acks, no 51004).
+PASS c13: ack row(s) exist for (PB13, M9), acknowledged_by = requester (1 row(s)).
+c13: cleanup done.
+
+------------------------------------------------------------
+ SCENARIO LOG: audit_invariant.sql
+------------------------------------------------------------
+PASS suite-audit: zero overlapping confirmed pairs AND zero confirmed-vs-OOS overlaps on TEST-13 spaces.
+
+------------------------------------------------------------
+ SCENARIO LOG: 99_cleanup.sql
+------------------------------------------------------------
+T13-CLEANUP-OK: all TEST-13 rows removed.
