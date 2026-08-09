@@ -1,0 +1,56 @@
+Task 12 CONCURRENCY IMPLEMENTATION — rev3 COMPLIANCE RE-VERIFICATION (contract check, zero file change)
+Date/time (UTC+7): 2026-08-09
+Database: SQL Server 2022 (localhost), scratch DB CS486_G05_Task12_Rev4 (created + dropped)
+
+PURPOSE: re-verify outputs/12-concurrency-implementation-G05.sql (approved rev3,
+2026-08-08) against the current contract — Task 09 v2.6 / Task 10 rev5 /
+Task 11 v3.4 — without touching the file.
+
+CONTRACT COMPLIANCE AUDIT (read-only, against file + upstream):
+  1. Entry points: exactly the 4 Task 11 §9 procedures, signatures intact
+     (instant_submit 10 params, approve 7, set_impact_level 5, report 8) — verified
+     live: usp_booking_approve(7), usp_booking_instant_submit(10),
+     usp_maintenance_report(8), usp_maintenance_set_impact_level(5).
+  2. Lock contract: space_booking:<space_id>, Exclusive, Transaction-owned,
+     5 000 ms; -1/-2/-3 -> 51005/51006/51007 (incl. 1205 catch); -999 -> THROW 52999;
+     acquired inside the same transaction as final check+write; no manual release.
+  3. Result codes 0/51001-51009, one per cause family, 1:1 with Task 11 §6.3:
+     BR1->51003, BR4->51002, NR2->51004, BR2->51008, BR3->51009, BR7->51001,
+     soft-gate failure = rc 0 + @instant_accepted=0 (no code). No stale
+     50001/50004/51011/usage_policy/CONTEXT_INFO leftovers (grep: absent).
+  4. Soft gate = check 1 only (purpose membership in space_type_allowed_purpose),
+     fast path + post-lock recompute; NO duration gate (v2.5 max_hours removed
+     upstream); preflight 0.2b THROW 52015 guards the stale v2.5 column.
+  5. Post-lock authoritative re-reads before every write (W1 step 4, W2 steps 3-4,
+     W3 step 3, W4 step 3); NR2 ack-repair inside the critical section before the
+     51004 gate (W2 step 5).
+  6. No schema change: procedures only (CREATE OR ALTER, idempotent).
+  7. Preflight THROWs 52010-52015 (>=50000, disjoint from business codes 51001-51009
+     and Task 13 530xx).
+
+CHAIN (sqlcmd -b, exit-on-error): 05-db-definition -> 06-sample-data ->
+10-schema-migration -> 12-concurrency-implementation (twice) on fresh DB.
+
+Run 1 (fresh DB):
+  T12-PREFLIGHT-OK
+  T12-PROCEDURES-CREATED
+  PASS S1   instant submit auto-approved (rc=0, instant=1)
+  PASS S2   overlap rejected 51003 (BR1)
+  PASS S3a  OOS ticket created (W4, rc=0)
+  PASS S3b  booking against OOS ticket rejected 51002 (BR4)
+  PASS S4   purpose not eligible -> pending fallback (rc=0, instant=0)
+  PASS S5   staff approval succeeded (rc=0)
+  PASS S5b  rejection without reason refuses 51001 (BR7)
+  PASS S6a  advisory ticket created (no-lock path)
+  PASS S6b  escalation recorded with SESSION_CONTEXT attribution (NR3)
+  PASS S6c  no-op same-level returns 0, no new history row
+  PASS S6d  downgrade back to advisory (rc=0)
+  SMOKE-OK
+
+Run 2 (idempotency re-run, N8): identical PASS set again.
+
+Post-run audit: smoke_maintenance 0; impact_history 0; ack_rows 0; no far-future
+bookings (<300 d); procedures = 4 (no duplicates); scratch DB dropped.
+
+VERDICT: rev3 fully compliant with Task 09 v2.6 / Task 10 rev5 / Task 11 v3.4.
+No drift found; no file change applied. A rev4 would only bump the header marker.

@@ -5,7 +5,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 
 ## Current phase
 **Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-08 v2.6; Task 10 ✅ 2026-08-08 rev4 (v2.6 → rev5 pending); Task 11 ✅ 2026-08-08; Task 12 🔄; Task 14 ✅ 2026-08-07; Task 16 ✅ 2026-08-08; Task 15 🔄**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-08 v2.6; Task 10 ✅ 2026-08-08 rev5 (v2.6); Task 11 ✅ 2026-08-08; Task 12 ✅ 2026-08-08 rev3; Task 14 ✅ 2026-08-07; Task 16 ✅ 2026-08-08; Task 15 🔄**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -34,25 +34,33 @@ for the affected tables (Option B, `docs/design-decisions.md`).
   Downstream: Task 10 rev 5 (no cap column), Task 11 rev 3.2, Task 12 rev 3,
   Task 13 re-generated against checks 1–5.
 - Task 10 output: outputs/10-schema-migration-G05.sql + companion rollback
-  outputs/10-schema-migration-G05-rollback.sql ✅ Approved 2026-08-08 (revision 4).
-  Data-preserving Phase-2 delta plus Task 09 v2.5 changes: maintenance.impact_level,
-  spaces.max_hours with CHECK, dropped spaces.usage_policy, new
+  outputs/10-schema-migration-G05-rollback.sql ✅ Approved 2026-08-08 (revision 5,
+  Task 09 v2.6: no max_hours column anywhere; v2.5 cap dropped). Data-preserving
+  Phase-2 delta plus Task 09 v2.5 changes: maintenance.impact_level,
   maintenance_impact_history, booking_advisory_acknowledgement, and
   space_type_allowed_purpose with guarded seed rows; reserved system approver
-  user_id = -1, required indexes/triggers, and validation checks. **v2.6 flag:** needs
-  rev 5 — remove the cap column + its CHECK; instantiability test = checks 1–5. Scratch-DB cycle
+  user_id = -1, required indexes/triggers, and validation checks. Scratch-DB cycle
   baseline → migration → idempotent re-run → rollback passed; post-rollback counts
   equal baseline with no data loss. Evidence under logs/trajectory/task10/ and
   logs/eval/task10/.
 - Task 11 output: outputs/11-concurrency-design-G05.md ✅ Approved 2026-08-08.
-  v2.0, entry-point scope 4: `usp_booking_instant_submit`, `usp_booking_approve`,
+  v3.4, entry-point scope 4: `usp_booking_instant_submit`, `usp_booking_approve`,
   `usp_maintenance_set_impact_level`, `usp_maintenance_report`; per-space
   transaction-owned `sys.sp_getapplock` (`space_booking:<space_id>`, Exclusive,
-  5 s), READ COMMITTED, deterministic result codes 50001–50004 rejection family,
-  51005 lock timeout, 51006 lock cancelled, 51011 unexpected; U3 synced
-  (escalation affects approved only); K5 closed via 4th entry point; handoff to
-  Task 12 (procedures table §9).
-- Task 12 output: outputs/12-concurrency-implementation-G05.sql 🔄 In progress.
+  5 s), READ COMMITTED, deterministic result codes 51001–51009 (one cause family
+  per code), 51005/51006 retryable, 51007 restart; soft gate = check 1 (purpose
+  membership) only (v2.6); K5 closed via usp_maintenance_report; handoff to
+  Task 12 (procedures table §9) and Task 13 (test guidance §10).
+- Task 12 output: outputs/12-concurrency-implementation-G05.sql ✅ Approved
+  2026-08-08 (rev3, aligned 09 v2.6 / 10 rev5 / 11 v3.4). Exactly the 4 entry
+  points — transaction-owned `sp_getapplock` per-space, codes 0/51001–51009,
+  W2 NR2-ack repair, SESSION_CONTEXT attribution, preflight 0.2b guards the
+  v2.6 no-max_hours schema; procedures-only (no schema change). Verified: compile
+  + smoke S1–S6d + idempotent re-run on scratch CS486_G05_Task12_Rev3 (evidence
+  logs/eval/task12/2026-08-08-2000-12-concurrency-implementation-rev3.log).
+- Task 13 output: outputs/13-concurrency-tests-G05/ generated 2026-08-08 (static QA
+  only; NOT yet live-run; result table in README §5 empty; baseline b01 audit-vs-
+  cleanup ordering + WAITFOR sync to re-check in the first live run). Not approved.
 - Task 14 output: outputs/14-data-generator-G05/ ✅ Approved 2026-08-07.
   Generated 120,000 bookings; manifest confirms 45,431 advisory acknowledgements
   and 64,607 confirmed bookings.
@@ -67,6 +75,8 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. Complete Task 12 — concurrency implementation (`outputs/12-concurrency-implementation-G05.sql`).
-2. Then Task 13 — concurrency tests.
-3. Continue Task 15 — index tuning report (`outputs/15-index-tuning-report-G05.md`): in progress.
+1. Task 13 — concurrency tests (`outputs/13-concurrency-tests-G05/`): suite
+   generated + statically QA'd; needs a live run on SQL Server (docker + sqlcmd)
+   to fill README §5, after fixing the b01/c01 audit-vs-cleanup ordering and
+   WAITFOR-sync issues found in the recheck. Then Task 13 handshake.
+2. Continue Task 15 — index tuning report (`outputs/15-index-tuning-report-G05.md`): in progress.

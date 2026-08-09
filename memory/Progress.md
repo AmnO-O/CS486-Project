@@ -26,9 +26,9 @@ description; statuses below reflect the current task state.
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
 | Task 09 | Updated ERD + logical design (+ 3NF re-check) | outputs/09-updated-erd-and-logical-design-G05.md | ✅ Approved (v2.6 revision 2026-08-08) | Task 08 |
-| Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | Approved (2026-08-08, v2.5 rev4) | Task 09 |
-| Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | ✅ Approved (2026-08-08, v2.0 scope 4) | Task 09 |
-| Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ⬜ | Task 11 |
+| Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | ✅ Approved (2026-08-08, rev5 — Task 09 v2.6, no duration cap) | Task 09 |
+| Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | ✅ Approved (2026-08-08, v3.4 — 4 entry points) | Task 09 |
+| Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ✅ Approved (2026-08-08, rev3 — aligned 09 v2.6 / 10 rev5 / 11 v3.4) | Task 11 |
 | Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
 | Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | Approved (2026-08-07) | Task 10 |
 | Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | 🔄 In progress | Task 14, Task 16 ✅ |
@@ -62,6 +62,7 @@ Do NOT generate DDL or sample data before this gate.
 | Date | Decision | Reason |
 |---|---|---|
 | 2026-08-08 | Task 09 v2.6 — per-space duration cap dropped (column + CHECK); instant usage-policy test back to checks 1–5 (soft gate = purpose membership only; no duration gate); downstream: 10 rev5, 11 rev3.2, 12 rev3, 13 | Post-Task 09 handshake (v2.6 revision) |
+| 2026-08-08 | Task 12 approved — concurrency implementation rev3: 4 entry points per Task 11 §9, per-space `sp_getapplock` (`space_booking:<space_id>`, Exclusive, 5 s), codes 0/51001–51009 per §6.3, soft gate = check 1 (purpose membership) only, NR2-ack repair in W2, no schema change (procedures only); compiled + smoke (S1–S6d PASS) + idempotent re-run on scratch DB CS486_G05_Task12_Rev3 | Post-Task 12 handshake (rev3; aligned 09 v2.6 / 10 rev5 / 11 v3.4) |
 | 2026-08-08 | Task 11 approved — v2.0 concurrency design, 4 entry points (`usp_booking_instant_submit`, `usp_booking_approve`, `usp_maintenance_set_impact_level`, `usp_maintenance_report`), per-space transaction-owned `sp_getapplock`, codes 51001–51011 | Post-Task 11 handshake |
 | 2026-08-04 | Task 10 approved — Phase 2 schema migration (delta on Phase 1 baseline) + rollback script, compiled & verified on a scratch DB | Post-Task 10 handshake |
 | 2026-08-04 | `changed_by` audit mechanism = `SESSION_CONTEXT(N'current_user_id')` via `sys.sp_set_session_context` (not `CONTEXT_INFO()` byte packing); fallback to reserved system user `-1`; session-scoped → app layer must set/clear per unit of work (connection-pooling leak risk, handoff to Task 11/12) | Reviewer feedback — SQL Server 2016+ recommended mechanism |
