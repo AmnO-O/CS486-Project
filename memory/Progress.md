@@ -26,17 +26,10 @@ description; statuses below reflect the current task state.
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
 | Task 09 | Updated ERD + logical design (+ 3NF re-check) | outputs/09-updated-erd-and-logical-design-G05.md | ✅ Approved (v2.6 revision 2026-08-08) | Task 08 |
-<<<<<<< HEAD
-| Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | Approved (2026-08-08, v2.5 rev4) | Task 09 |
-| Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | ✅ Approved (2026-08-08, v2.0 scope 4) | Task 09 |
-| Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ✅ Approved (rev3, 2026-08-08) | Task 11 |
-| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ✅ Approved (2026-08-08, full baseline scope, no exclusion) | Task 12 |
-=======
 | Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | ✅ Approved (2026-08-08, rev5 — Task 09 v2.6, no duration cap) | Task 09 |
 | Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | ✅ Approved (2026-08-08, v3.4 — 4 entry points) | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ✅ Approved (2026-08-08, rev3 — aligned 09 v2.6 / 10 rev5 / 11 v3.4) | Task 11 |
-| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
->>>>>>> origin/main
+| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ✅ Approved (2026-08-08, full baseline scope, no exclusion) | Task 12 |
 | Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | Approved (2026-08-07) | Task 10 |
 | Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | 🔄 In progress | Task 14, Task 16 ✅ |
 | Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ✅ Approved (2026-08-08, trajectory 2026-08-08-0655) | Task 14 |
