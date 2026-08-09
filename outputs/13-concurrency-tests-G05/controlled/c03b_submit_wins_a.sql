@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c03b (T3b — K3 submit-wins order)
 -- Task 12: usp_booking_instant_submit then usp_maintenance_set_impact_level.
@@ -19,9 +21,8 @@ IF @m3 IS NULL
 DECLARE @rc INT, @msg NVARCHAR(500);
 
 -- B confirms its booking at ~+2 s while M3 is advisory; wait for it.
-WAITFOR DELAY '00:00:04';
-
-EXEC sys.sp_set_session_context N'current_user_id', (SELECT TOP 1 user_id FROM dbo.users WHERE email=N'test13.staff@campus.edu');
+DECLARE @st INT = (SELECT TOP 1 user_id FROM dbo.users WHERE email=N'test13.staff@campus.edu');
+EXEC sys.sp_set_session_context N'current_user_id', @st;
 EXEC dbo.usp_maintenance_set_impact_level
     @maintenance_id = @m3, @new_impact_level = 'out-of-service',
     @reason = N'c03b submit-wins', @result_code = @rc OUTPUT, @message = @msg OUTPUT;

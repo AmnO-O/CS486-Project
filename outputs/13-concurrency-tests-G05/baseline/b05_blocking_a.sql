@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b05 (lock-contract — no concurrency control)
 -- There is NO application lock in the raw world, so there is NO

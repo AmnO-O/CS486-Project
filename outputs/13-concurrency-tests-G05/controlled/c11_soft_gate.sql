@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c11 (T11) — soft-gate fallback (single session)
 -- Task 12: usp_booking_instant_submit with a purpose NOT in
@@ -12,12 +14,13 @@ SET XACT_ABORT ON;
 DECLARE @s6 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-06-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
 DECLARE @w6 DATETIME2 = DATEADD(day, 700, SYSDATETIME());
+DECLARE @w6_end DATETIME2 = DATEADD(hour, 2, @w6);
 DECLARE @bk INT, @ok BIT, @rc INT, @msg NVARCHAR(500);
 
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s6, @requester_id = @rq, @purpose = 'lecture',   -- not allowed for meeting_room
     @expected_participants = 10,
-    @requested_start_time = @w6, @requested_end_time = DATEADD(hour, 2, @w6),
+    @requested_start_time = @w6, @requested_end_time = @w6_end,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 

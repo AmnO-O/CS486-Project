@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b02 session B (K2 — no concurrency control)
 -- Inserts TWO confirmed bookings overlapping the pending PB2a/PB2b

@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c03b session B (T3b — K3 submit-wins order)
 -- B confirms while M3 is advisory; then, after A escalates, any
@@ -9,6 +11,10 @@ SET XACT_ABORT ON;
 DECLARE @s3 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-03-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
 DECLARE @w3 DATETIME2 = DATEADD(day, 640, SYSDATETIME());
+DECLARE @w3_s1 DATETIME2 = DATEADD(hour, 4, @w3);
+DECLARE @w3_e1 DATETIME2 = DATEADD(hour, 5, @w3);
+DECLARE @w3_s2 DATETIME2 = DATEADD(hour, 6, @w3);
+DECLARE @w3_e2 DATETIME2 = DATEADD(hour, 7, @w3);
 DECLARE @b1 INT, @o1 BIT, @r1 INT, @m1 NVARCHAR(500);
 DECLARE @b2 INT, @o2 BIT, @r2 INT, @m2 NVARCHAR(500);
 
@@ -17,8 +23,8 @@ WAITFOR DELAY '00:00:02';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s3, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 5,
-    @requested_start_time = DATEADD(hour, 4, @w3),
-    @requested_end_time = DATEADD(hour, 5, @w3),
+    @requested_start_time = @w3_s1,
+    @requested_end_time = @w3_e1,
     @booking_id = @b1 OUTPUT, @instant_accepted = @o1 OUTPUT,
     @result_code = @r1 OUTPUT, @message = @m1 OUTPUT;
 IF @r1 = 0 AND @o1 = 1
@@ -34,8 +40,8 @@ WAITFOR DELAY '00:00:06';   -- A escalates at ~+4 s, restores at ~+10 s
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s3, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 10,
-    @requested_start_time = DATEADD(hour, 6, @w3),
-    @requested_end_time = DATEADD(hour, 7, @w3),
+    @requested_start_time = @w3_s2,
+    @requested_end_time = @w3_e2,
     @booking_id = @b2 OUTPUT, @instant_accepted = @o2 OUTPUT,
     @result_code = @r2 OUTPUT, @message = @m2 OUTPUT;
 IF @r2 = 51002

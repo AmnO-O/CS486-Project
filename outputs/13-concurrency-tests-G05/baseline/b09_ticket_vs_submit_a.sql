@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b09 (K5 — no concurrency control)
 -- out-of-service ticket creation vs a booking submit, raw SQL:

@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b10 session B (staff vs staff, no control)
 -- Approves PB10b (overlaps PB10a) while A's approval of PB10a is

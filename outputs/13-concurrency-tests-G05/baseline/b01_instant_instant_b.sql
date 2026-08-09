@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b01 session B (K1 — no concurrency control)
 -- Inserts a CONFIRMED booking overlapping A's still-uncommitted row.

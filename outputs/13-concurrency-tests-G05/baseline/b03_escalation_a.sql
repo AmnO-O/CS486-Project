@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b03 (K3 — no concurrency control)
 -- Escalation (advisory -> out-of-service) vs an in-flight booking:

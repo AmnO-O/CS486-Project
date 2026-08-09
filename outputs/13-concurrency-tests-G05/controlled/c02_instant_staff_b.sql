@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c02 session B (K2)
 -- Order-1: instant submit overlapping W2A after A approved PB2a -> 51003.
@@ -8,8 +10,15 @@ SET XACT_ABORT ON;
 
 DECLARE @s2  INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-02-MR');
 DECLARE @rq  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
-DECLARE @w2a DATETIME2 = DATEADD(day, 620, SYSDATETIME());
-DECLARE @w2b DATETIME2 = DATEADD(day, 621, SYSDATETIME());
+
+DECLARE @w2a DATETIME2, @w2b DATETIME2;
+SELECT TOP 1 @w2a = requested_start_time FROM dbo.bookings WHERE space_id = @s2 AND status = 'pending' ORDER BY requested_start_time ASC;
+SELECT TOP 1 @w2b = requested_start_time FROM dbo.bookings WHERE space_id = @s2 AND status = 'pending' AND requested_start_time > @w2a ORDER BY requested_start_time ASC;
+
+DECLARE @w2a_start DATETIME2 = DATEADD(minute, 30, @w2a);
+DECLARE @w2a_end   DATETIME2 = DATEADD(hour, 1, @w2a_start);
+DECLARE @w2b_start DATETIME2 = DATEADD(minute, 30, @w2b);
+DECLARE @w2b_end   DATETIME2 = DATEADD(hour, 1, @w2b_start);
 DECLARE @bk INT, @ok BIT, @rc INT, @msg NVARCHAR(500);
 
 -- Order-1: A approved PB2a at ~+1 s; submit W2A overlapping it.
@@ -17,8 +26,8 @@ WAITFOR DELAY '00:00:02';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s2, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 5,
-    @requested_start_time = DATEADD(minute, 30, @w2a),
-    @requested_end_time = DATEADD(hour, 1, DATEADD(minute, 30, @w2a)),
+    @requested_start_time = @w2a_start,
+    @requested_end_time = @w2a_end,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 IF @rc = 51003
@@ -31,8 +40,8 @@ WAITFOR DELAY '00:00:01';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s2, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 10,
-    @requested_start_time = DATEADD(minute, 30, @w2b),
-    @requested_end_time = DATEADD(hour, 1, DATEADD(minute, 30, @w2b)),
+    @requested_start_time = @w2b_start,
+    @requested_end_time = @w2b_end,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 IF @rc = 0 AND @ok = 1

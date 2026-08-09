@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c13 (T13) — advisory ack repair inside W2
 -- Single session: PB13 (pending) overlaps an active advisory M9 whose

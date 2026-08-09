@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c09 session B (K5/T9)
 -- Order-1: instant submit overlapping A's order-1 ticket (created at
@@ -15,6 +17,10 @@ SET XACT_ABORT ON;
 DECLARE @s5 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-05-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
 DECLARE @w5 DATETIME2 = DATEADD(day, 680, SYSDATETIME());
+DECLARE @w5_s1 DATETIME2 = DATEADD(minute, 30, @w5);
+DECLARE @w5_e1 DATETIME2 = DATEADD(hour, 1, @w5_s1);
+DECLARE @w5_s2 DATETIME2 = DATEADD(hour, 2, @w5);
+DECLARE @w5_e2 DATETIME2 = DATEADD(hour, 3, @w5);
 DECLARE @bk INT, @ok BIT, @rc INT, @msg NVARCHAR(500);
 
 -- Order-1: overlapping A's T1 window.
@@ -22,8 +28,8 @@ WAITFOR DELAY '00:00:02';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s5, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 5,
-    @requested_start_time = DATEADD(minute, 30, @w5),
-    @requested_end_time = DATEADD(hour, 1, DATEADD(minute, 30, @w5)),
+    @requested_start_time = @w5_s1,
+    @requested_end_time = @w5_e1,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 IF @rc = 51002
@@ -36,8 +42,8 @@ WAITFOR DELAY '00:00:06';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s5, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 10,
-    @requested_start_time = DATEADD(hour, 2, @w5),
-    @requested_end_time = DATEADD(hour, 3, @w5),
+    @requested_start_time = @w5_s2,
+    @requested_end_time = @w5_e2,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 IF @rc = 0 AND @ok = 1

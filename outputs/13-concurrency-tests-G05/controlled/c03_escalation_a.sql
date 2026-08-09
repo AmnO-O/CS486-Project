@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c03 (K3/DD1/T4) — escalation vs in-flight submit
 -- Task 12: usp_maintenance_set_impact_level / usp_booking_instant_submit.
@@ -17,8 +19,8 @@ IF @m3 IS NULL
 
 DECLARE @rc INT, @msg NVARCHAR(500);
 
--- Escalate NOW (session A acts first; B's submit runs at ~+2 s).
-EXEC sys.sp_set_session_context N'current_user_id', (SELECT TOP 1 user_id FROM dbo.users WHERE email=N'test13.staff@campus.edu');
+DECLARE @st INT = (SELECT TOP 1 user_id FROM dbo.users WHERE email=N'test13.staff@campus.edu');
+EXEC sys.sp_set_session_context N'current_user_id', @st;
 EXEC dbo.usp_maintenance_set_impact_level
     @maintenance_id = @m3, @new_impact_level = 'out-of-service',
     @reason = N'c03 escalate-wins', @result_code = @rc OUTPUT, @message = @msg OUTPUT;

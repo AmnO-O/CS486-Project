@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- CS486 G05 — Campus Space Management System
 -- Task 13: Concurrency Tests — audit_invariant.sql (suite-wide)

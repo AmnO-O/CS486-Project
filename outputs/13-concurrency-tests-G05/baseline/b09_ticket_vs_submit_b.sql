@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b09 session B (K5 — no concurrency control)
 -- Inserts the confirmed booking overlapping the OOS ticket while the

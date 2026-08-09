@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c09 (K5/T9) — ticket creation vs instant submit
 -- Task 12: usp_maintenance_report vs usp_booking_instant_submit.
@@ -20,8 +22,9 @@ SET XACT_ABORT ON;
 
 DECLARE @s5 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-05-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
-DECLARE @w5 DATETIME2 = DATEADD(day, 680, SYSDATETIME())   -- W5 = +680 days
-                  , @w5b DATETIME2 = DATEADD(hour, 2, @w5); -- order-2 window
+DECLARE @w5 DATETIME2 = DATEADD(day, 680, SYSDATETIME());  -- W5 = +680 days
+DECLARE @w5_st DATETIME2 = DATEADD(hour, -1, @w5);
+DECLARE @w5b DATETIME2 = DATEADD(hour, 2, @w5); -- order-2 window
 
 DECLARE @tk INT, @rc INT, @msg NVARCHAR(500);
 
@@ -29,7 +32,7 @@ DECLARE @tk INT, @rc INT, @msg NVARCHAR(500);
 EXEC dbo.usp_maintenance_report
     @space_id = @s5, @reporter_id = @rq,
     @problem_description = N'c09 order-1 OOS ticket',
-    @start_time = DATEADD(hour, -1, @w5), @impact_level = 'out-of-service',
+    @start_time = @w5_st, @impact_level = 'out-of-service',
     @maintenance_id = @tk OUTPUT, @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 IF @rc = 0 AND @tk IS NOT NULL
     PRINT 'PASS c09-A: order-1 ticket rc=0 (maintenance_id=' + CAST(@tk AS VARCHAR(12)) + ').';

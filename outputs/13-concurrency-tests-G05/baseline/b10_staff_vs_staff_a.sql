@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b10 (T10 shape — staff vs staff, no control)
 -- Two raw approvals of two DIFFERENT pending bookings with OVERLAPPING

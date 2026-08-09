@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c05 (T5/T7) — app lock timeout + retry
 -- Task 12: usp_maintenance_report with sp_getapplock 5 s timeout.
@@ -10,11 +12,12 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
 DECLARE @s4 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-04-MR');
+DECLARE @res NVARCHAR(255) = N'space_booking:' + CONVERT(NVARCHAR(12), @s4);
 DECLARE @lock_rc INT;
 
 BEGIN TRANSACTION;
     EXEC @lock_rc = sys.sp_getapplock
-        @Resource = N'space_booking:' + CONVERT(NVARCHAR(12), @s4),
+        @Resource = @res,
         @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
     IF @lock_rc <> 0   -- hold only if we own it
         ROLLBACK TRANSACTION;

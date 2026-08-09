@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b05 session B (no timeout/retry contract)
 -- Waits on the row A holds. No applock -> no 51005; the UPDATE

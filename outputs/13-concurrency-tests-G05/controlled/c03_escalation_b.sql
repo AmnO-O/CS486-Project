@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c03 session B (K3/DD1/T4)
 -- Order-1: instant submit inside the (already escalated) M3 window
@@ -11,8 +13,11 @@ SET XACT_ABORT ON;
 DECLARE @s3  INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-03-MR');
 DECLARE @rq  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
 DECLARE @st  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.staff@campus.edu');
-DECLARE @w3  DATETIME2 = DATEADD(day, 640, SYSDATETIME());
-DECLARE @pb3 INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s3 AND requested_start_time = @w3 AND status = 'pending');
+DECLARE @w3  DATETIME2;
+DECLARE @pb3 INT;
+SELECT TOP 1 @pb3 = booking_id, @w3 = requested_start_time FROM dbo.bookings WHERE space_id = @s3 AND status = 'pending';
+DECLARE @w3_start DATETIME2 = DATEADD(minute, 30, @w3);
+DECLARE @w3_end   DATETIME2 = DATEADD(hour, 1, @w3_start);
 
 IF @pb3 IS NULL
     THROW 53031, N'Task 13 c03: PB3 missing.', 1;
@@ -24,8 +29,8 @@ WAITFOR DELAY '00:00:02';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s3, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 5,
-    @requested_start_time = DATEADD(minute, 30, @w3),
-    @requested_end_time = DATEADD(hour, 1, DATEADD(minute, 30, @w3)),
+    @requested_start_time = @w3_start,
+    @requested_end_time = @w3_end,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 IF @rc = 51002

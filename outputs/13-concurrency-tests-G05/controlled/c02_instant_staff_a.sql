@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c02 (K2) — instant submit vs staff approval
 -- Task 12: usp_booking_instant_submit vs usp_booking_approve,
@@ -12,10 +14,10 @@ SET XACT_ABORT ON;
 
 DECLARE @s2   INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-02-MR');
 DECLARE @st   INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.staff@campus.edu');
-DECLARE @w2a  DATETIME2 = DATEADD(day, 620, SYSDATETIME());
-DECLARE @w2b  DATETIME2 = DATEADD(day, 621, SYSDATETIME());
-DECLARE @pb2a INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s2 AND requested_start_time = @w2a AND status = 'pending');
-DECLARE @pb2b INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s2 AND requested_start_time = @w2b AND status = 'pending');
+
+DECLARE @pb2a INT, @pb2b INT;
+SELECT TOP 1 @pb2a = booking_id FROM dbo.bookings WHERE space_id = @s2 AND status = 'pending' ORDER BY requested_start_time ASC;
+SELECT TOP 1 @pb2b = booking_id FROM dbo.bookings WHERE space_id = @s2 AND status = 'pending' AND booking_id <> @pb2a ORDER BY requested_start_time ASC;
 
 IF @pb2a IS NULL OR @pb2b IS NULL
     THROW 53020, N'Task 13 c02: PB2a/PB2b fixture missing (run 00_setup.sql).', 1;

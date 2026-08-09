@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b01 (K1 — no concurrency control)
 -- Two raw INSERTs of CONFIRMED bookings on the same space,

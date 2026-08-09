@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c01 (K1) — instant submit vs instant submit
 -- Task 12: usp_booking_instant_submit with per-space applock.
@@ -13,6 +15,7 @@ SET XACT_ABORT ON;
 DECLARE @s1  INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-01-MR');
 DECLARE @rq  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
 DECLARE @w1  DATETIME2 = DATEADD(day, 600, SYSDATETIME());
+DECLARE @w1_end DATETIME2 = DATEADD(hour, 2, @w1);
 DECLARE @bk  INT, @ok  BIT, @rc  INT, @msg NVARCHAR(500);
 
 -- Both sessions fire nearly simultaneously (runner launches pairs in
@@ -20,7 +23,7 @@ DECLARE @bk  INT, @ok  BIT, @rc  INT, @msg NVARCHAR(500);
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s1, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 10,
-    @requested_start_time = @w1, @requested_end_time = DATEADD(hour, 2, @w1),
+    @requested_start_time = @w1, @requested_end_time = @w1_end,
     @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
     @result_code = @rc OUTPUT, @message = @msg OUTPUT;
 

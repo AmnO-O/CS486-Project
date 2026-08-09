@@ -23,7 +23,7 @@ cd "$DIR"
 TS="$(date +%Y%m%d-%H%M%S)"
 mkdir -p results
 
-SQLCMD=(sqlcmd -b -C -S "${SQLCMD_SERVER:-localhost}" -d "${SQLCMD_DB:-CampusSpaceDB}")
+SQLCMD=(sqlcmd -b -C -I -S "${SQLCMD_SERVER:-localhost}" -d "${SQLCMD_DB:-CampusSpaceDB}")
 if [ -n "${SQLCMD_USER:-}" ]; then SQLCMD+=(-U "$SQLCMD_USER"); fi
 if [ -n "${SQLCMD_PASSWORD:-}" ]; then SQLCMD+=(-P "$SQLCMD_PASSWORD"); fi
 

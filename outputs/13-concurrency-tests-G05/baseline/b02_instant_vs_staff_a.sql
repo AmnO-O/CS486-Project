@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b02 (K2 — no concurrency control)
 -- Staff approval vs instant submit, raw SQL, TWO sessions:

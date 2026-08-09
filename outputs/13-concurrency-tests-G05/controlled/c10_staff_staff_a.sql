@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c10 (T10) — staff vs staff approvals
 -- Task 12: usp_booking_approve on two overlapping pendings (PB10a,

@@ -5,7 +5,7 @@ description: Current task being worked on, blocking issues, and immediate next s
 
 ## Current phase
 **Phase 1 (Tasks 01–07): COMPLETE + LOCKED ✅**
-**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-08 v2.6; Task 10 ✅ 2026-08-08 rev4 (v2.6 → rev5 pending); Task 11 ✅ 2026-08-08; Task 12 🔄; Task 14 ✅ 2026-08-07; Task 16 ✅ 2026-08-08; Task 15 🔄**
+**Phase 2 (Tasks 08–16): IN PROGRESS — Task 08 ✅ 2026-08-02; Task 09 ✅ 2026-08-08 v2.6; Task 10 ✅ 2026-08-08 rev4 (v2.6 → rev5 pending); Task 11 ✅ 2026-08-08; Task 12 ✅ 2026-08-08 rev3; Task 13 ✅ 2026-08-08; Task 14 ✅ 2026-08-07; Task 16 ✅ 2026-08-08; Task 15 🔄**
 
 Phase 2 extends the system (see `docs/project_phase2_description.md`): maintenance impact
 levels, advisory acknowledgements, concurrent/instant booking, schema migration, a
@@ -52,7 +52,23 @@ for the affected tables (Option B, `docs/design-decisions.md`).
   51005 lock timeout, 51006 lock cancelled, 51011 unexpected; U3 synced
   (escalation affects approved only); K5 closed via 4th entry point; handoff to
   Task 12 (procedures table §9).
-- Task 12 output: outputs/12-concurrency-implementation-G05.sql 🔄 In progress.
+- Task 12 output: outputs/12-concurrency-implementation-G05.sql ✅ Approved 2026-08-08 (rev3,
+  compiled + smoke on scratch DB, evidence logs/eval/task12/*rev3*).
+  Entry points (4): usp_booking_instant_submit, usp_booking_approve,
+  usp_maintenance_set_impact_level, usp_maintenance_report; per-space
+  transaction-owned applock `space_booking:<space_id>` 5 s; codes 0/51001–51009;
+  W1 gate order: BR1 (51003) before BR4 (51002); report proc locks ONLY for
+  out-of-service tickets; NULL completion_time → OOS covers all later windows.
+- Task 13 output: outputs/13-concurrency-tests-G05/ ✅ Approved 2026-08-08.
+  Comparison suite: baseline/ (12 raw twins: b01/b02/b03/b05/b09/b10 × _a/_b) +
+  controlled/ (17: c01–c10 pairs, c11 soft gate, c12 fallback-vs-instant,
+  c13 ack-repair, c03b submit-wins order) + 00_setup.sql (TEST-13 fixture:
+  dept/users × 2, 9 meeting rooms, M3/M9 advisories, 6 pending bookings;
+  windows ≥ +600 days), 99_cleanup.sql (provable teardown), audit_invariant.sql
+  (Q_BR1 + Q_NR6), run_all.sh (parallel sqlcmd -b pairs, FAIL grep, exit code),
+  README.md. FULL baseline scope decision recorded (no exclusion) in
+  docs/design-decisions.md. Static QA passed; LIVE run pending SQL Server
+  instance (fill README §5 + eval evidence).
 - Task 14 output: outputs/14-data-generator-G05/ ✅ Approved 2026-08-07.
   Generated 120,000 bookings; manifest confirms 45,431 advisory acknowledgements
   and 64,607 confirmed bookings.
@@ -67,6 +83,6 @@ for the affected tables (Option B, `docs/design-decisions.md`).
 - None. Phase 2 underway.
 
 ## Next steps
-1. Complete Task 12 — concurrency implementation (`outputs/12-concurrency-implementation-G05.sql`).
-2. Then Task 13 — concurrency tests.
-3. Continue Task 15 — index tuning report (`outputs/15-index-tuning-report-G05.md`): in progress.
+1. Live-run the Task 13 suite on a SQL Server instance (`outputs/13-concurrency-tests-G05/run_all.sh`) and fill README §5 results + eval log evidence.
+2. Complete Task 15 — index tuning report (`outputs/15-index-tuning-report-G05.md`): in progress.
+3. Then Phase 2 report PDF (`outputs/report-P2-G05.pdf`).

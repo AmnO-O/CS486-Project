@@ -1,3 +1,5 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b03 session B (K3 — no concurrency control)
 -- Inserts the confirmed booking overlapping M3 while A's escalation
