@@ -11,8 +11,9 @@ SET XACT_ABORT ON;
 
 DECLARE @s2 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-02-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
-DECLARE @w2a DATETIME2 = DATEADD(day, 620, SYSDATETIME());
-DECLARE @w2b DATETIME2 = DATEADD(day, 621, SYSDATETIME());
+DECLARE @w2a DATETIME2, @w2b DATETIME2;
+SELECT TOP 1 @w2a = requested_start_time FROM dbo.bookings WHERE space_id = @s2 AND status = 'pending' ORDER BY requested_start_time ASC;
+SELECT TOP 1 @w2b = requested_start_time FROM dbo.bookings WHERE space_id = @s2 AND status = 'pending' AND requested_start_time > @w2a ORDER BY requested_start_time ASC;
 DECLARE @b1 INT, @b2 INT;
 
 -- overlapping with the pending's window (A hasn't committed its

@@ -12,12 +12,10 @@ SET ANSI_NULLS ON;
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
-DECLARE @s9  INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-09-MR');
-DECLARE @st  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.staff@campus.edu');
-DECLARE @w9  DATETIME2 = DATEADD(day, 760, SYSDATETIME());
-DECLARE @pb13 INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s9 AND requested_start_time = @w9 AND status = 'pending');
-DECLARE @m9  INT = (SELECT maintenance_id FROM dbo.maintenance
-                    WHERE space_id = @s9 AND problem_description = N'TEST-13 advisory M9');
+DECLARE @s9   INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-09-MR');
+DECLARE @st   INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.staff@campus.edu');
+DECLARE @m9   INT = (SELECT maintenance_id FROM dbo.maintenance WHERE space_id = @s9 AND problem_description LIKE N'%M9%');
+DECLARE @pb13 INT = (SELECT TOP 1 booking_id FROM dbo.bookings WHERE space_id = @s9 AND status = 'pending');
 
 IF @pb13 IS NULL OR @m9 IS NULL
     THROW 53050, N'Task 13 c13: PB13/M9 fixture missing.', 1;

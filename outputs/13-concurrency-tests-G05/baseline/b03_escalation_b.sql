@@ -11,7 +11,7 @@ SET XACT_ABORT ON;
 
 DECLARE @s3 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-03-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
-DECLARE @w3 DATETIME2 = DATEADD(day, 640, SYSDATETIME());
+DECLARE @w3 DATETIME2 = (SELECT start_time FROM dbo.maintenance WHERE space_id = @s3 AND problem_description = N'TEST-13 advisory M3');
 DECLARE @b3 INT;
 
 WAITFOR DELAY '00:00:02';

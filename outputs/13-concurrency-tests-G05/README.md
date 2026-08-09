@@ -77,7 +77,7 @@ THROWs if any TEST-13 row remains — provable cleanup per N3.
 
 | date | environment | scenario PASSes | FAILs | notes |
 |---|---|---|---|---|
-| (fill after run) | (server) | (x/y) | (n) | |
+| 2026-08-09 | Docker `cs486_sql_server` (SQL Server 2022) | 29/29 (12 baseline + 17 controlled) | 0 | Full comparison suite verified; baseline race conditions & trigger 50000 errors confirmed, controlled applock procedures serialized cleanly with rc=51003/51002/51005 and Q_BR1=0. See [DEMO_RESULTS.md](file:///Users/caoquanghung/HCMUS/CS/DataBase/FinalProject/CS486-Project/outputs/13-concurrency-tests-G05/DEMO_RESULTS.md) for full report. |
 
 ## 6. Notes / decisions recorded this run
 
