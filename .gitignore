@@ -12,3 +12,4 @@ test-database.sql
 outputs/testt.md
 outputs/14-data-generator-G05/_generated/
 logs/eval/task15/plans/*.raw.txt
+outputs/13-concurrency-tests-G05/REPRODUCE.md

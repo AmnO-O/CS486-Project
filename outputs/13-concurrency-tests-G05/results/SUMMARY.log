@@ -1,28 +1,25 @@
 ============================================================
  CS486 G05 Task 13 — CONCURRENCY SUITE MASTER SUMMARY LOG
+ (Database Mode: READ_COMMITTED_SNAPSHOT ON)
 ============================================================
 
 ------------------------------------------------------------
  SCENARIO LOG: 00_setup.sql
 ------------------------------------------------------------
-Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_prevent_overlap, Line 19
-Overlapping booking exists for this space and time range.
-Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 139
-The transaction ended in the trigger. The batch has been aborted.
+T13-SETUP-OK: TEST-13 fixture ready (1 dept, 2 users, 9 spaces, 2 advisories, 6 pending bookings).
 
 ------------------------------------------------------------
  SCENARIO LOG: b01: Baseline Instant vs Instant
 ------------------------------------------------------------
 [Session A Output]:
-b01-A: holding confirmed booking 1348 uncommitted at W1.
-b01-A: committed booking 1348.
-FAIL b01-A: expected overlapping-confirmed violation, found Q_BR1=0.
+b01-A: holding confirmed booking 3745 uncommitted at W1.
+b01-A: committed booking 3745.
+PASS b01-A: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=1).
 b01-A: cleanup done.
 [Session B Output]:
-Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_prevent_overlap, Line 19
-Overlapping booking exists for this space and time range.
-Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 21
-The transaction ended in the trigger. The batch has been aborted.
+b01-B: committed overlapping confirmed booking 3746.
+PASS b01-B: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=1).
+b01-B: cleanup left to session A.
 
 ------------------------------------------------------------
  SCENARIO LOG: b02: Baseline Instant vs Staff
@@ -30,14 +27,17 @@ The transaction ended in the trigger. The batch has been aborted.
 [Session A Output]:
 b02-A: fiat approval of PB2a held in transaction...
 b02-A: PB2a approval committed.
-b02-A: unexpected — PB2b approval succeeded without control.
-b02-A: no persisted overlap this round (order-1 raced); recorded.
-b02-A: fixture restored.
-[Session B Output]:
+PASS b02-A: RAW-ERROR-APPROVAL-PB2B (error 50000 — no business result code).
+PASS b02-A: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=1).
 Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_prevent_overlap, Line 19
 Overlapping booking exists for this space and time range.
-Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 22
+Msg 3609, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_updated_at, Line 9
 The transaction ended in the trigger. The batch has been aborted.
+[Session B Output]:
+b02-B: inserted approved booking 3753 overlapping PB2a.
+b02-B: inserted confirmed booking 3754 overlapping PB2b.
+PASS b02-B: VIOLATION-OBSERVED (Q_BR1=1).
+b02-B: cleanup done.
 
 ------------------------------------------------------------
  SCENARIO LOG: b03: Baseline Escalation vs Submit
@@ -48,8 +48,10 @@ b03-A: M3 escalated (out-of-service) after B committed its booking.
 b03-A: no persist overlap recorded this round.
 b03-A: M3 restored to advisory.
 [Session B Output]:
-Msg 547, Level 16, State 1, Server 0684dcc66472, Line 18
-The INSERT statement conflicted with the FOREIGN KEY constraint "FK_bookings_space_id". The conflict occurred in database "CampusSpaceDB", table "dbo.spaces", column 'space_id'.
+Msg 50000, Level 16, State 1, Server 0684dcc66472, Procedure trg_bookings_check_maintenance, Line 29
+Overlapping out-of-service maintenance exists for this space.
+Msg 3609, Level 16, State 1, Server 0684dcc66472, Line 18
+The transaction ended in the trigger. The batch has been aborted.
 
 ------------------------------------------------------------
  SCENARIO LOG: b05: Baseline Blocking
@@ -58,14 +60,14 @@ The INSERT statement conflicted with the FOREIGN KEY constraint "FK_bookings_spa
 b05-A: holding row lock on M3 (no app lock, no timeout contract).
 b05-A: released after 18 s.
 [Session B Output]:
-FAIL b05-B: expected a long silent wait, got 2s.
+PASS b05-B: uncontrolled blocking observed (B waited 18 s for A; no business code, no retry contract).
 b05-B: done.
 
 ------------------------------------------------------------
  SCENARIO LOG: b09: Baseline Ticket vs Submit
 ------------------------------------------------------------
 [Session A Output]:
-b09-A: OOS ticket 1096 held uncommitted...
+b09-A: OOS ticket 3222 held uncommitted...
 b09-A: OOS ticket committed after B.obtain:
 b09-A: 0 violations recorded this run.
 b09-A: ticket removed.
@@ -79,11 +81,14 @@ The transaction ended in the trigger. The batch has been aborted.
  SCENARIO LOG: b10: Baseline Staff vs Staff
 ------------------------------------------------------------
 [Session A Output]:
-Msg 53010, Level 16, State 1, Server 0684dcc66472, Line 26
-Task 13 b10: PB10a/PB10b fixture missing (run 00_setup.sql).
+b10-A: approval of PB10a held uncommitted...
+b10-A: after B, PB10a is approved.
+PASS b10-A: VIOLATION-OBSERVED (staff-vs-staff overlapping approvals, Q_BR1=1).
+b10-A: fixture restored.
 [Session B Output]:
-Msg 53010, Level 16, State 1, Server 0684dcc66472, Line 18
-Task 13 b10: PB10b fixture missing.
+b10-B: PB10b approved (its re-check saw PB10a still pending).
+PASS b10-B: VIOLATION-OBSERVED (Q_BR1=1).
+b10-B: cleanup left to A (fixture restore).
 
 ------------------------------------------------------------
  SCENARIO LOG: c01: Controlled Instant vs Instant
@@ -94,8 +99,10 @@ PASS c01-A: exactly one booking confirmed on the window (race serialized).
 PASS c01-A: audit Q_BR1 = 0 (no overlapping confirmed bookings).
 c01-A: cleanup done.
 [Session B Output]:
-Msg 52999, Level 16, State 1, Server 0684dcc66472, Procedure dbo.usp_booking_instant_submit, Line 123
-usp_booking_instant_submit: invalid sp_getapplock return.
+PASS c01-B: conflict 51003 (loser side) as designed.
+PASS c01-B: exactly one booking confirmed on the window (race serialized).
+PASS c01-B: audit Q_BR1 = 0.
+c01-B: cleanup done.
 
 ------------------------------------------------------------
  SCENARIO LOG: c02: Controlled Instant vs Staff
@@ -139,14 +146,14 @@ c05-A: holding app lock on space_booking:... for 20 s.
 c05-A: lock released.
 [Session B Output]:
 PASS c05-B: first report rc=51005 (app lock timeout, retryable).
-PASS c05-B: retry rc=0, ticket 1109 created (T7).
+PASS c05-B: retry rc=0, ticket 3235 created (T7).
 c05-B: cleanup done.
 
 ------------------------------------------------------------
  SCENARIO LOG: c09: Controlled Ticket vs Submit
 ------------------------------------------------------------
 [Session A Output]:
-PASS c09-A: order-1 ticket rc=0 (maintenance_id=1112).
+PASS c09-A: order-1 ticket rc=0 (maintenance_id=3238).
 c09-A: order-1 ticket deleted (fixture for order-2 clean).
 PASS c09-A: order-2 ticket rc=0 (ticket creation does no booking DML).
 c09-A: cleanup done.

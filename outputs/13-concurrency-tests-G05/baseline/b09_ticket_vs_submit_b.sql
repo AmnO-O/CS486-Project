@@ -23,7 +23,7 @@ VALUES
 SET @b5 = SCOPE_IDENTITY();
 PRINT 'b09-B: confirmed booking ' + CAST(@b5 AS VARCHAR(12)) + ' committed.';
 
-WAITFOR DELAY '00:00:04';
+WAITFOR DELAY '00:00:07';
 DECLARE @q INT = (SELECT COUNT(*)
     FROM bookings b
     INNER JOIN dbo.maintenance m ON m.space_id = b.space_id

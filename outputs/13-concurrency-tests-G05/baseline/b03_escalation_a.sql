@@ -33,9 +33,11 @@ BEGIN TRANSACTION;
     SET impact_level = 'out-of-service'
     WHERE maintenance_id = @m3;
     PRINT 'b03-A: escalation held uncommitted...';
-    WAITFOR DELAY '00:00:05';
+    WAITFOR DELAY '00:00:08';
 COMMIT TRANSACTION;
 PRINT 'b03-A: M3 escalated (out-of-service) after B committed its booking.';
+
+WAITFOR DELAY '00:00:04'; -- let B measure violation and delete its booking first
 
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings b

@@ -262,7 +262,7 @@ BEGIN
             SET @message = N'Deadlock victim (51007) — restart unit.';
             RETURN;
         END
-        IF @lock_rc <> 0   -- bad return (e.g. -999) = programmer error
+        IF @lock_rc NOT IN (0, 1)   -- bad return (e.g. -999) = programmer error
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52999, N'usp_booking_instant_submit: invalid sp_getapplock return.', 1;
@@ -496,7 +496,7 @@ BEGIN
             SET @message = N'Deadlock victim (51007) — restart unit.';
             RETURN;
         END
-        IF @lock_rc <> 0
+        IF @lock_rc NOT IN (0, 1)
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52999, N'usp_booking_approve: invalid sp_getapplock return.', 1;
@@ -757,7 +757,7 @@ BEGIN
             SET @message = N'Deadlock victim (51007) — restart unit.';
             RETURN;
         END
-        IF @lock_rc <> 0
+        IF @lock_rc NOT IN (0, 1)
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52999, N'usp_maintenance_set_impact_level: invalid sp_getapplock return.', 1;
@@ -908,7 +908,7 @@ BEGIN
                 SET @message = N'Deadlock victim (51007) — restart unit.';
                 RETURN;
             END
-            IF @lock_rc <> 0
+            IF @lock_rc NOT IN (0, 1)
             BEGIN
                 ROLLBACK TRANSACTION;
                 THROW 52999, N'usp_maintenance_report: invalid sp_getapplock return.', 1;

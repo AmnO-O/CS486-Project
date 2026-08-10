@@ -43,6 +43,5 @@ IF @q = 0
 ELSE
     PRINT 'PASS b01-B: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=' + CAST(@q AS VARCHAR(10)) + ').';
 
--- Cleanup of this session's row (A cleans the other).
-DELETE FROM dbo.bookings WHERE booking_id = @b_b;
-PRINT 'b01-B: cleanup done.';
+-- Cleanup left to session A (which deletes both overlapping bookings by window).
+PRINT 'b01-B: cleanup left to session A.';

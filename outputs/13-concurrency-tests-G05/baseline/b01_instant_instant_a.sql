@@ -34,6 +34,8 @@ BEGIN TRANSACTION;
 COMMIT TRANSACTION;
 PRINT 'b01-A: committed booking ' + CAST(@b_a AS VARCHAR(12)) + '.';
 
+WAITFOR DELAY '00:00:03'; -- let B measure violation first
+
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings a
     INNER JOIN dbo.bookings b ON a.space_id = b.space_id AND a.booking_id < b.booking_id

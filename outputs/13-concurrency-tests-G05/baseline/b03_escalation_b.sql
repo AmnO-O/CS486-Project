@@ -24,7 +24,7 @@ VALUES
 SET @b3 = SCOPE_IDENTITY();
 PRINT 'b03-B: confirmed booking ' + CAST(@b3 AS VARCHAR(12)) + ' committed while M3 was still advisory.';
 
-WAITFOR DELAY '00:00:04';   -- let A commit its escalation first
+WAITFOR DELAY '00:00:07';   -- let A commit its escalation first
 
 DECLARE @prev VARCHAR(50) = (SELECT impact_level FROM dbo.maintenance WHERE maintenance_id =
     (SELECT TOP 1 maintenance_id FROM dbo.maintenance WHERE space_id = @s3 ORDER BY maintenance_id));

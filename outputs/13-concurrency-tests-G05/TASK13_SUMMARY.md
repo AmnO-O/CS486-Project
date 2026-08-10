@@ -42,43 +42,23 @@ Mục tiêu cốt lõi của **Task 13** là xây dựng bộ kiểm thử đồ
 ## 2. Test Như Thế Nào? (Testing Methodology)
 
 ### **a) Mô hình Khởi chạy 2 Session Song Song (Dual-Session Execution):**
-- Sử dụng 2 tiến trình `sqlcmd` độc lập chạy trên 2 Terminal/Thread riêng biệt đại diện cho **Session A** và **Session B**.
+- Sử dụng 2 tiến trình `sqlcmd` độc lập (hoặc 2 Tab Query độc lập) đại diện cho **Session A** và **Session B**.
 - Tiến trình Runner (`run_all.sh`) khởi chạy `_a.sql` và `_b.sql` đồng thời trong cùng một milisecond bằng kỹ thuật chạy nền trong Bash (`sqlcmd -i _a.sql & sqlcmd -i _b.sql & wait`) để ép SQL Server phải xử lý đua tranh khóa (Lock Contention) thực sự.
 
 ### **b) Khởi tạo Fixture Độc lập & Cô lập tuyệt đối (`00_setup.sql` & `99_cleanup.sql`):**
 - **Không gian thử nghiệm độc lập:** Bộ test tự định nghĩa dữ liệu riêng (`TEST-13-Dept`, 2 user `test13.requester` / `test13.staff`, 9 phòng `TEST-13-01-MR` đến `TEST-13-09-MR`).
-- **Khung giờ thử nghiệm cô lập:** Tất cả các mốc thời gian đặt phòng đều nằm ở tương lai xa $\ge +600$ ngày so với thời điểm chạy test. Điều này đảm bảo tuyệt đối không va chạm hay làm hỏng dữ liệu mẫu của Task 06 hay Task 12.
+- **Khung giờ thử nghiệm cô lập:** Tất cả các mốc thời gian đặt phòng đều nằm ở tương lai xa $\ge +600$ ngày so me thời điểm chạy test. Điều này đảm bảo tuyệt đối không va chạm hay làm hỏng dữ liệu mẫu của Task 06 hay Task 12.
 - **Quy trình đóng gói Idempotent:** Trước và sau mỗi lượt chạy test, script `99_cleanup.sql` thực hiện dọn dẹp sạch sẽ toàn bộ dòng dữ liệu `TEST-13` theo thứ tự rào cản khóa ngoại (FK-safe).
 
 ---
 
 ## 3. Cơ Chế Đánh Giá Test Là Thế Nào? (Evaluation Criteria)
 
-Bộ kiểm thử đánh giá tính ĐẠT/KHÔNG ĐẠT (PASS/FAIL) dựa trên các tiêu chí nghiêm ngặt sau:
-
-```mermaid
-flowchart TD
-    A["Khởi chạy Scenario Test"] --> B{"Cách thức thực thi?"}
-    
-    B -- "Baseline (RAW DML)" --> C["Chạy DML thô không qua AppLock"]
-    C --> D{"Kết quả thu được?"}
-    D -- "Bùng nổ lỗi Trigger Msg 50000 / Crash / Lock Timeout" --> E["✅ PASS Baseline (Chỉ ra điểm yếu nghẽn hệ thống)"]
-    D -- "Hoặc Ghi nhận vi phạm dữ liệu Q_BR1 >= 1" --> E
-    D -- "Trả về mã nghiệp vụ Task 12" --> F["❌ FAIL Baseline (Sai thiết kế)"]
-    
-    B -- "Controlled (Task 12)" --> G["Gọi Stored Procedures qua AppLock"]
-    G --> H{"Kết quả thu được?"}
-    H -- "1 Bên thắng rc=0, 1 Bên thua rc=51003 / 51002 / 51005" --> I["Kiểm tra Audit Invariants"]
-    I -- "Q_BR1 = 0 AND Q_NR6 = 0" --> J["✅ PASS Controlled (Tuần tự hóa hoàn hảo & Bảo toàn dữ liệu)"]
-    I -- "Q_BR1 > 0" --> K["❌ FAIL Controlled (Vi phạm trùng lịch)"]
-    H -- "Bùng nổ lỗi Trigger Msg 50000" --> K
-```
-
-### **1. Quy tắc Đánh giá Baseline (Chưa kiểm soát):**
-- **ĐẠT (PASS Baseline):** Khi bài test thể hiện được điểm yếu của DML thô thông qua:
-  - Bùng nổ lỗi SQL Server Engine / Trigger Phase 1 (`Msg 50000` từ `trg_bookings_prevent_overlap`, `Msg 3609` Abort batch).
-  - Hoặc bộc lộ vi phạm toàn vẹn dữ liệu thực sự ($Q_{BR1} \ge 1$: 2 đơn trùng lịch cùng `approved`; hoặc $Q_{NR6} \ge 1$: đơn đặt trùng giờ phòng Out-of-Service).
-- **KHÔNG ĐẠT:** Nếu Baseline trả về mã lỗi nghiệp vụ của Task 12.
+### **1. Quy tắc Đánh giá Baseline (Chưa kiểm soát - RAW DML):**
+- **ĐẠT (PASS Baseline):** Khi bài test thể hiện được hạn chế của DML thô thông qua:
+  - Bùng nổ lỗi Trigger thô `Msg 50000` / `Msg 3609` từ `trg_bookings_prevent_overlap` (do Session B bị block chờ A commit, sau đó trigger thấy dòng đã commit và quăng exception).
+  - Hoặc hiện tượng treo khóa thô không có timeout contract (Blocking).
+- **KHÔNG ĐẠT:** Nếu Baseline trả về mã lỗi nghiệp vụ của Task 12 (`51001`–`51009`).
 
 ### **2. Quy tắc Đánh giá Controlled (Task 12 Procedures):**
 - **ĐẠT (PASS Controlled):** Bắt buộc thỏa mãn đồng thời 3 điều kiện:
@@ -90,90 +70,23 @@ flowchart TD
 
 ## 4. Vấn Đề Gì Xuất Hiện Sau Khi Test? (Key Findings & Insights)
 
-Sau khi thực thi toàn bộ 29 kịch bản kiểm thử trên SQL Server Docker Container, các phát hiện quan trọng được ghi nhận như sau:
-
 ### **1. Điểm yếu nghiêm trọng của Baseline (RAW DML):**
-- **Ứng dụng bị Crash do Lỗi Trigger `Msg 50000`:** Trong các kịch bản đua lệnh instant submit (`b01`), do DML thô không có khóa ứng dụng trước, câu lệnh `INSERT` kích hoạt Trigger Phase 1 (`trg_bookings_prevent_overlap`). Khi Session B bị treo khóa (blocking) chờ A commit xong, Trigger của B thức dậy phát hiện trùng lịch và quăng lỗi `Msg 50000` kèm `ROLLBACK TRANSACTION`. Điều này làm **crash/abort giao dịch tầng ứng dụng của Client**.
-- **Nguy cơ vi phạm trùng lịch ($Q_{BR1} \ge 1$):** Trong kịch bản phối hợp Duyệt phòng vs Instant Submit (`b02`), nếu không có AppLock kiểm soát việc đọc/ghi bảng `booking_approvals`, cả 2 giao dịch có thể cùng commit thành công 2 đơn đặt phòng trùng lịch trên cùng 1 phòng, làm hỏng toàn vẹn dữ liệu.
+- **Sập ứng dụng Client (Unhandled Engine Exceptions):** Vì không có cơ chế khóa ứng dụng, Session B bị đứng hình chờ khóa Session A. Ngay khi Session A `COMMIT`, Session B tiếp tục chạy và bị Trigger Phase 1 chặn lại bằng lỗi **`Msg 50000`** thô bạo. Kết quả là làm **crash giao dịch tầng client (nổ 500 Internal Server Error)**.
+- **Treo đứng hình vô thời hạn (Indefinite Lock Blocking):** Giao dịch bị ngưng trệ không có hợp đồng thời gian chờ (Timeout Contract).
 
 ### **2. Sự vượt trội của Controlled (Task 12 Stored Procedures):**
 - **Giải quyết triệt để nghẽn khóa và crash hệ thống:** Khóa ứng dụng `sys.sp_getapplock` (`space_booking:<space_id>`, Exclusive, 5s timeout) bắt các giao dịch cùng tác động vào 1 phòng phải xếp hàng tuần tự hóa ở tầng logic trước khi đụng vào bảng dữ liệu.
-- **Trải nghiệm người dùng chuyên nghiệp:** Session bị trùng lịch nhận ngay phản hồi định danh chi tiết (`rc = 51003` / `51002`) mà không làm nổ lỗi SQL Server, giúp Frontend/API xử lý thông báo mượt mà.
 - **Bảo toàn dữ liệu tuyệt đối:** Đạt $Q_{BR1} = 0$ và $Q_{NR6} = 0$ trên 100% các kịch bản controlled.
 
 ---
 
 ## 5. Hướng Dẫn Tái Hiện Kết Quả Kiểm Thử (How to Reproduce Results)
 
-Để tái hiện lại 100% kết quả kiểm thử trên máy tính của bạn, thực hiện theo các hướng dẫn sau:
+Để tái hiện lại 100% kết quả kiểm thử trên máy tính của bạn, toàn bộ câu lệnh thực thi chi tiết cho 29 test case được lưu trữ tại file riêng:
 
-### **a) Tái hiện toàn bộ 29 Test Case tự động (1 Lệnh duy nhất):**
-Chạy script orchestrator `run_all.sh` thông qua Docker:
+👉 **[REPRODUCE.md](file:///Users/caoquanghung/HCMUS/CS/DataBase/FinalProject/CS486-Project/outputs/13-concurrency-tests-G05/REPRODUCE.md)**
 
-```bash
-docker exec -w /tmp/t13 -e PATH="/opt/mssql-tools18/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" -e SQLCMD_SERVER=localhost -e SQLCMD_DB=CampusSpaceDB -e SQLCMD_USER=sa -e SQLCMD_PASSWORD='StrongPassword123!' cs486_sql_server bash /tmp/t13/run_all.sh
-```
+Chi tiết đầu ra nhật ký thực thi của tất cả các bài test được lưu tại:
 
----
-
-### **b) Tái hiện các Kịch bản Baseline (Chưa kiểm soát - RAW DML):**
-
-#### **1. Baseline `b01` (Instant vs Instant Submit — Lỗi Trigger `Msg 50000` & Lock Blocking):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b01_instant_instant_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b01_instant_instant_b.sql & wait)
-```
-*Hiện tượng:* Session B bị treo 4 giây, sau đó nổ lỗi `Msg 50000` từ Trigger `trg_bookings_prevent_overlap` và bị abort batch.
-
-#### **2. Baseline `b02` (Instant Submit vs Staff Approval — Duyệt đè không có AppLock):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b02_instant_vs_staff_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b02_instant_vs_staff_b.sql & wait)
-```
-
-#### **3. Baseline `b03` (Escalation vs In-flight Submit — Leo thang bảo trì không có AppLock):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b03_escalation_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i baseline/b03_escalation_b.sql & wait)
-```
-
----
-
-### **c) Tái hiện các Kịch bản Controlled Nổi bật (Task 12 Procedures):**
-
-#### **1. Demo Controlled `c01` (Instant vs Instant Submit — 2 Đơn instant nộp đua nhau):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c01_instant_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c01_instant_b.sql & wait)
-```
-*Kết quả:* 1 đơn thành công `rc=0`, 1 đơn trả về mã lỗi nghiệp vụ `51003`.
-
-#### **2. Demo Controlled `c02` (Instant Submit vs Staff Approval — Nộp instant đua với Duyệt phòng):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c02_instant_staff_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c02_instant_staff_b.sql & wait)
-```
-
-#### **3. Demo Controlled `c03` (Escalation vs In-flight Submit — Leo thang bảo trì Out-of-Service):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c03_escalation_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c03_escalation_b.sql & wait)
-```
-*Kết quả:* Đơn nộp trùng khung giờ Out-of-Service bị chặn mượt mà với mã `51002`.
-
-#### **4. Demo Controlled `c05` (AppLock Timeout & Retry — Thử nghiệm hết 5s Timeout và Thử lại):**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 99_cleanup.sql && docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -b -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i 00_setup.sql && (docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c05_timeout_a.sql & docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i controlled/c05_timeout_b.sql & wait)
-```
-*Kết quả:* Thao tác 1 bị hết timeout 5s nhận mã `51005` (retryable), thao tác retry 2 thành công `rc=0`.
-
----
-
-### **c) Kiểm tra Invariant Audit Bảo toàn Dữ liệu:**
-```bash
-docker exec -w /tmp/t13 cs486_sql_server /opt/mssql-tools18/bin/sqlcmd -C -I -S localhost -U sa -P 'StrongPassword123!' -d CampusSpaceDB -i audit_invariant.sql
-```
-*Kết quả:* `PASS suite-audit: zero overlapping confirmed pairs AND zero confirmed-vs-OOS overlaps on TEST-13 spaces.`
-
----
-
-### **d) Trích xuất File Log Tổng hợp Duy nhất (`SUMMARY.log`):**
-Sau khi thực thi script, bạn có thể copy duy nhất 1 file tổng hợp log kết quả duy nhất từ Docker về máy host:
-```bash
-docker cp cs486_sql_server:/tmp/t13/results/SUMMARY.log outputs/13-concurrency-tests-G05/results/SUMMARY.log
-```
-File **[SUMMARY.log](file:///Users/caoquanghung/HCMUS/CS/DataBase/FinalProject/CS486-Project/outputs/13-concurrency-tests-G05/results/SUMMARY.log)** chứa đầy đủ chi tiết đầu ra của tất cả 29 kịch bản test mà không bị trùng lặp.
+👉 **[DEMO_RESULTS.md](file:///Users/caoquanghung/HCMUS/CS/DataBase/FinalProject/CS486-Project/outputs/13-concurrency-tests-G05/DEMO_RESULTS.md)**  
+👉 **[SUMMARY.log](file:///Users/caoquanghung/HCMUS/CS/DataBase/FinalProject/CS486-Project/outputs/13-concurrency-tests-G05/results/SUMMARY.log)**

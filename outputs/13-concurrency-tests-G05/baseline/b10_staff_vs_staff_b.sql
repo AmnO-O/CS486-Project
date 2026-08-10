@@ -10,9 +10,9 @@ SET XACT_ABORT ON;
 
 DECLARE @s8    INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-08-MR');
 DECLARE @st    INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.staff@campus.edu');
-DECLARE @w8    DATETIME2 = DATEADD(day, 740, SYSDATETIME());
-DECLARE @w8b   DATETIME2 = DATEADD(minute, 30, @w8);
-DECLARE @pb10b INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s8 AND requested_start_time = @w8b AND status = 'pending');
+DECLARE @pb10a INT, @pb10b INT;
+SELECT TOP 1 @pb10a = booking_id FROM dbo.bookings WHERE space_id = @s8 AND status = 'pending' ORDER BY requested_start_time ASC;
+SELECT TOP 1 @pb10b = booking_id FROM dbo.bookings WHERE space_id = @s8 AND status = 'pending' AND booking_id <> @pb10a ORDER BY requested_start_time ASC;
 
 IF @pb10b IS NULL
     THROW 53010, N'Task 13 b10: PB10b fixture missing.', 1;
