@@ -26,21 +26,14 @@ description; statuses below reflect the current task state.
 |---|---|---|---|---|
 | Task 08 | Requirement-change analysis | `outputs/08-requirement-change-analysis-G05.md` | ✅ Approved | Phase 1 (01–07) |
 | Task 09 | Updated ERD + logical design (+ 3NF re-check) | outputs/09-updated-erd-and-logical-design-G05.md | ✅ Approved (v2.6 revision 2026-08-08) | Task 08 |
-<<<<<<< HEAD
-| Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | Approved (2026-08-08, v2.5 rev4) | Task 09 |
-| Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | ✅ Approved (2026-08-08, v2.0 scope 4) | Task 09 |
-| Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ✅ Approved (rev3, 2026-08-08) | Task 11 |
-| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ✅ Approved (2026-08-08, full baseline scope, no exclusion) | Task 12 |
-=======
 | Task 10 | Schema migration | outputs/10-schema-migration-G05.sql | ✅ Approved (2026-08-08, rev5 — Task 09 v2.6, no duration cap) | Task 09 |
 | Task 11 | Concurrency design | outputs/11-concurrency-design-G05.md | ✅ Approved (2026-08-08, v3.4 — 4 entry points) | Task 09 |
 | Task 12 | Concurrency implementation | `outputs/12-concurrency-implementation-G05.sql` | ✅ Approved (2026-08-08, rev3 — aligned 09 v2.6 / 10 rev5 / 11 v3.4) | Task 11 |
-| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ⬜ | Task 12 |
->>>>>>> origin/main
-| Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | Approved (2026-08-07) | Task 10 |
-| Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | 🔄 In progress | Task 14, Task 16 ✅ |
+| Task 13 | Concurrency tests | `outputs/13-concurrency-tests-G05/` | ✅ Approved (2026-08-10, live-run on SQL Server 2022 Docker, RCSI ON) | Task 12 |
+| Task 14 | Data generator (>=100k bookings) | outputs/14-data-generator-G05/ | ✅ Approved (2026-08-07) | Task 10 |
+| Task 15 | Index-tuning report | `outputs/15-index-tuning-report-G05.md` | ✅ Approved (2026-08-10, measured on scratch CS486_G05_T14) | Task 14, Task 16 ✅ |
 | Task 16 | Analytical queries | `outputs/16-analytical-queries-G05.sql` | ✅ Approved (2026-08-08, trajectory 2026-08-08-0655) | Task 14 |
-| — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ⬜ | All tasks |
+| — | Phase 2 report (PDF) | `outputs/report-P2-G05.pdf` | ✅ Approved (2026-08-10, compiled via CS486-Report LaTeX) | All tasks |
 
 ## Status legend
 
@@ -68,6 +61,9 @@ Do NOT generate DDL or sample data before this gate.
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-08-10 | Task 15 approved — index-tuning report finalized: Q1/Q2 mandatory targets + Q3/Q5 selected; measured on scratch DB CS486_G05_T14 (120k bookings, 4 academic years); before/after plan evidence under logs/eval/task15/plans/ | Post-Task 15 handshake (user: all tasks done) |
+| 2026-08-10 | Task 13 live-run release — suite executed on SQL Server 2022 (Docker cs486_sql_server, CampusSpaceDB, RCSI ON): baseline RAW-DML trigger bypass proven (Q_BR1=1), controlled 51002/51003/51005 serialization + audit Q_BR1=Q_NR6=0; c03b submit-wins order race recorded in SUMMARY.log; artifacts TASK13_SUMMARY.md / DEMO_RESULTS.md / results/SUMMARY.log | Post-Task 13 live run + team release |
+| 2026-08-10 | Pipeline COMPLETE — all 16 tasks (01–16) ✅; Phase 2 report delivered via CS486-Report LaTeX build; project closed | User decision: project done |
 | 2026-08-08 | Task 13 approved — concurrency tests suite: FULL baseline scope (b01/b02/b03/b05/b09/b10 raw twins, no exclusion) + controlled twins c01–c13 (+c03b submit-wins order), shared TEST-13 fixture (9 spaces, 2 users, M3/M9 advisories, 6 pendings), audit_invariant Q_BR1/Q_NR6, run_all.sh orchestrator (sqlcmd -b, FAIL grep); static QA passed; live run pending SQL Server instance | Post-Task 13 handshake (user: mark complete) |
 | 2026-08-08 | Task 12 approved (rev3) — upstream fact used by Task 13: W1 gate order BR1 (51003) fires before BR4 (51002); usp_maintenance_report locks only for out-of-service; NULL completion_time → OOS ticket covers all later windows; err codes 0/51001–51009; applock `space_booking:<id>` 5 s | Task 13 generation evidence |
 | 2026-08-08 | Task 09 v2.6 — per-space duration cap dropped (column + CHECK); instant usage-policy test back to checks 1–5 (soft gate = purpose membership only; no duration gate); downstream: 10 rev5, 11 rev3.2, 12 rev3, 13 | Post-Task 09 handshake (v2.6 revision) |

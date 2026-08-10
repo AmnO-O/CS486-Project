@@ -157,7 +157,7 @@ a space at booking time.
 | ack_id | INT | NO | PK | — | IDENTITY(1,1) | |
 | booking_id | INT | NO | UQ | bookings(booking_id) | — | Part of composite UQ (booking_id, maintenance_id) — see note below |
 | maintenance_id | INT | NO | UQ | maintenance(maintenance_id) | — | Part of composite UQ (booking_id, maintenance_id) — the advisory the requester was informed about |
-| acknowledged_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | when the requester confirmed |
+| acknowledged_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() |when the system recorded that the requester was informed / deemed acknowledged at booking time  |
 | acknowledged_by | INT | NO | — | users(user_id) | — | normally the requester; FK → users |
 | created_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | BR12 |
 | updated_at | DATETIME2 | NO | — | — | DEFAULT GETDATE() | BR12 |
