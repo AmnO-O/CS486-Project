@@ -21,6 +21,7 @@ IF @m3 IS NULL
 DECLARE @rc INT, @msg NVARCHAR(500);
 
 -- B confirms its booking at ~+2 s while M3 is advisory; wait for it.
+WAITFOR DELAY '00:00:04';
 DECLARE @st INT = (SELECT TOP 1 user_id FROM dbo.users WHERE email=N'test13.staff@campus.edu');
 EXEC sys.sp_set_session_context N'current_user_id', @st;
 EXEC dbo.usp_maintenance_set_impact_level

@@ -24,6 +24,14 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
 -- ------------------------------------------------------------------
+-- 0. Ensure Database Isolation Level is READ_COMMITTED_SNAPSHOT ON (RCSI)
+-- ------------------------------------------------------------------
+IF EXISTS (SELECT 1 FROM sys.databases WHERE name = DB_NAME() AND is_read_committed_snapshot_on = 0)
+BEGIN
+    ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+END
+
+-- ------------------------------------------------------------------
 -- 1. Preflight: Task 12 entry points must exist (they are the object
 --    under test); the Phase 2 schema (Task 10) is assumed applied.
 -- ------------------------------------------------------------------
