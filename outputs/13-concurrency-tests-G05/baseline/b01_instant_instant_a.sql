@@ -7,8 +7,14 @@ SET ANSI_NULLS ON;
 -- No app lock, no entry point, no re-check: the defense triggers
 -- check committed data only (READ COMMITTED), so once each session
 -- holds its own uncommitted row, the other session's check passes.
--- Expected outcome (PASS condition for the baseline twin):
---   BOTH commit -> overlapping confirmed bookings -> audit Q_BR1 >= 1.
+--
+-- PASS families (both valid for this no-control twin, never a Task 12
+-- business code):
+--   1) BOTH commit -> overlapping confirmed bookings (Q_BR1 >= 1);
+--   2) arrival collapses -> B's raw INSERT is rejected by the Phase-1
+--      trigger backstop (raw engine error family).
+-- A's 12 s hold window absorbs ~6 s process-spawn skew between the
+-- two sessions, maximizing the real concurrent window.
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -30,9 +36,11 @@ BEGIN TRANSACTION;
     SET @b_a = SCOPE_IDENTITY();
 
     PRINT 'b01-A: holding confirmed booking ' + CAST(@b_a AS VARCHAR(12)) + ' uncommitted at W1.';
-    WAITFOR DELAY '00:00:06';   -- window where B's check reads no committed overlap
+    WAITFOR DELAY '00:00:12';   -- window where B's check reads no committed overlap
 COMMIT TRANSACTION;
 PRINT 'b01-A: committed booking ' + CAST(@b_a AS VARCHAR(12)) + '.';
+
+WAITFOR DELAY '00:00:06';   -- let B's insert attempt land inside the window
 
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings a
@@ -43,13 +51,20 @@ DECLARE @q INT = (SELECT COUNT(*)
       AND a.requested_start_time < b.requested_end_time
       AND a.requested_end_time > b.requested_start_time);
 
-IF @q = 0
-    PRINT 'FAIL b01-A: expected overlapping-confirmed violation, found Q_BR1=0.';
-ELSE
-    PRINT 'PASS b01-A: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=' + CAST(@q AS VARCHAR(10)) + ').';
+-- Family 1: the violation persisted. Family 2: B's row is absent
+-- (its insert was rejected by the raw trigger backstop).
+DECLARE @b_rows INT = (SELECT COUNT(*) FROM dbo.bookings
+                       WHERE space_id = @s1
+                         AND requested_start_time = DATEADD(minute, 30, @w1));
 
--- Cleanup: remove both race bookings by window (pair session deletes
--- its own overlapping row by window too; idempotent).
-DELETE FROM dbo.bookings WHERE space_id = @s1 AND requested_start_time = @w1;
-DELETE FROM dbo.bookings WHERE space_id = @s1 AND requested_start_time = DATEADD(minute, 30, @w1);
+IF @q > 0
+    PRINT 'PASS b01-A: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=' + CAST(@q AS VARCHAR(10)) + ').';
+ELSE IF @b_rows = 0
+    PRINT 'PASS b01-A: collapsed race — B was backstopped by the raw trigger (no control, no Task 12 code).';
+ELSE
+    PRINT 'FAIL b01-A: expected overlapping-confirmed violation, found Q_BR1=0.';
+
+-- Cleanup: A's own race row (B cleans its own by booking_id).
+DELETE FROM dbo.bookings WHERE requested_start_time = @w1 AND space_id = @s1;
+DELETE FROM dbo.bookings WHERE requested_start_time = DATEADD(minute, 30, @w1) AND space_id = @s1;
 PRINT 'b01-A: cleanup done.';

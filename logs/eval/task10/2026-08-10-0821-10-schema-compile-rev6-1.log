@@ -1,0 +1,75 @@
+=================================================================
+CS486 G05 - Task 10 schema migration - COMPILE + SMOKE LOG
+(REVIEW PASS rev6.1 - 2026-08-10)
+=================================================================
+Run date : 2026-08-10-0821
+Instance: SQL Server 2022 (16.0.1000.6, localhost, Windows auth)
+Scratch : CS486_G05_MIGTEST (created, exercised, dropped)
+
+Review scope (user request): full review vs planFix.md checklist +
+trigger SQL deep check + header/comment polish.
+
+-----------------------------------------------------------------
+Review findings and fixes applied
+-----------------------------------------------------------------
+1. R6 verbatim check: re-read the LIVE 8c rejection predicate
+   (rev6 lines 563-596) and compared row-by-row with the embedded R6
+   diff block - exact logical complements on all five rows
+   (is_deleted / status / impact_level / start_time / completion_time
+   with matched strictness and NULL semantics). No predicate change.
+   Nuance documented at 8g: b.is_deleted is not in the INSERT-eligible
+   predicate; a deliberate raw insert with is_deleted = 1 produces an
+   ack that 8c rejects and rolls back the whole insert - intentional
+   fail-fast (R3).
+2. Trigger SQL deep check: multi-row safety is set-based by
+   construction; NOW ALSO verified live via new smoke S13 (two
+   bookings in one INSERT..SELECT..UNION ALL -> exactly 2 ack rows)
+   and boundary negatives via S14 (completed advisory and future
+   advisory -> zero ack rows). PASS on the server.
+3. Header/comments polish: REVISION v6.1 note appended to the v6
+   block (review-pass record); 8g comment clarified (R6 line-number
+   caveat "locate by trigger name", b.is_deleted fail-fast nuance);
+   rollback header now names the v6 trigger in its drop list.
+4. SELF-DETECTED ERROR (fixed before final run): Msg 1046 "Subqueries
+   are not allowed in this context" - the S13 FAIL message used
+   CAST((SELECT COUNT(*) ...) AS VARCHAR(10)), and T-SQL does not
+   allow a subquery as a CAST argument. Fixed by reading the count
+   into @ack_count first (DECLARE extended), then casting the
+   variable. Recompile passed.
+
+-----------------------------------------------------------------
+Full verification cycle (all green)
+-----------------------------------------------------------------
+a. DROP/CREATE CS486_G05_MIGTEST ...................... DB-OK
+b. outputs/05-db-definition-G05.sql ..................... 05-OK
+   outputs/06-sample-data-G05.sql ...................... 06-OK
+c. outputs/10-schema-migration-G05.sql ................. MIG-OK
+   Validation: 10.1 / 10.8 / 10.9 / 10.10 / 10.11 all PASS
+   Smoke (all PASS):
+     S1  out_of_service blocks ......................... PASS
+     S2  advisory allows booking ....................... PASS
+     S3  trigger ack at insert (acknowledged_by=requester) PASS
+     S4  ack vs different maintenance .................. PASS
+     S5  instant approval with complete acks ........... PASS
+     S6  impact history ................................ PASS
+     S7  recompute under_maintenance ................... PASS
+     S8  description-only edit guard ................... PASS
+     S9  soft-delete recompute ......................... PASS
+     S10 junction CHECK ................................ PASS
+     S11 composite UQ (trigger row + manual) ........... PASS
+     S12 approval gate, DD6 window ..................... PASS
+     S13 multi-row insert -> 2 acks (deep check) ....... PASS
+     S14 completed/future advisory -> no ack (deep check) PASS
+d. Idempotent re-run .................................. RERUN-OK
+   (re-run mode WARNING, no duplicate-object errors)
+e. outputs/10-schema-migration-G05-rollback.sql ........ RB-OK
+   R7.1-R7.6 all PASS (incl. v6 trigger dropped)
+f. Scratch DB dropped ................................. SCRATCH-DROPPED
+
+-----------------------------------------------------------------
+Conclusion: rev6.1 (review pass) compiles, runs, re-runs and
+reverses cleanly on SQL Server 2022. Review checklist items closed:
+R6 verbatim verified live, deep-check smokes S13/S14 added and
+green, header polish applied. No behavior change to the trigger
+predicate itself.
+=================================================================

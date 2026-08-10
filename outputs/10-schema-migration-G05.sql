@@ -19,6 +19,36 @@ GO
 -- for it — the net spaces delta is the usage_policy drop + the new junction
 -- table only (docs/design-decisions.md, 2026-08-08; Task 09 §B.2.3/§B.2.5).
 --
+-- REVISION v6 (2026-08-10, planFix.md rev4 FINAL dated 2026-08-09 - R1..R10): adds the NR2
+-- insert-time acknowledgement layer. NEW trigger
+-- trg_bookings_insert_advisory_acknowledgements (AFTER INSERT ON bookings,
+-- section 8g) materializes one acknowledgement row per advisory maintenance
+-- that is active at insert time and overlaps the booking period, so "a
+-- booking row implies ack rows for every advisory active at insert time" is
+-- enforced by the schema itself (NR2, schema-registry line 445) on every
+-- insert path - including raw DML outside the Task 12 procedures.
+--   - Unconditional and status-agnostic (R1): mirrors the removed W1 step-8
+--     ack INSERT (Task 12 rev4) at the schema level; fires for pending/
+--     approved/instant and raw-DML inserts alike.
+--   - The trigger becomes the SINGLE source of truth for insert-time acks
+--     (R3); the approval gate (8b, 51004) and the W2 repair (Task 12) remain
+--     the layers for advisories created after booking insert (R2).
+--   - R6 (closed): the INSERT-eligible predicate is the EXACT logical
+--     complement of the trg_booking_advisory_ack_validate (8c) rejection
+--     predicate - literal diff embedded at the trigger (8g).
+--   - R9 wording: acknowledged_at = when the system recorded that the
+--     requester was informed / deemed acknowledged at booking time.
+--   - Data-preservation promise still holds: rows are only ADDED, never
+--     deleted; existing ack rows are untouched (forward-only for new
+--     inserts). This supersedes the v5 note "no insert trigger is imposed
+--     on bookings".
+--   - REVIEW PASS v6.1 (2026-08-10): R6 verbatim re-verified against the
+--     live 8c predicate (now quoted at rev6 lines 563-596); the
+--     b.is_deleted fail-fast nuance is documented at 8g; smoke suite
+--     extended with a multi-row insert case (S13) and non-overlap
+--     boundary cases (S14); header and comment polish. No predicate
+--     change vs rev6.
+--
 -- DATA-PRESERVATION PROMISE
 --   - No Phase 1 table is dropped or rebuilt; no booking/maintenance row is
 --     deleted or modified in meaning.
@@ -26,7 +56,7 @@ GO
 --     'out-of-service' (registry default, A09-1) so legacy rows keep their
 --     Phase 1 blocking behavior.
 --   - All changes are additive/removal-minimal: 1 new column (impact_level),
---     3 new tables, 4 new indexes, 9 triggers (6 new + 3
+--     3 new tables, 4 new indexes, 10 triggers (7 new + 3
 --     replaced), 1 reserved seed row (system approver -1), 18 junction seed
 --     rows (space_type_allowed_purpose), plus a one-time recompute of
 --     spaces.current_status under the new trigger-maintained semantics
@@ -91,6 +121,14 @@ GO
 --   - trg_space_type_allowed_purpose_updated_at (new, BR12 pattern): keeps
 --     updated_at current on the new junction table, same shape as the Phase 1
 --     updated_at triggers.
+--
+--   - trg_bookings_insert_advisory_acknowledgements (new, v6): on EVERY
+--     bookings INSERT, materializes one acknowledgement row per advisory
+--     maintenance active at insert time that overlaps the booking period
+--     (NR2 insert-time layer). INSERT-eligible predicate = exact complement
+--     of the 8c rejection predicate (R6; literal diff at 8g). Status-
+--     agnostic: fires for pending/approved/instant and raw-DML inserts
+--     alike; ad-hoc DBA/app-bug writes get the same guarantee.
 --
 -- HANDOFF NOTE (application layer — Tasks 11/12 concurrency design):
 --   changed_by flows through SESSION_CONTEXT, which is session-scoped, NOT
@@ -160,6 +198,10 @@ GO
 
 IF OBJECT_ID(N'dbo.trg_booking_advisory_ack_validate', N'TR') IS NOT NULL
     DROP TRIGGER dbo.trg_booking_advisory_ack_validate;
+GO
+
+IF OBJECT_ID(N'dbo.trg_bookings_insert_advisory_acknowledgements', N'TR') IS NOT NULL
+    DROP TRIGGER dbo.trg_bookings_insert_advisory_acknowledgements;
 GO
 
 IF OBJECT_ID(N'dbo.trg_maintenance_impact_history', N'TR') IS NOT NULL
@@ -690,6 +732,74 @@ BEGIN
 END
 GO
 
+-- ------------------------------------------------------------
+-- 8g. trg_bookings_insert_advisory_acknowledgements (NEW, v6, NR2
+--     insert-time layer; planFix.md rev4, R1..R10)
+--     On EVERY bookings INSERT, materializes one acknowledgement row per
+--     advisory maintenance that is active at insert time and overlaps the
+--     booking period, so "a booking row implies ack rows for every advisory
+--     active at insert time" is enforced by the schema itself (NR2;
+--     schema-registry line 445) for every insert path - including raw DML
+--     outside the Task 12 procedures. Unconditional and status-agnostic:
+--     it mirrors the behaviour of the removed W1 step-8 ack INSERT (Task 12
+--     rev4) at the schema level, applies to pending/soft-gate fallbacks
+--     too, and adds ack rows on plain 'approved'/'cancelled' raw inserts
+--     alike. The approval gate (8b, 51004) and the W2 repair (Task 12)
+--     remain the layers for advisories created after booking insert (R2).
+--     acknowledged_at = when the system recorded that the requester was
+--     informed / deemed acknowledged at booking time (R9 wording).
+--     Timestamp convention: GETDATE(), matching the ack table DEFAULT
+--     DF_booking_advisory_ack_acknowledged_at; the recompute trigger's
+--     SYSDATETIME() is a separate clock read for status windows.
+--     Data-preserving: adds rows only; never deletes or rewrites.
+--     b.is_deleted is not part of the INSERT-eligible predicate: legitimate
+--     inserts carry is_deleted = 0 (column default). A deliberate raw
+--     insert with is_deleted = 1 produces an ack row that 8c rejects,
+--     rolling back the whole insert - intentional fail-fast (R3).
+--
+-- R6 (planFix.md rev4, CLOSED): the INSERT-eligible predicate below is the
+-- EXACT logical complement of the rejection predicate of
+-- trg_booking_advisory_ack_validate (8c; quoted at rev5 lines 538-543 -
+-- line numbers shifted in rev6, locate by trigger name). Side-by-side:
+--
+--   new trigger (rows eligible for ack insert)   | 8c (rows REJECTED)
+--   ---------------------------------------------+------------------------------
+--   m.is_deleted = 0                             | b.is_deleted = 1 OR m.is_deleted = 1
+--   m.status IN ('open','in_progress')           | m.status NOT IN ('open','in_progress')
+--   m.impact_level = 'advisory'                  | m.impact_level <> 'advisory'
+--   m.start_time < i.requested_end_time          | m.start_time >= b.requested_end_time
+--   m.completion_time IS NULL OR                 | m.completion_time IS NOT NULL AND
+--     m.completion_time > i.requested_start_time |   m.completion_time <= b.requested_start_time
+--   ---------------------------------------------+------------------------------
+--   Matched strictness (< vs >=, > vs <=), identical NULL semantics on
+--   completion_time, same columns. GUARD: this predicate must remain the
+--   exact complement of the 8c predicate - an ack row produced here can
+--   never be rejected by 8c, and a row 8c rejects can never be produced
+--   here. Multi-row safe (set-based on inserted).
+-- ------------------------------------------------------------
+CREATE TRIGGER trg_bookings_insert_advisory_acknowledgements
+ON bookings
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.booking_advisory_acknowledgement
+        (booking_id, maintenance_id, acknowledged_at, acknowledged_by)
+    SELECT i.booking_id,
+           m.maintenance_id,
+           GETDATE(),
+           i.requester_id
+    FROM inserted i
+    INNER JOIN dbo.maintenance m
+        ON m.space_id = i.space_id
+       AND m.is_deleted = 0
+       AND m.status IN ('open','in_progress')
+       AND m.impact_level = 'advisory'
+       AND m.start_time < i.requested_end_time
+       AND (m.completion_time IS NULL OR m.completion_time > i.requested_start_time);
+END
+GO
+
 -- ============================================================
 -- 9. Commit
 -- ============================================================
@@ -785,9 +895,10 @@ SELECT '10.8 triggers' AS check_name,
         AND OBJECT_ID(N'dbo.trg_maintenance_impact_history_updated_at', N'TR') IS NOT NULL
         AND OBJECT_ID(N'dbo.trg_booking_advisory_acknowledgement_updated_at', N'TR') IS NOT NULL
         AND OBJECT_ID(N'dbo.trg_space_type_allowed_purpose_updated_at', N'TR') IS NOT NULL
+        AND OBJECT_ID(N'dbo.trg_bookings_insert_advisory_acknowledgements', N'TR') IS NOT NULL
         AND OBJECT_ID('dbo.trg_maintenance_completion_space_status', N'TR') IS NULL
             THEN 'PASS' ELSE 'FAIL' END AS result,
-       'BR4/BR2 replaced (BR19 folded into recompute) + 6 new triggers' AS detail;
+       'BR4/BR2 replaced (BR19 folded into recompute) + 7 new triggers' AS detail;
 GO
 
 -- 10.9 reserved system approver exists (NR5, decision point 2)
@@ -849,7 +960,7 @@ BEGIN
     DECLARE @smoke_user  INT = (SELECT TOP 1 user_id FROM dbo.users WHERE account_status = 'active' AND user_id <> -1 ORDER BY user_id);
     DECLARE @win_start DATETIME2 = DATEADD(day, 400, SYSDATETIME());
     DECLARE @win_end   DATETIME2 = DATEADD(hour, 2, @win_start);
-    DECLARE @m_id INT, @bk_id INT, @st VARCHAR(50);
+    DECLARE @m_id INT, @bk_id INT, @st VARCHAR(50), @ack_count INT;
 
     -- S1: out-of-service maintenance overlapping the window blocks booking
     BEGIN TRY
@@ -888,9 +999,13 @@ BEGIN
         SET @bk_id = SCOPE_IDENTITY();
         PRINT 'PASS: 10.12-S2 advisory maintenance allows the booking.';
 
-        INSERT INTO dbo.booking_advisory_acknowledgement (booking_id, maintenance_id, acknowledged_by)
-        VALUES (@bk_id, @m_id, @smoke_user);
-        PRINT 'PASS: 10.12-S3 ack for overlapping advisory accepted.';
+        -- v6: the insert trigger materialized the ack row at booking insert
+        IF EXISTS (SELECT 1 FROM dbo.booking_advisory_acknowledgement
+                   WHERE booking_id = @bk_id AND maintenance_id = @m_id
+                     AND acknowledged_by = @smoke_user)
+            PRINT 'PASS: 10.12-S3 trigger materialized the ack at insert (NR2, acknowledged_by = requester).';
+        ELSE
+            PRINT 'FAIL: 10.12-S3 insert-time ack row missing (trigger did not fire).';
 
         INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
         VALUES (@smoke_space, @smoke_user, N'MIG-SMOKE: advisory ticket 2', DATEADD(day, -1, SYSDATETIME()), 'open', 'advisory');
@@ -974,8 +1089,7 @@ BEGIN
         INSERT INTO dbo.bookings (space_id, requester_id, requested_start_time, requested_end_time, purpose, expected_participants)
         VALUES (@smoke_space, @smoke_user, @win_start, @win_end, 'meeting', 10);
         SET @bk_id = SCOPE_IDENTITY();
-        INSERT INTO dbo.booking_advisory_acknowledgement (booking_id, maintenance_id, acknowledged_by)
-        VALUES (@bk_id, @m_id, @smoke_user);
+        -- v6: the insert trigger already materialized the ack row for this pair
 
         BEGIN TRY
             INSERT INTO dbo.booking_advisory_acknowledgement (booking_id, maintenance_id, acknowledged_by)
@@ -984,7 +1098,7 @@ BEGIN
         END TRY
         BEGIN CATCH
             IF ERROR_MESSAGE() LIKE '%UQ_booking_advisory_ack_booking_maintenance%'
-                PRINT 'PASS: 10.12-S11 composite UQ rejects duplicate (booking, maintenance_id) pair.';
+                PRINT 'PASS: 10.12-S11 composite UQ rejects duplicate (booking, maintenance_id) pair (trigger row + manual insert).';
             ELSE
                 PRINT 'FAIL: 10.12-S11 unexpected error: ' + ERROR_MESSAGE();
             IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
@@ -999,11 +1113,13 @@ BEGIN
     -- S12: approval gate — approved bookings needs complete acks
     BEGIN TRY
         BEGIN TRANSACTION;
-        INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
-        VALUES (@smoke_space, @smoke_user, N'MIG-SMOKE: advisory ticket 1', DATEADD(day, -1, SYSDATETIME()), 'open', 'advisory');
         INSERT INTO dbo.bookings (space_id, requester_id, requested_start_time, requested_end_time, purpose, expected_participants)
         VALUES (@smoke_space, @smoke_user, DATEADD(day, 401, SYSDATETIME()), DATEADD(hour, 2, DATEADD(day, 401, SYSDATETIME())), 'meeting', 10);
         SET @bk_id = SCOPE_IDENTITY();
+        -- v6: advisory created AFTER the booking insert -> no insert-time ack
+        -- (DD6 window); the approval gate (8b) is the layer that must reject
+        INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
+        VALUES (@smoke_space, @smoke_user, N'MIG-SMOKE: advisory ticket 1', DATEADD(day, -1, SYSDATETIME()), 'open', 'advisory');
         BEGIN TRY
             INSERT INTO dbo.booking_approvals (booking_id, approver_id, decision_time, decision, decision_note)
             VALUES (@bk_id, -1, SYSDATETIME(), 'approved', 'MIG-SMOKE');
@@ -1011,7 +1127,7 @@ BEGIN
         END TRY
         BEGIN CATCH
             IF ERROR_MESSAGE() LIKE '%advisory acknowledgements are missing%'
-                PRINT 'PASS: 10.12-S12 approval gate rejects missing advisory acks.';
+                PRINT 'PASS: 10.12-S12 approval gate rejects missing advisory acks (advisory after booking insert, DD6 window).';
             ELSE
                 PRINT 'FAIL: 10.12-S12 unexpected error: ' + ERROR_MESSAGE();
             IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
@@ -1021,6 +1137,53 @@ BEGIN
     BEGIN CATCH
         IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
         PRINT 'FAIL: 10.12-S12 aborted: ' + ERROR_MESSAGE();
+    END CATCH;
+
+    -- S13: multi-row raw INSERT - two bookings overlapping one active
+    --      advisory in a single statement -> one ack row per booking
+    --      (set-based trigger, multi-row safe)
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
+        VALUES (@smoke_space, @smoke_user, N'MIG-SMOKE: advisory ticket 1', DATEADD(day, -1, SYSDATETIME()), 'open', 'advisory');
+        SET @m_id = SCOPE_IDENTITY();
+        INSERT INTO dbo.bookings (space_id, requester_id, requested_start_time, requested_end_time, purpose, expected_participants)
+        SELECT @smoke_space, @smoke_user, @win_start, @win_end, 'meeting', 10
+        UNION ALL
+        SELECT @smoke_space, @smoke_user, DATEADD(hour, 3, @win_start), DATEADD(hour, 5, @win_start), 'meeting', 8;
+        SET @ack_count = (SELECT COUNT(*) FROM dbo.booking_advisory_acknowledgement WHERE maintenance_id = @m_id);
+        IF @ack_count = 2
+            PRINT 'PASS: 10.12-S13 multi-row insert materialized 2 acks (one per booking).';
+        ELSE
+            PRINT 'FAIL: 10.12-S13 expected 2 acks, got ' + CAST(@ack_count AS VARCHAR(10)) + '.';
+        ROLLBACK TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+        PRINT 'FAIL: 10.12-S13 aborted: ' + ERROR_MESSAGE();
+    END CATCH;
+
+    -- S14: boundary negatives - a COMPLETED advisory (completion_time
+    --      before the request start) and a FUTURE advisory (start after
+    --      the request end) must produce NO ack row
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, completion_time, status, impact_level)
+        VALUES (@smoke_space, @smoke_user, N'MIG-SMOKE: completed advisory', DATEADD(day, -3, SYSDATETIME()), DATEADD(day, -2, SYSDATETIME()), 'resolved', 'advisory');
+        INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
+        VALUES (@smoke_space, @smoke_user, N'MIG-SMOKE: future advisory', DATEADD(day, 500, SYSDATETIME()), 'open', 'advisory');
+        INSERT INTO dbo.bookings (space_id, requester_id, requested_start_time, requested_end_time, purpose, expected_participants)
+        VALUES (@smoke_space, @smoke_user, @win_start, @win_end, 'meeting', 10);
+        SET @bk_id = SCOPE_IDENTITY();
+        IF NOT EXISTS (SELECT 1 FROM dbo.booking_advisory_acknowledgement WHERE booking_id = @bk_id)
+            PRINT 'PASS: 10.12-S14 completed/future advisory produced no ack row.';
+        ELSE
+            PRINT 'FAIL: 10.12-S14 unexpected ack row for completed/future advisory.';
+        ROLLBACK TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+        PRINT 'FAIL: 10.12-S14 aborted: ' + ERROR_MESSAGE();
     END CATCH;
 END
 GO

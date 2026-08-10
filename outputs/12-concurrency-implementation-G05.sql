@@ -14,9 +14,20 @@ GO
 --   space_type_allowed_purpose); there is no duration gate anywhere (W1 step 2/4,
 --   preflight 0.2, comments). No other contract change.
 --
+-- REVISION 4 (2026-08-10): W1 step 8's ack INSERT is REMOVED — Task 10 rev6 adds
+--   trigger trg_bookings_insert_advisory_acknowledgements (AFTER INSERT on bookings,
+--   unconditional, status-agnostic), which is now the SINGLE owner of insert-time
+--   acknowledgement materialization (planFix R3). W1 steps renumbered (auto-approval
+--   is now step 8, COMMIT step 9); W2 NR2 repair (DD6) is UNCHANGED; error codes and
+--   the lock contract are unchanged. Smoke set extended with S0/S1b/S4b to prove the
+--   trigger materializes acks on both auto-approved and pending (fallback) inserts.
+--   (Review pass 2026-08-10: preflight 0.2b upstream pointer updated to rev6; W1
+--   step 7 comment restores the 8c pair-validation note. No logic change.)
+--
 -- Upstream files implemented:
---   - outputs/10-schema-migration-G05.sql   (approved 2026-08-08, rev5 — Phase 2 schema,
---     Task 09 v2.6: no max_hours column, junction space_type_allowed_purpose seeded)
+--   - outputs/10-schema-migration-G05.sql   (approved 2026-08-10, rev6 — Phase 2 schema,
+--     Task 09 v2.6: no max_hours column, junction space_type_allowed_purpose seeded;
+--     rev6 adds trg_bookings_insert_advisory_acknowledgements — W1 relies on it, R3)
 --   - outputs/11-concurrency-design-G05.md  (approved 2026-08-08, v3.3/v3.4 — the
 --     implementation contract: workflows W1..W4, Section 6.3 result codes,
 --     Section 9 Task 12 handoff)
@@ -102,14 +113,17 @@ GO
 
 -- 0.2b v2.6 assumption check: the duration-cap column must NOT exist. If
 --      spaces.max_hours is present, the database was migrated with the v2.5
---      migration, not Task 10 rev5 — the soft-gate contract would differ.
+--      migration, not Task 10 rev5/rev6 — the soft-gate contract would differ.
 IF COL_LENGTH(N'dbo.spaces', N'max_hours') IS NOT NULL
 BEGIN
-    THROW 52015, 'Task 12 preflight: spaces.max_hours exists — this is the v2.5 schema. Re-run outputs/10-schema-migration-G05.sql rev5 (Task 09 v2.6 has no duration cap).', 1;
+    THROW 52015, 'Task 12 preflight: spaces.max_hours exists — this is the v2.5 schema. Re-run outputs/10-schema-migration-G05.sql rev6 (approved 2026-08-10; Task 09 v2.6 has no duration cap).', 1;
 END
 GO
 
--- 0.3 Defense-in-depth triggers kept by Task 10 are present
+-- 0.3 Triggers kept/added by Task 10 are present. Note: since rev4 removed W1
+--      step 8's ack INSERT, trg_bookings_insert_advisory_acknowledgements is NOT
+--      merely defense-in-depth anymore — it is the ONLY insert-time ack owner
+--      (planFix R3); its absence would silently break the NR2 insert-time layer.
 IF OBJECT_ID(N'dbo.trg_bookings_prevent_overlap', N'TR') IS NULL
    OR OBJECT_ID(N'dbo.trg_bookings_check_maintenance', N'TR') IS NULL
    OR OBJECT_ID(N'dbo.trg_bookings_check_capacity', N'TR') IS NULL
@@ -120,8 +134,9 @@ IF OBJECT_ID(N'dbo.trg_bookings_prevent_overlap', N'TR') IS NULL
    OR OBJECT_ID(N'dbo.trg_maintenance_impact_history', N'TR') IS NULL
    OR OBJECT_ID(N'dbo.trg_maintenance_recompute_space_status', N'TR') IS NULL
    OR OBJECT_ID(N'dbo.trg_booking_advisory_ack_validate', N'TR') IS NULL
+   OR OBJECT_ID(N'dbo.trg_bookings_insert_advisory_acknowledgements', N'TR') IS NULL
 BEGIN
-    THROW 52012, 'Task 12 preflight: defense-in-depth trigger missing.', 1;
+    THROW 52012, 'Task 12 preflight: required trigger missing (defense-in-depth set or trg_bookings_insert_advisory_acknowledgements — Task 10 rev6 migration required).', 1;
 END
 GO
 
@@ -262,7 +277,7 @@ BEGIN
             SET @message = N'Deadlock victim (51007) — restart unit.';
             RETURN;
         END
-        IF @lock_rc <> 0   -- bad return (e.g. -999) = programmer error
+        IF @lock_rc NOT IN (0, 1)   -- 0 granted sync, 1 granted after wait; else (e.g. -999) programmer error
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52999, N'usp_booking_instant_submit: invalid sp_getapplock return.', 1;
@@ -350,7 +365,12 @@ BEGIN
             RETURN;
         END
 
-        -- W1 step 7: insert the booking row (status EXPLICIT 'pending' — N6)
+        -- W1 step 7: insert the booking row (status EXPLICIT 'pending' — N6).
+        -- Acknowledgement rows for overlapping active advisories are materialized
+        -- by trigger trg_bookings_insert_advisory_acknowledgements in the SAME
+        -- transaction (planFix R3 — the schema trigger is the single insert-time
+        -- owner; the ack INSERT formerly done here was removed in rev4).
+        -- trg_booking_advisory_ack_validate (8c) confirms each materialized pair.
         INSERT INTO dbo.bookings
             (space_id, requester_id, requested_start_time, requested_end_time, purpose,
              expected_participants, status)
@@ -360,20 +380,7 @@ BEGIN
 
         SET @booking_id = SCOPE_IDENTITY();
 
-        -- W1 step 8: acknowledgement rows for every overlapping active advisory
-        -- (NR2; trg_booking_advisory_ack_validate confirms each pair)
-        INSERT INTO dbo.booking_advisory_acknowledgement
-            (booking_id, maintenance_id, acknowledged_at, acknowledged_by)
-        SELECT @booking_id, m.maintenance_id, SYSDATETIME(), @requester_id
-        FROM dbo.maintenance m
-        WHERE m.space_id = @space_id
-          AND m.is_deleted = 0
-          AND m.status IN ('open','in_progress')
-          AND m.impact_level = 'advisory'
-          AND m.start_time < @requested_end_time
-          AND (m.completion_time IS NULL OR m.completion_time > @requested_start_time);
-
-        -- W1 step 9: auto-approval iff the instant test passed (hard AND soft gates).
+        -- W1 step 8: auto-approval iff the instant test passed (hard AND soft gates).
         -- Otherwise the booking stays pending (design: NOT an error — DD5).
         IF @instant_accepted = 1
         BEGIN
@@ -383,7 +390,7 @@ BEGIN
                 (@booking_id, -1, SYSDATETIME(), 'approved', NULL, N'Instant auto-approval (system user -1).');
         END
 
-        -- W1 step 10: COMMIT releases the app lock automatically
+        -- W1 step 9: COMMIT releases the app lock automatically
         COMMIT TRANSACTION;
 
         SET @result_code = 0;
@@ -496,7 +503,7 @@ BEGIN
             SET @message = N'Deadlock victim (51007) — restart unit.';
             RETURN;
         END
-        IF @lock_rc <> 0
+        IF @lock_rc NOT IN (0, 1)   -- 0 granted sync, 1 granted after wait; else (e.g. -999) programmer error
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52999, N'usp_booking_approve: invalid sp_getapplock return.', 1;
@@ -757,7 +764,7 @@ BEGIN
             SET @message = N'Deadlock victim (51007) — restart unit.';
             RETURN;
         END
-        IF @lock_rc <> 0
+        IF @lock_rc NOT IN (0, 1)   -- 0 granted sync, 1 granted after wait; else (e.g. -999) programmer error
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52999, N'usp_maintenance_set_impact_level: invalid sp_getapplock return.', 1;
@@ -908,7 +915,7 @@ BEGIN
                 SET @message = N'Deadlock victim (51007) — restart unit.';
                 RETURN;
             END
-            IF @lock_rc <> 0
+            IF @lock_rc NOT IN (0, 1)   -- 0 granted sync, 1 granted after wait; else (e.g. -999) programmer error
             BEGIN
                 ROLLBACK TRANSACTION;
                 THROW 52999, N'usp_maintenance_report: invalid sp_getapplock return.', 1;
@@ -1014,10 +1021,23 @@ BEGIN
     DECLARE @b1 INT, @ia1 BIT, @rc1 INT, @msg1 NVARCHAR(500);
     DECLARE @b2 INT, @ia2 BIT, @rc2 INT, @msg2 NVARCHAR(500);
     DECLARE @b3 INT, @ia3 BIT, @rc3b INT, @msg3b NVARCHAR(500);
+    DECLARE @m0 INT, @rc0 INT, @msg0 NVARCHAR(500);   -- S0 advisory seed (trigger ack source)
     DECLARE @m3 INT, @rc3 INT, @msg3 NVARCHAR(500);
     DECLARE @b4 INT, @ia4 BIT, @rc4 INT, @msg4 NVARCHAR(500);
     DECLARE @m6 INT, @rc6 INT, @msg6 NVARCHAR(500);
     DECLARE @hist INT, @hist2 INT;
+    DECLARE @acks INT;                                 -- ack-presence assertion (R3/R4)
+
+    -- S0: seed an ADVISORY ticket overlapping the S1 window (day +400) so the
+    -- insert-time trigger has a real advisory to materialize acks for (R3/R4).
+    EXEC dbo.usp_maintenance_report @space_id = @smk_space, @reporter_id = @smk_requester,
+        @problem_description = N'S0 advisory seed (trigger ack source)',
+        @start_time = @win_start, @impact_level = 'advisory',
+        @maintenance_id = @m0 OUTPUT, @result_code = @rc0 OUTPUT, @message = @msg0 OUTPUT;
+    IF @rc0 = 0 AND @m0 IS NOT NULL
+        PRINT 'PASS S0: advisory seed ticket created (rc=0).';
+    ELSE
+        PRINT 'FAIL S0: expected rc=0 — got rc=' + ISNULL(CAST(@rc0 AS VARCHAR(5)),'null');
 
     -- S1: instant submit success (all gates pass) -> rc=0, instant=1
     EXEC dbo.usp_booking_instant_submit
@@ -1037,6 +1057,24 @@ BEGIN
     ELSE
         PRINT 'FAIL S1: expected rc=0 instant=1 — got rc=' + ISNULL(CAST(@rc1 AS VARCHAR(5)),'null')
             + ' instant=' + ISNULL(CAST(@ia1 AS VARCHAR(1)),'null') + '.';
+
+    -- S1b: acks materialized by the trigger (R3/R4) — count must equal the number
+    -- of overlapping active advisories at insert time, all attributed to requester;
+    -- a UQ (booking_id, maintenance_id) double-insert would have rolled back S1.
+    SET @acks = (SELECT COUNT(*) FROM dbo.booking_advisory_acknowledgement
+                 WHERE booking_id = @b1);
+    IF @acks >= 1
+       AND @acks = (SELECT COUNT(*) FROM dbo.maintenance m
+            WHERE m.space_id = @smk_space AND m.is_deleted = 0
+              AND m.status IN ('open','in_progress') AND m.impact_level = 'advisory'
+              AND m.start_time < @win_end
+              AND (m.completion_time IS NULL OR m.completion_time > @win_start))
+       AND NOT EXISTS (SELECT 1 FROM dbo.booking_advisory_acknowledgement
+                       WHERE booking_id = @b1 AND acknowledged_by <> @smk_requester)
+        PRINT 'PASS S1b: trigger materialized ' + CAST(@acks AS VARCHAR(5))
+            + ' ack row(s) at insert (attributed to requester).';
+    ELSE
+        PRINT 'FAIL S1b: ack count=' + CAST(@acks AS VARCHAR(5)) + ' — trigger contract (R3/R4) broken.';
 
     -- S2: overlapping instant submit -> BR1 (51003)
     EXEC dbo.usp_booking_instant_submit
@@ -1120,6 +1158,20 @@ BEGIN
             PRINT 'FAIL S4: expected pending fallback — rc=' + ISNULL(CAST(@rc4 AS VARCHAR(5)),'null')
                 + ' msg=' + ISNULL(@msg4,'null');
 
+        -- S4b: trigger still ran for the PENDING insert (R1: status-agnostic) —
+        -- ack count must match the active-advisory predicate (0 on this clean window).
+        SET @acks = (SELECT COUNT(*) FROM dbo.booking_advisory_acknowledgement
+                     WHERE booking_id = @b4);
+        IF @acks = (SELECT COUNT(*) FROM dbo.maintenance m
+                WHERE m.space_id = @smk_space AND m.is_deleted = 0
+                  AND m.status IN ('open','in_progress') AND m.impact_level = 'advisory'
+                  AND m.start_time < @win2_end
+                  AND (m.completion_time IS NULL OR m.completion_time > @win2_start))
+            PRINT 'PASS S4b: pending fallback ack count matches predicate ('
+                + CAST(@acks AS VARCHAR(5)) + ').';
+        ELSE
+            PRINT 'FAIL S4b: ack count=' + CAST(@acks AS VARCHAR(5)) + ' for pending booking.';
+
         -- S5: staff approve the pending booking (W2 success path)
         DECLARE @rc5b INT, @msg5b NVARCHAR(500);
         EXEC dbo.usp_booking_approve @booking_id = @b4, @approver_id = @smk_staff,
@@ -1193,6 +1245,7 @@ BEGIN
     IF @b4 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b4;
     IF @m3 IS NOT NULL DELETE FROM dbo.maintenance WHERE maintenance_id = @m3;
     IF @m6 IS NOT NULL DELETE FROM dbo.maintenance WHERE maintenance_id = @m6;
+    IF @m0 IS NOT NULL DELETE FROM dbo.maintenance WHERE maintenance_id = @m0;
 
     -- final invariant audit: no overlapping confirmed bookings on the smoke space
     DECLARE @ovl INT = (SELECT COUNT(*)

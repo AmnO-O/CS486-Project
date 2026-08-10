@@ -11,7 +11,8 @@ GO
 -- Reverses every additive change made by
 -- outputs/10-schema-migration-G05.sql, so a bad migration can be undone
 -- during testing:
---   1. drops the new/replaced Phase 2 triggers,
+--   1. drops the new/replaced Phase 2 triggers (incl. the v6 insert-time
+--      trigger trg_bookings_insert_advisory_acknowledgements),
 --   2. restores the three Phase 1 trigger definitions
 --      (trg_bookings_check_maintenance, trg_booking_approvals_check_space,
 --      trg_maintenance_completion_space_status) from the Phase 1 baseline,
@@ -52,6 +53,10 @@ GO
 -- ============================================================
 IF OBJECT_ID(N'dbo.trg_booking_advisory_ack_validate', N'TR') IS NOT NULL
     DROP TRIGGER dbo.trg_booking_advisory_ack_validate;
+GO
+
+IF OBJECT_ID(N'dbo.trg_bookings_insert_advisory_acknowledgements', N'TR') IS NOT NULL
+    DROP TRIGGER dbo.trg_bookings_insert_advisory_acknowledgements;
 GO
 
 IF OBJECT_ID(N'dbo.trg_maintenance_impact_history', N'TR') IS NOT NULL
@@ -263,6 +268,7 @@ SELECT 'R7.4 Phase 1 triggers restored' AS check_name,
         AND OBJECT_ID(N'dbo.trg_maintenance_recompute_space_status', N'TR') IS NULL
         AND OBJECT_ID(N'dbo.trg_booking_advisory_ack_validate', N'TR') IS NULL
         AND OBJECT_ID(N'dbo.trg_space_type_allowed_purpose_updated_at', N'TR') IS NULL
+        AND OBJECT_ID(N'dbo.trg_bookings_insert_advisory_acknowledgements', N'TR') IS NULL
             THEN 'PASS' ELSE 'FAIL' END AS result,
        '3 Phase 1 triggers recreated, Phase 2 triggers dropped' AS detail;
 GO

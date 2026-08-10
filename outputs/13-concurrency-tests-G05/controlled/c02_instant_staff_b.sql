@@ -2,8 +2,12 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c02 session B (K2)
--- Order-1: instant submit overlapping W2A after A approved PB2a -> 51003.
--- Order-2: instant submit overlapping W2B (before any approval) -> 0.
+-- Fixed schedule: A approves PB2a at ~+12 s and PB2b at ~+60 s.
+--   W2A submit @+36 s covering PB2a's window -> 51003 (approved exists);
+--   W2B submit @+40 s covering PB2b's window -> rc=0, instant=1
+--     (submit-wins; A's approval of PB2b at +60 s then fails 51003).
+-- Margins of >= 12 s leave the asserted codes independent of the
+-- sessions' arrival order.
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -21,8 +25,8 @@ DECLARE @w2b_start DATETIME2 = DATEADD(minute, 30, @w2b);
 DECLARE @w2b_end   DATETIME2 = DATEADD(hour, 1, @w2b_start);
 DECLARE @bk INT, @ok BIT, @rc INT, @msg NVARCHAR(500);
 
--- Order-1: A approved PB2a at ~+1 s; submit W2A overlapping it.
-WAITFOR DELAY '00:00:02';
+-- Order-1: A approved PB2a at ~+12 s; submit W2A overlapping it at +36 s.
+WAITFOR DELAY '00:00:36';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s2, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 5,
@@ -35,8 +39,9 @@ IF @rc = 51003
 ELSE
     PRINT 'FAIL c02-B: expected 51003 for W2A submit, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null');
 
--- Order-2: no approval exists on W2B yet -> instant succeeds.
-WAITFOR DELAY '00:00:01';
+-- Order-2: no approval exists on W2B yet -> instant succeeds (before
+-- A's PB2b approval at ~+60 s).
+WAITFOR DELAY '00:00:04';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s2, @requester_id = @rq, @purpose = 'meeting',
     @expected_participants = 10,

@@ -66,6 +66,7 @@ run2 controlled/c10_staff_staff_a.sql controlled/c10_staff_staff_b.sql
 run1 controlled/c11_soft_gate.sql
 run1 controlled/c12_fallback_vs_instant.sql
 run1 controlled/c13_ack_repair.sql
+run1 controlled/c14_raw_insert_trigger.sql
 
 echo "== T13 run: suite audit =="
 run1 audit_invariant.sql

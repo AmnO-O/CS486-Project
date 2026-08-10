@@ -18,7 +18,8 @@ DECLARE @w3_e2 DATETIME2 = DATEADD(hour, 7, @w3);
 DECLARE @b1 INT, @o1 BIT, @r1 INT, @m1 NVARCHAR(500);
 DECLARE @b2 INT, @o2 BIT, @r2 INT, @m2 NVARCHAR(500);
 
--- Submit #1 while M3 is still advisory (A escalates at ~+4 s).
+-- Submit #1 while M3 is still advisory (A escalates at ~+15 s; margin
+-- 13 s against worst-case skew).
 WAITFOR DELAY '00:00:02';
 EXEC dbo.usp_booking_instant_submit
     @space_id = @s3, @requester_id = @rq, @purpose = 'meeting',
@@ -32,7 +33,7 @@ IF @r1 = 0 AND @o1 = 1
 ELSE
     PRINT 'FAIL c03b-B: expected 0/1, got rc=' + ISNULL(CAST(@r1 AS VARCHAR(5)),'null');
 
-WAITFOR DELAY '00:00:06';   -- A escalates at ~+4 s, restores at ~+10 s
+WAITFOR DELAY '00:00:20';   -- A escalates at ~+15 s, restores at ~+45 s
 
 -- Submit #2 on a DIFFERENT window (M3 has no completion: overlaps all
 -- later times; #1's window is taken by the confirmed booking, so BR1

@@ -16,13 +16,23 @@ DECLARE @w1_start DATETIME2 = DATEADD(minute, 30, @w1);
 DECLARE @w1_end DATETIME2 = DATEADD(hour, 1, DATEADD(minute, 30, @w1));
 DECLARE @bk INT, @ok BIT, @rc INT, @msg NVARCHAR(500);
 
-EXEC dbo.usp_booking_instant_submit
-    @space_id = @s1, @requester_id = @rq, @purpose = 'meeting',
-    @expected_participants = 10,
-    @requested_start_time = @w1_start,
-    @requested_end_time = @w1_end,
-    @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
-    @result_code = @rc OUTPUT, @message = @msg OUTPUT;
+-- TRY/CATCH keeps the batch error-free under any race outcome; a loser
+-- that waited on the applock gets sp_getapplock return 1 (granted after
+-- wait) — Task 12 rev5 treats 0 and 1 both as success, then re-checks
+-- BR1 under the lock and returns 51003 cleanly.
+BEGIN TRY
+    EXEC dbo.usp_booking_instant_submit
+        @space_id = @s1, @requester_id = @rq, @purpose = 'meeting',
+        @expected_participants = 10,
+        @requested_start_time = @w1_start,
+        @requested_end_time = @w1_end,
+        @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
+        @result_code = @rc OUTPUT, @message = @msg OUTPUT;
+END TRY
+BEGIN CATCH
+    PRINT 'FAIL c01-B: entry point threw (error ' + CAST(ERROR_NUMBER() AS VARCHAR(10))
+        + ') — Task 12 applock-code defect; msg=' + ISNULL(ERROR_MESSAGE(),'null');
+END CATCH
 
 IF @rc = 0 AND @ok = 1
     PRINT 'PASS c01-B: instant approved (winner side).';

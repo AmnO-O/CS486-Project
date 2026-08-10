@@ -1,0 +1,92 @@
+=================================================================
+CS486 G05 - Task 10 schema migration - COMPILE + SMOKE LOG (rev6)
+=================================================================
+Run date : 2026-08-10-0805
+Instance: SQL Server 2022 (16.0.1000.6, localhost, Windows auth)
+Scratch : CS486_G05_MIGTEST (created, exercised, dropped)
+
+Changes under test (rev6, per planFix.md rev4 FINAL - R1..R10):
+  - NEW trigger trg_bookings_insert_advisory_acknowledgements
+    (AFTER INSERT ON bookings): materializes one ack row per advisory
+    maintenance active at insert time overlapping the booking window
+    (NR2 insert-time layer; R6 predicate = exact complement of 8c).
+  - Migration: REVISION v6 header note, trigger-mapping bullet, guarded
+    drop in section 1, new section 8g (+ R6 literal diff comment),
+    validation 10.8 (+trigger), smoke tests S2/S3/S11/S12 reworked
+    (insert-trigger now auto-creates ack rows).
+  - Rollback: drop for the new trigger + R7.4 asserts it is gone.
+
+-----------------------------------------------------------------
+Step a. Scratch DB create
+-----------------------------------------------------------------
+sqlcmd -S localhost -E -C -b -Q "DROP DATABASE IF EXISTS CS486_G05_MIGTEST; CREATE DATABASE CS486_G05_MIGTEST;"
+Result: DB-OK
+
+-----------------------------------------------------------------
+Step b. Phase 1 baseline rebuild (05 DDL + 06 sample data)
+-----------------------------------------------------------------
+sqlcmd ... -d CS486_G05_MIGTEST -b -i outputs/05-db-definition-G05.sql  -> 05-OK
+sqlcmd ... -d CS486_G05_MIGTEST -b -i outputs/06-sample-data-G05.sql    -> 06-OK
+
+-----------------------------------------------------------------
+Step c. Migration rev6 run
+-----------------------------------------------------------------
+Result: MIG-OK (exit 0, no errors)
+MIGRATION-OK: Phase 2 schema migration applied.
+Validation summary (all PASS):
+  10.1 tables PASS   10.8 triggers PASS (BR4/BR2 replaced + 7 new triggers)
+  10.9 system approver PASS   10.10 seed 18 pairs PASS   10.11 status recompute PASS
+Smoke tests:
+  S1  out_of_service blocks overlapping booking ................ PASS
+  S2  advisory maintenance allows the booking .................. PASS
+  S3  trigger materialized the ack at insert (NR2, acknowledged_by =
+      requester) ................................................ PASS   <- v6 NEW
+  S4  ack against a DIFFERENT maintenance accepted ............. PASS
+  S5  instant approval accepted when acks are complete ......... PASS
+  S6  impact history recorded .................................. PASS
+  S7  current_status recomputed to under_maintenance ........... PASS
+  S8  description-only update skipped by guard ................. PASS
+  S9  soft-delete recomputed space to available ................ PASS
+  S10 junction CHECK rejects invalid space_type ............... PASS
+  S11 composite UQ rejects duplicate pair (trigger row +
+      manual insert) ........................................... PASS   <- v6 reworked
+  S12 approval gate rejects missing acks (advisory created AFTER
+      booking insert, DD6 window) .............................. PASS   <- v6 reworked
+MIGRATION-VALIDATION-DONE
+
+R6 exercised directly: S2/S3 seeded an active advisory BEFORE the
+booking insert; the trigger produced the ack row and 8c accepted it
+(same-transaction, no error), proving complement-equivalence on a live
+server rather than by reasoning.
+
+-----------------------------------------------------------------
+Step d. Idempotency re-run (migration a second time)
+-----------------------------------------------------------------
+Result: RERUN-OK (exit 0)
+WARNING: Phase 2 tables already exist - running in idempotent re-run
+mode (additive steps skipped, triggers refreshed).
+MIGRATION-OK: Phase 2 schema migration applied.
+(no Msg 2714 or duplicate-object errors; guard drops worked)
+
+-----------------------------------------------------------------
+Step e. Rollback run
+-----------------------------------------------------------------
+Result: ROLLBACK-OK (exit 0)
+ROLLBACK-OK: Phase 2 migration reversed (Phase 1 schema restored).
+R7.1 new tables gone PASS   R7.2 impact_level gone PASS
+R7.3 spaces restored PASS   R7.4 Phase 1 triggers restored PASS
+R7.5 system approver gone PASS   R7.6 no instant approvals remain PASS
+R7.4 includes: trg_bookings_insert_advisory_acknowledgements IS NULL
+(asserts the v6 trigger was dropped)
+
+-----------------------------------------------------------------
+Step f. Cleanup
+-----------------------------------------------------------------
+DROP DATABASE CS486_G05_MIGTEST -> SCRATCH-DROPPED
+
+-----------------------------------------------------------------
+Conclusion: rev6 migration + rollback compile, run, re-run and
+reverse cleanly on SQL Server 2022; all validation and smoke checks
+pass, including the new insert-trigger semantics. No data-loss
+indicators (rollback re-created the exact Phase 1 object set).
+=================================================================

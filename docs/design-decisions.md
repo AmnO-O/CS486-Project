@@ -962,10 +962,74 @@ not asserted. Exclusions recorded as NONE this run.
 then controlled pairs, then the invariant audit.
 
 ---
+
+### Decision: Task 10 rev 6 — insert-time advisory-ack trigger (planFix R1–R10)
+
+**Task:** 10 (Schema Migration — rev 6) · **Date:** 2026-08-09 (approved 2026-08-10)
+
+`schema enforcement` closes the raw-DML ack gap: `trg_bookings_insert_advisory_acknowledgements`
+(`AFTER INSERT ON dbo.bookings`) materializes one ack row per advisory active at
+insert time overlapping the booking period — unconditional and status-agnostic
+(R1). The ack table's composite UQ `(booking_id, maintenance_id)` makes this the
+**single** insert-time owner: W1 step-8 ack INSERT removed from
+`usp_booking_instant_submit` (R3, Task 12 rev 4); W2 NR2 repair in
+`usp_booking_approve` stays unchanged (DD6 layer).
+
+- **Consent model — implicit, evidenced:** five independent sources describe the
+  requirement as "record that the requester was informed", never "prove the
+  requester read a popup" (phase-2 description:16; project-overview:61-62;
+  outputs/08:68-70; outputs/09:150-153; entity-registry:363). The booking row
+  IS the record that the requester was informed of / is deemed to have
+  acknowledged the active advisories at booking time. R9 wording standardized
+  (doc 09 A.2.3 `acknowledged_at` note).
+- **R6 (closed, literal diff):** the trigger's INSERT-eligible predicate is the
+  exact logical complement of `trg_booking_advisory_ack_validate`'s rejection
+  predicate, with matched strictness and identical NULL semantics on
+  `completion_time` — no ack row produced by the trigger can be rejected by 8c.
+  The verbatim diff is embedded in the migration above the trigger.
+- **R7 (closed):** the 51004 gate (`trg_booking_approvals_check_space`) is
+  defined `ON dbo.booking_approvals`; b03-B's raw insert never touches that
+  table → no latent 51004 for this trigger to fix; its only effect there is one
+  inert ack row (R10 verified b03 assertions are ack-independent).
+- **R8 (closed):** "Report #4" (doc 09) ≡ Q5 (Task 16,
+  `usp_task16_q5_escalation_impact`) — one artifact, standardized name.
+- **Task 14 unaffected (R5):** generator's `BULK INSERT` omits `FIRE_TRIGGERS`
+  by design → trigger never fires during load; generator keeps its own ack logic.
+- **Verified:** scratch-DB compile (incl. seeded advisory-overlap-at-insert case),
+  rollback drops the trigger, idempotent re-run OK; Task 13 live run green
+  (c14 raw-insert trigger test, 2026-08-10).
+
+---
+
+### Decision: Task 12 rev 5 — `sp_getapplock` return `1` (granted after wait) is success
+
+**Task:** 12 (Concurrency Implementation — rev 5) · **Date:** 2026-08-10
+
+All four entry points guarded the app lock with `IF @lock_rc <> 0 → THROW 52999`.
+SQL Server documents return `1` as "lock granted after waiting for conflicting
+locks"; under real contention the *loser* session waits, receives the lock with
+return `1`, and rev 4 threw 52999 instead of re-checking BR1 and returning the
+deterministic code `51003` (defect surfaced by Task 13 c01 live run).
+
+**Fix:** `IF @lock_rc NOT IN (0, 1)` in
+`usp_booking_instant_submit`, `usp_booking_approve`,
+`usp_maintenance_set_impact_level`, `usp_maintenance_report` — both `0`
+(granted sync) and `1` (granted after wait) proceed; -1/-2/-3 map to
+51005/51006/51007 unchanged; any other return (e.g. -999) remains the 52999
+programmer-error THROW. No schema change; result-code contract unchanged.
+Complies with the Task 11 §5.3 contract (its table simply omitted return `1`).
+
+**Verified:** scratch smoke S0–S6d PASS + idempotent re-run
+(`CS486_G05_T12R5`); full Task 13 suite green — c01-B now
+"PASS c01-B: conflict 51003 (loser side) as designed" (run 2026-08-10-101557).
+
+---
 ## Revision log
 
 | Date | Change | By | Task |
 |---|---|---|---| 
+| 2026-08-10 | Task 12 **rev 5** — applock guard `<> 0` → `NOT IN (0,1)`: `sp_getapplock` return `1` (granted after wait) is success; loser sessions now re-check and return 51003 instead of THROWing 52999 (surfaced by Task 13 c01 live run) | Agent | Task 12
+| 2026-08-09 | Task 10 **rev 6** — insert-time advisory-ack trigger (planFix R1–R10): unconditional AFTER-INSERT materialization, single insert-time owner (W1 ack INSERT removed in Task 12 rev 4), R6 predicate-complement diff embedded, implicit-consent wording (R9), Report #4 ≡ Q5 naming (R8) | Agent | Task 10
 | 2026-08-08 | Task 09 **v2.6** — per-space duration cap dropped (column + CHECK); usage-policy test back to **checks 1–5** (soft gate = purpose only; no duration gate); downstream: 10 (rev 5), 11 (rev 3.3), 12 (rev 3), 13 | Agent | Task 09
 | 2026-08-07 | Phase 2 Task 09 v2.5 — usage policy now data-driven: `spaces.usage_policy` free-text dropped (2026-06-15 decision superseded); `spaces.max_hours` added (per-space duration cap, NULL = unlimited, amends 2026-08-03 spaces-unchanged decision); new `space_type_allowed_purpose` junction (data-defined instant eligibility, seeded for the four eligible types); instant test extended to checks 1–6 with soft (purpose/cap) → pending-fallback vs hard (capacity/overlap/out-of-service) → reject | Agent | Task 09 |
 2026-08-03 | Phase 2 — instant-booking origin **derived** from `approver_id = -1` (no stored origin column — a stored one would add the non-key FD `approver_id → origin` and violate 3NF); reserved system user `-1`; eligibility set + auto-approval test (U1); NR6 enforcement deferred to Task 11 | Agent | Task 09 |

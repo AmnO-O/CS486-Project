@@ -2,8 +2,9 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b09 session B (K5 — no concurrency control)
--- Inserts the confirmed booking overlapping the OOS ticket while the
--- ticket is uncommitted. BR4 trigger sees no OOS -> insert passes.
+-- Inserts the confirmed booking on the would-be ticket window FIRST
+-- (deterministic; A polls for this row, then inserts the OOS ticket).
+-- The BR4 trigger sees no OOS maintenance -> insert passes.
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -11,19 +12,25 @@ SET XACT_ABORT ON;
 DECLARE @s5 INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-05-MR');
 DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requester@campus.edu');
 DECLARE @w5 DATETIME2 = DATEADD(day, 680, SYSDATETIME());
-DECLARE @b5 INT;
+DECLARE @b5 INT, @r_err INT = 0;
 
-WAITFOR DELAY '00:00:02';
-INSERT INTO dbo.bookings
-    (space_id, requester_id, requested_start_time, requested_end_time,
-     purpose, expected_participants, status)
-VALUES
-    (@s5, @rq, DATEADD(minute, 30, @w5), DATEADD(hour, 1, DATEADD(minute, 30, @w5)),
-     'meeting', 10, 'approved');
-SET @b5 = SCOPE_IDENTITY();
-PRINT 'b09-B: confirmed booking ' + CAST(@b5 AS VARCHAR(12)) + ' committed.';
+BEGIN TRY
+    INSERT INTO dbo.bookings
+        (space_id, requester_id, requested_start_time, requested_end_time,
+         purpose, expected_participants, status)
+    VALUES
+        (@s5, @rq, DATEADD(minute, 30, @w5), DATEADD(hour, 1, DATEADD(minute, 30, @w5)),
+         'meeting', 10, 'approved');
+    SET @b5 = SCOPE_IDENTITY();
+    PRINT 'b09-B: confirmed booking ' + CAST(@b5 AS VARCHAR(12)) + ' committed (no control).';
+END TRY
+BEGIN CATCH
+    SET @r_err = ERROR_NUMBER();
+    PRINT 'b09-B: submit rejected by raw BR4 trigger (error ' + CAST(@r_err AS VARCHAR(10))
+        + ' — backstop family, no business code).';
+END CATCH
 
-WAITFOR DELAY '00:00:04';
+WAITFOR DELAY '00:00:06';   -- let A's ticket land and commit first
 DECLARE @q INT = (SELECT COUNT(*)
     FROM bookings b
     INNER JOIN dbo.maintenance m ON m.space_id = b.space_id
@@ -34,8 +41,11 @@ DECLARE @q INT = (SELECT COUNT(*)
       AND (m.completion_time IS NULL OR m.completion_time > b.requested_start_time));
 IF @q > 0
     PRINT 'PASS b09-B: VIOLATION-OBSERVED (Q=' + CAST(@q AS VARCHAR(10)) + ').';
+ELSE IF @r_err <> 0
+    PRINT 'b09-B: insert backstopped by raw trigger (no control).';
 ELSE
-    PRINT 'b09-B: 0 violations at time of read.';
+    PRINT 'b09-B: no violation persisted (collapsed race; backstop path).';
 
-DELETE FROM dbo.bookings WHERE booking_id = @b5;
+IF @b5 IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @b5)
+    DELETE FROM dbo.bookings WHERE booking_id = @b5;
 PRINT 'b09-B: cleanup done.';

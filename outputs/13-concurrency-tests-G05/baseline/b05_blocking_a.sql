@@ -19,11 +19,11 @@ IF @m3 IS NULL
     THROW 53008, N'Task 13 b05: M3 not found.', 1;
 
 BEGIN TRANSACTION;
-    -- touch the same row B needs -> exclusive row lock held ~18 s
+    -- touch the same row B needs -> exclusive row lock held ~25 s
     UPDATE dbo.maintenance
     SET status = 'open'           -- no-op value: lock only, state unchanged
     WHERE maintenance_id = @m3;
     PRINT 'b05-A: holding row lock on M3 (no app lock, no timeout contract).';
-    WAITFOR DELAY '00:00:18';
+    WAITFOR DELAY '00:00:25';
 COMMIT TRANSACTION;
-PRINT 'b05-A: released after 18 s.';
+PRINT 'b05-A: released after 25 s.';

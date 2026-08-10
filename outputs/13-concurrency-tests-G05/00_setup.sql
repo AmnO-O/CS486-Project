@@ -116,19 +116,17 @@ DECLARE @w8  DATETIME2 = DATEADD(day, 740, SYSDATETIME());  -- b10/c10 staff vs 
 DECLARE @w9  DATETIME2 = DATEADD(day, 760, SYSDATETIME());  -- c13 ack repair
 
 -- ------------------------------------------------------------------
--- 6. Advisory maintenance tickets (seeded; escalation/ack targets)
+-- 6. Advisory maintenance ticket M3 (seeded; escalation target)
 --    M3: on S3, overlaps W3 (advisory -> escalated to OOS in b03/c03)
---    M9: on S9, overlaps W9 (advisory; acks deliberately NOT inserted)
+--    M9 (on S9, overlaps W9) is seeded in section 7 AFTER PB13 —
+--    ordering matters (planFix): PB13 must be inserted BEFORE M9 exists
+--    so the Task 10 rev 6 insert trigger materializes NOTHING for PB13
+--    and c13's "acks deliberately NOT inserted" DD6 state holds.
 -- ------------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM dbo.maintenance m
                WHERE m.space_id = @s3 AND m.problem_description = N'TEST-13 advisory M3')
     INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
     VALUES (@s3, @rq, N'TEST-13 advisory M3', DATEADD(hour, -1, @w3), 'open', 'advisory');
-
-IF NOT EXISTS (SELECT 1 FROM dbo.maintenance m
-               WHERE m.space_id = @s9 AND m.problem_description = N'TEST-13 advisory M9')
-    INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
-    VALUES (@s9, @rq, N'TEST-13 advisory M9', DATEADD(hour, -1, @w9), 'open', 'advisory');
 
 -- ------------------------------------------------------------------
 -- 7. Pending bookings (seeded via RAW INSERT — pending rows pass all
@@ -160,9 +158,19 @@ IF NOT EXISTS (SELECT 1 FROM dbo.bookings b WHERE b.space_id = @s8 AND b.request
     INSERT INTO dbo.bookings (space_id, requester_id, requested_start_time, requested_end_time, purpose, expected_participants, status)
     VALUES (@s8, @rq, @w8b, DATEADD(hour, 2, @w8b), 'meeting', 10, 'pending');
 
--- PB13: S9 window W9 (c13 ack repair; advisory M9 overlaps, acks missing)
+-- PB13: S9 window W9 (c13 ack repair). PB13 is inserted FIRST — before
+-- advisory M9 exists — so the Task 10 rev 6 insert trigger materializes
+-- no ack rows for it (realistic DD6 case: advisory created post-booking;
+-- the (PB13, M9) ack appears only via W2's repair inside c13).
 IF NOT EXISTS (SELECT 1 FROM dbo.bookings b WHERE b.space_id = @s9 AND b.requested_start_time = @w9)
     INSERT INTO dbo.bookings (space_id, requester_id, requested_start_time, requested_end_time, purpose, expected_participants, status)
     VALUES (@s9, @rq, @w9, DATEADD(hour, 2, @w9), 'meeting', 10, 'pending');
+
+-- M9 (seeded AFTER PB13 — planFix ordering): on S9, overlaps W9,
+-- advisory; acks deliberately NOT inserted at seed time.
+IF NOT EXISTS (SELECT 1 FROM dbo.maintenance m
+               WHERE m.space_id = @s9 AND m.problem_description = N'TEST-13 advisory M9')
+    INSERT INTO dbo.maintenance (space_id, reporter_id, problem_description, start_time, status, impact_level)
+    VALUES (@s9, @rq, N'TEST-13 advisory M9', DATEADD(hour, -1, @w9), 'open', 'advisory');
 
 PRINT 'T13-SETUP-OK: TEST-13 fixture ready (1 dept, 2 users, 9 spaces, 2 advisories, 6 pending bookings).';

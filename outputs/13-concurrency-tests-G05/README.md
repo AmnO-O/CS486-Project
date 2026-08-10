@@ -30,7 +30,7 @@ cd outputs/13-concurrency-tests-G05
 ./run_all.sh
 ```
 
-The runner, in order: setup → 6 baseline pairs → 8 controlled pairs + 3
+The runner, in order: setup → 6 baseline pairs → 7 controlled pairs + 4
 single-session gates → suite-wide invariant audit → teardown. Every script
 logs to `results/<timestamp>-<name>.log`; exit 0 only if no `FAIL` line exists
 in any log and sqlcmd never errored.
@@ -49,6 +49,7 @@ in any log and sqlcmd never errored.
 | soft-gate fallback (T11) | — (no race) | `c11` | rc=0, instant=0, stays pending, no auto-approval row |
 | fallback-vs-instant overlap | — | `c12` | fallback 0/0; instant 0/1 same window; later approve of fallback 51003 |
 | advisory-ack repair in W2 | — | `c13` | approve rc=0 (not 51004); ack rows exist, acknowledged_by = requester |
+| insert-time ack trigger (raw-DML path) | — (no race; tests the schema trigger directly) | `c14` | raw insert → ack rows exist immediately, count = overlapping active advisories, acknowledged_by = requester; composite UQ never double-inserted (planFix R5) |
 
 **Baseline PASS condition:** the invariant violation materializes (audit count
 ≥ 1) or a raw engine error surfaces (unique-violation 2601/2627, deadlock 1205,
@@ -69,6 +70,9 @@ TEST-13 world: 1 department, 2 users (`test13.requester@campus.edu` lecturer,
 advisory (M9) maintenance ticket, 6 seeded pending bookings (PB2a/PB2b/PB3/
 PB10a/PB10b/PB13). All windows ≥ +600 days from run time — never collides with
 Task 06 sample data or Task 12 smoke windows (+340..+400 days). Idempotent.
+PB13 is seeded **before** advisory M9 (planFix fixture ordering) so the
+Task 10 rev 6 insert trigger materializes nothing for PB13 — c13's "acks
+deliberately absent" DD6 state holds by construction.
 
 Teardown (`99_cleanup.sql`) deletes the seeded world in FK-safe order and
 THROWs if any TEST-13 row remains — provable cleanup per N3.
@@ -77,12 +81,15 @@ THROWs if any TEST-13 row remains — provable cleanup per N3.
 
 | date | environment | scenario PASSes | FAILs | notes |
 |---|---|---|---|---|
+| 2026-08-10 | localhost SQL Server (2019+, `CS486_G05_T13LIVE` scratch DB) | 29/29 (12 baseline + 17 controlled) | 0 | Live run on Task 12 **rev 5** (applock return-1 fix): c01-B now returns 51003 as designed; audit Q_BR1=0/Q_NR6=0. Runner `T13-SUITE: PASS`. See `results/SUMMARY.log` + `FULL_SUITE_RUN.log`. |
 | 2026-08-09 | Docker `cs486_sql_server` (SQL Server 2022) | 29/29 (12 baseline + 17 controlled) | 0 | Full comparison suite verified; baseline race conditions & trigger 50000 errors confirmed, controlled applock procedures serialized cleanly with rc=51003/51002/51005 and Q_BR1=0. See [DEMO_RESULTS.md](file:///Users/caoquanghung/HCMUS/CS/DataBase/FinalProject/CS486-Project/outputs/13-concurrency-tests-G05/DEMO_RESULTS.md) for full report. |
 
 ## 6. Notes / decisions recorded this run
 
 - Baseline scope decision: FULL baseline (K1, K2, K3, K5 + lock-blocking b05
   + touch staff-vs-staff b10) — recorded in `docs/design-decisions.md`.
+- c14 (planFix §4.4): the rev 6 insert trigger's raw-DML boundary is tested
+  directly — acks materialize for bookings inserted without the procedures.
 - Session B must be a different sqlcmd process (locks are connection-scoped) —
   the runner launches `_a` and `_b` in parallel (N1).
 - Entry points are called standalone (they own transactions; never wrap them in

@@ -3,11 +3,13 @@ SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 CONTROLLED c02 (K2) — instant submit vs staff approval
 -- Task 12: usp_booking_instant_submit vs usp_booking_approve,
--- both orders, deterministic sequencing:
---   Order-1 (approve first): A approves PB2a (rc=0); B's instant
---     submit overlapping W2A -> 51003 (BR1, serialized by applock).
---   Order-2 (submit first): B's instant on W2B succeeds (rc=0,
---     instant=1); A's later approval of PB2B -> 51003.
+-- both orders, deterministic sequencing. FIXED SCHEDULE with >= 12 s
+-- margins between critical events (process-spawn skew observed up to
+-- ~6 s; margins absorb it so the asserted codes never depend on
+-- arrival order):
+--   B submit W2A @+36 s  -> 51003 (A approved PB2a @+12 s first);
+--   B submit W2B @+40 s  -> rc=0, instant=1 (submit-wins order);
+--   A approve PB2b @+60 s -> 51003 (BR1 vs B's confirmed W2B booking).
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -24,7 +26,8 @@ IF @pb2a IS NULL OR @pb2b IS NULL
 
 DECLARE @rc INT, @msg NVARCHAR(500);
 
--- Order-1: approve PB2a FIRST; B is submitting at ~+3 s.
+-- Order-1: approve PB2a first; B is submitting at ~+36 s (12 s margin).
+WAITFOR DELAY '00:00:12';
 EXEC dbo.usp_booking_approve
     @booking_id = @pb2a, @approver_id = @st, @decision = 'approved',
     @rejection_reason = NULL, @decision_note = N'T13 c02 order-1',
@@ -34,8 +37,9 @@ IF @rc = 0
 ELSE
     PRINT 'FAIL c02-A: expected rc=0, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null');
 
--- Wait for B: W2A submit (expect 51003 at +2..3 s) and W2B submit (expect 0 at +4 s).
-WAITFOR DELAY '00:00:06';
+-- Wait for B: W2A submit (expect 51003 at +36 s) and W2B submit (expect
+-- 0 at +40 s), both with margins against the +60 s approval below.
+WAITFOR DELAY '00:00:48';
 
 -- Order-2: B confirmed an instant covering W2B -> this approval must fail BR1.
 EXEC dbo.usp_booking_approve

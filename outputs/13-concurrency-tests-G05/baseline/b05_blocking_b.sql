@@ -16,7 +16,7 @@ IF @m3 IS NULL
     THROW 53008, N'Task 13 b05: M3 not found.', 1;
 
 DECLARE @t0 DATETIME2 = SYSDATETIME();
-WAITFOR DELAY '00:00:02';   -- ensure A owns the lock first
+WAITFOR DELAY '00:00:10';   -- A (25 s hold) owns the lock well before B arrives
 
 -- This blocks until A's COMMIT — no timeout parameter exists to bound it.
 UPDATE dbo.maintenance

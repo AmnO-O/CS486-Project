@@ -2,39 +2,50 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b10 (T10 shape — staff vs staff, no control)
--- Two raw approvals of two DIFFERENT pending bookings with OVERLAPPING
--- windows on the same space (PB10a & PB10b), raw SQL:
---   A approves PB10a inside a held transaction;
---   B also approves PB10b (its overlap re-check reads PB10a as still
---     pending -> passes) and commits;
---   A commits.
--- Expected: both pendings become approved -> overlapping confirmed
--- bookings (Q_BR1 >= 1) — the staff-vs-staff K1 shape without a
--- serialization gate.
+-- Two raw approvals of the two OVERLAPPING pending bookings on the
+-- same space (PB10a & PB10b), raw SQL, autonomous race:
+--   A and B each approve ONE pending (autocommit, no hold);
+--   each approval's re-check runs inside the OTHER's uncommitted
+--   window (or after its commit when the arrival collapses).
+-- PASS families (both valid for this no-control twin, never a Task 12
+-- business code):
+--   1) both approvals commit while the other was still pending ->
+--      overlapping confirmed bookings (Q_BR1 >= 1);
+--   2) arrival collapses -> the second approval's raw trigger
+--      backstops (raw engine error family) - no violation persists.
+-- NOTE (why no held transaction): the approval INSERT flips
+-- bookings.status via trg_booking_approvals_decision inside the
+-- writer's transaction; a staged hold would block the second
+-- session's re-check on the X-locked row and force the collapse.
+-- Fixture lookup uses TOP-1 pending ordering (NOT time equality).
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
 DECLARE @s8    INT = (SELECT space_id FROM dbo.spaces WHERE space_code = N'TEST-13-08-MR');
 DECLARE @st    INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.staff@campus.edu');
-DECLARE @w8    DATETIME2 = DATEADD(day, 740, SYSDATETIME());
-DECLARE @w8b   DATETIME2 = DATEADD(minute, 30, @w8);
-DECLARE @pb10a INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s8 AND requested_start_time = @w8  AND status = 'pending');
-DECLARE @pb10b INT = (SELECT booking_id FROM dbo.bookings WHERE space_id = @s8 AND requested_start_time = @w8b AND status = 'pending');
+DECLARE @pb10a INT = (SELECT TOP 1 booking_id FROM dbo.bookings
+                      WHERE space_id = @s8 AND status = 'pending'
+                      ORDER BY requested_start_time ASC);
+DECLARE @pb10b INT = (SELECT TOP 1 booking_id FROM dbo.bookings
+                      WHERE space_id = @s8 AND status = 'pending' AND booking_id <> @pb10a
+                      ORDER BY requested_start_time ASC);
 
 IF @pb10a IS NULL OR @pb10b IS NULL
     THROW 53010, N'Task 13 b10: PB10a/PB10b fixture missing (run 00_setup.sql).', 1;
 
--- A: approve PB10a, held open so B's re-check sees it still pending.
-BEGIN TRANSACTION;
+-- A approves PB10a immediately (autocommit); B fires ~2 s later.
+BEGIN TRY
     INSERT INTO dbo.booking_approvals (booking_id, approver_id, decision_time, decision)
     VALUES (@pb10a, @st, SYSDATETIME(), 'approved');
-    PRINT 'b10-A: approval of PB10a held uncommitted...';
-    WAITFOR DELAY '00:00:05';
-COMMIT TRANSACTION;
+    PRINT 'b10-A: approval of PB10a committed (decision trigger set status=approved).';
+END TRY
+BEGIN CATCH
+    PRINT 'b10-A: approval of PB10a rejected by raw trigger (error '
+        + CAST(ERROR_NUMBER() AS VARCHAR(10)) + ' - backstop family, no business code).';
+END CATCH
 
-WAITFOR DELAY '00:00:03';   -- let B's approval run second
-PRINT 'b10-A: after B, PB10a is approved.';
+WAITFOR DELAY '00:00:06';   -- let B's approval land and commit
 
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings a
@@ -47,9 +58,10 @@ DECLARE @q INT = (SELECT COUNT(*)
 IF @q > 0
     PRINT 'PASS b10-A: VIOLATION-OBSERVED (staff-vs-staff overlapping approvals, Q_BR1=' + CAST(@q AS VARCHAR(10)) + ').';
 ELSE
-    PRINT 'b10-A: 0 overlapping approved pairs recorded this run.';
+    PRINT 'b10-A: 0 overlapping approved pairs recorded this run (second approval backstopped - collapsed race, no control).';
 
--- Restore fixture: remove approval rows, revert statuses to pending.
+-- Restore fixture: A clears BOTH bookings' approval rows and reverts
+-- statuses (idempotent; B also touches only its own row).
 DELETE FROM dbo.booking_approvals WHERE booking_id IN (@pb10a, @pb10b);
 UPDATE dbo.bookings SET status = 'pending' WHERE booking_id IN (@pb10a, @pb10b);
 PRINT 'b10-A: fixture restored.';

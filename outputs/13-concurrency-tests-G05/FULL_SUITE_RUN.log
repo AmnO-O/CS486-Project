@@ -1,7 +1,7 @@
-== T13 run 20260809-101336: setup ==
+== T13 run 20260810-111428: setup ==
 == T13 run: BASELINE pairs (no concurrency control) ==
-RUN-ERROR: pair baseline/b01_instant_instant_a.sql / baseline/b01_instant_instant_b.sql
-RUN-ERROR: pair baseline/b02_instant_vs_staff_a.sql / baseline/b02_instant_vs_staff_b.sql
-RUN-ERROR: pair baseline/b09_ticket_vs_submit_a.sql / baseline/b09_ticket_vs_submit_b.sql
-RUN-ERROR: pair baseline/b10_staff_vs_staff_a.sql / baseline/b10_staff_vs_staff_b.sql
 == T13 run: CONTROLLED (Task 12 entry points) ==
+== T13 run: suite audit ==
+== T13 run: teardown ==
+T13-SUITE: PASS (all scenario + audit logs clean).
+Aggregated summary log created at: results/SUMMARY.log

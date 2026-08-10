@@ -1,0 +1,27 @@
+T12-PREFLIGHT-OK
+T12-PROCEDURES-CREATED
+SMOKE: verify entry points exist (name + parameter count)
+procedure_name                                                                                                                   parameter_count
+-------------------------------------------------------------------------------------------------------------------------------- ---------------
+usp_booking_approve                                                                                                                            7
+usp_booking_instant_submit                                                                                                                    10
+usp_maintenance_report                                                                                                                         8
+usp_maintenance_set_impact_level                                                                                                               5
+
+(4 rows affected)
+PASS S0: advisory seed ticket created (rc=0).
+PASS S1: instant submit auto-approved (rc=0, instant=1).
+PASS S1b: trigger materialized 1 ack row(s) at insert (attributed to requester).
+PASS S2: overlap rejected (code 51003, BR1).
+PASS S3a: ticket created (W4, rc=0).
+PASS S3b: booking against OOS ticket rejected (code 51002, BR4).
+PASS S4: purpose not eligible -> pending fallback (rc=0, instant=0).
+PASS S4b: pending fallback ack count matches predicate (0).
+PASS S5: staff approval succeeded (rc=0).
+PASS S5b: rejection without reason refuses (51001, BR7).
+PASS S6a: advisory ticket created (no-lock path).
+PASS S6b: escalation recorded with SESSION_CONTEXT attribution (NR3).
+PASS S6c: no-op same-level returns 0 and writes no new history row.
+PASS S6d: downgrade back to advisory succeeded (rc=0).
+PASS invariant: zero overlapping confirmed bookings on the smoke space.
+SMOKE-OK: all non-concurrent Task 12 smoke checks finished.

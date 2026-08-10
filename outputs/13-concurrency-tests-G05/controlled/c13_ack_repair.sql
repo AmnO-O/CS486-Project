@@ -8,6 +8,11 @@ SET ANSI_NULLS ON;
 --   1) return rc=0 (not 51004) — W2 repairs the missing ack set
 --      inside the critical section (acknowledged_by = requester);
 --   2) leave the ack rows present for (PB13, M9).
+-- Fixture ordering (planFix): PB13 is seeded BEFORE advisory M9, so the
+-- Task 10 rev 6 insert trigger (trg_bookings_insert_advisory_acknowledgements)
+-- materialized nothing for PB13 at insert time — M9 is a genuine
+-- post-booking advisory (DD6 window). The layer-1 trigger (exercised
+-- directly by c14) and the layer-2 W2 repair are both exercised here.
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -20,7 +25,8 @@ DECLARE @pb13 INT = (SELECT TOP 1 booking_id FROM dbo.bookings WHERE space_id = 
 IF @pb13 IS NULL OR @m9 IS NULL
     THROW 53050, N'Task 13 c13: PB13/M9 fixture missing.', 1;
 
--- Sanity: no ack rows exist yet (the fixture deliberately omitted them).
+-- Sanity: no ack rows exist yet — guaranteed by the fixture ordering
+-- (M9 was created AFTER PB13, so the insert trigger materialized none).
 DECLARE @before INT = (SELECT COUNT(*) FROM dbo.booking_advisory_acknowledgement
                        WHERE booking_id = @pb13 AND maintenance_id = @m9);
 IF @before > 0

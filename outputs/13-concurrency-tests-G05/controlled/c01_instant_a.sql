@@ -20,12 +20,21 @@ DECLARE @bk  INT, @ok  BIT, @rc  INT, @msg NVARCHAR(500);
 
 -- Both sessions fire nearly simultaneously (runner launches pairs in
 -- parallel; this script has no artificial delay for the race itself).
-EXEC dbo.usp_booking_instant_submit
-    @space_id = @s1, @requester_id = @rq, @purpose = 'meeting',
-    @expected_participants = 10,
-    @requested_start_time = @w1, @requested_end_time = @w1_end,
-    @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
-    @result_code = @rc OUTPUT, @message = @msg OUTPUT;
+-- A loser that waits on the applock receives sp_getapplock return 1
+-- (granted after wait) — Task 12 rev5 treats 0 and 1 both as success,
+-- so the loser re-checks BR1 under the lock and returns 51003 cleanly.
+BEGIN TRY
+    EXEC dbo.usp_booking_instant_submit
+        @space_id = @s1, @requester_id = @rq, @purpose = 'meeting',
+        @expected_participants = 10,
+        @requested_start_time = @w1, @requested_end_time = @w1_end,
+        @booking_id = @bk OUTPUT, @instant_accepted = @ok OUTPUT,
+        @result_code = @rc OUTPUT, @message = @msg OUTPUT;
+END TRY
+BEGIN CATCH
+    PRINT 'FAIL c01-A: entry point threw (error ' + CAST(ERROR_NUMBER() AS VARCHAR(10))
+        + ') — Task 12 applock-code defect; msg=' + ISNULL(ERROR_MESSAGE(),'null');
+END CATCH
 
 IF @rc = 0 AND @ok = 1
     PRINT 'PASS c01-A: instant approved (winner side).';

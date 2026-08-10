@@ -3,14 +3,14 @@ SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b03 (K3 — no concurrency control)
 -- Escalation (advisory -> out-of-service) vs an in-flight booking:
--- both writers raw SQL, no app lock:
---   A: UPDATE maintenance M3 SET impact_level='out-of-service'
---      inside a HELD transaction (uncommitted).
---   B: raw INSERT a confirmed booking overlapping M3's window —
---      the BR4 trigger sees only committed rows (M3 still advisory)
---      -> passes; B commits.
---   A then commits -> a CONFIRMED booking now overlaps an ACTIVE
---   out-of-service maintenance, silently (nothing re-checks).
+-- both writers raw SQL, no app lock.
+-- DETERMINISTIC order (poll-based, immune to spawn skew):
+--   B inserts a CONFIRMED booking overlapping M3's window first
+--     (+0 s; BR4 trigger reads M3 still 'advisory' -> passes);
+--   A polls until B's booking exists, then escalates M3 to
+--     out-of-service — the escalation UPDATE has NO overlap gate;
+--   A commits -> a CONFIRMED booking now overlaps an ACTIVE
+--     out-of-service maintenance, silently (nothing re-checks).
 -- Expected: Q_NR6 >= 1 (confirmed vs active-OOS overlap).
 -- ============================================================
 SET NOCOUNT ON;
@@ -26,17 +26,31 @@ BEGIN
     THROW 53007, N'Task 13 b03: M3 not found.', 1;
 END
 
--- Escalate inside a held transaction so B's booking insert reads
--- M3 as still advisory.
-BEGIN TRANSACTION;
-    UPDATE dbo.maintenance
-    SET impact_level = 'out-of-service'
-    WHERE maintenance_id = @m3;
-    PRINT 'b03-A: escalation held uncommitted...';
-    WAITFOR DELAY '00:00:05';
-COMMIT TRANSACTION;
+DECLARE @w3 DATETIME2 = (SELECT start_time FROM dbo.maintenance WHERE maintenance_id = @m3);
+
+-- Poll for B's confirmed booking (window W3+30min) before escalating.
+DECLARE @b_win DATETIME2 = DATEADD(minute, 30, @w3);
+DECLARE @t INT = 0;
+WHILE @t < 45 AND NOT EXISTS (SELECT 1 FROM dbo.bookings
+                              WHERE space_id = @s3 AND requested_start_time = @b_win
+                                AND status = 'approved' AND is_deleted = 0)
+BEGIN
+    WAITFOR DELAY '00:00:01';
+    SET @t = @t + 1;
+END
+IF @t = 45
+    PRINT 'WARN b03-A: poll timed out (B''s booking never landed).';
+ELSE
+    PRINT 'b03-A: B''s confirmed booking present (poll done).';
+
+-- Escalate — the raw UPDATE has no overlap gate; it commits on top of
+-- the confirmed booking (nothing re-checks).
+UPDATE dbo.maintenance
+SET impact_level = 'out-of-service'
+WHERE maintenance_id = @m3;
 PRINT 'b03-A: M3 escalated (out-of-service) after B committed its booking.';
 
+WAITFOR DELAY '00:00:02';
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings b
     INNER JOIN dbo.maintenance m ON m.space_id = b.space_id

@@ -2,13 +2,16 @@ SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================
 -- T13 BASELINE b09 (K5 — no concurrency control)
--- out-of-service ticket creation vs a booking submit, raw SQL:
---   A inserts the OOS ticket inside a held transaction (in-flight);
---   B inserts a CONFIRMED booking overlapping the ticket window.
---   B's BR4 trigger reads committed maintenance only -> sees no OOS
---   -> passes; B commits; then A commits.
+-- out-of-service ticket creation vs a booking submit, raw SQL.
+-- DETERMINISTIC order (poll-based, immune to spawn skew):
+--   B inserts a CONFIRMED booking overlapping the would-be ticket
+--     window first (+0 s; the BR4 trigger reads no OOS -> passes);
+--   A polls until B's booking exists, then inserts the OOS ticket —
+--     the raw maintenance INSERT has no overlap gate;
+--   A commits -> the confirmed booking now overlaps an active
+--     out-of-service ticket, silently (nothing re-checks).
 -- Expected (PASS baseline): confirmed booking overlapping the OOS
--- worry-line -> no mechanism caught it (Q_OVERLAP >= 1).
+-- ticket -> no mechanism caught it (Q_NR6 >= 1).
 -- ============================================================
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -18,17 +21,32 @@ DECLARE @rq  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.request
 DECLARE @w5  DATETIME2 = DATEADD(day, 680, SYSDATETIME());
 DECLARE @tk  INT;
 
-BEGIN TRANSACTION;
-    INSERT INTO dbo.maintenance
-        (space_id, reporter_id, problem_description, start_time, status, impact_level)
-    VALUES
-        (@s5, @rq, N'TEST-13 b09 OOS ticket', DATEADD(hour, -1, @w5), 'open', 'out-of-service');
-    SET @tk = SCOPE_IDENTITY();
-    PRINT 'b09-A: OOS ticket ' + CAST(@tk AS VARCHAR(12)) + ' held uncommitted...';
-    WAITFOR DELAY '00:00:05';
-COMMIT TRANSACTION;
-PRINT 'b09-A: OOS ticket committed after B.obtain:';
+-- Poll for B's confirmed booking (window W5+30min) before inserting
+-- the OOS ticket.
+DECLARE @b_win DATETIME2 = DATEADD(minute, 30, @w5);
+DECLARE @t INT = 0;
+WHILE @t < 45 AND NOT EXISTS (SELECT 1 FROM dbo.bookings
+                              WHERE space_id = @s5 AND requested_start_time = @b_win
+                                AND status = 'approved' AND is_deleted = 0)
+BEGIN
+    WAITFOR DELAY '00:00:01';
+    SET @t = @t + 1;
+END
+IF @t = 45
+    PRINT 'WARN b09-A: poll timed out (B''s booking never landed).';
+ELSE
+    PRINT 'b09-A: B''s confirmed booking present (poll done).';
 
+-- Insert the OOS ticket — the raw INSERT has no overlap gate; it
+-- commits on top of the confirmed booking (nothing re-checks).
+INSERT INTO dbo.maintenance
+    (space_id, reporter_id, problem_description, start_time, status, impact_level)
+VALUES
+    (@s5, @rq, N'TEST-13 b09 OOS ticket', DATEADD(hour, -1, @w5), 'open', 'out-of-service');
+SET @tk = SCOPE_IDENTITY();
+PRINT 'b09-A: OOS ticket ' + CAST(@tk AS VARCHAR(12)) + ' committed after B.obtain:';
+
+WAITFOR DELAY '00:00:02';
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings b
     INNER JOIN dbo.maintenance m ON m.space_id = b.space_id
@@ -41,7 +59,7 @@ DECLARE @q INT = (SELECT COUNT(*)
 IF @q > 0
     PRINT 'PASS b09-A: VIOLATION-OBSERVED (confirmed booking overlapping OOS ticket, Q=' + CAST(@q AS VARCHAR(10)) + ').';
 ELSE
-    PRINT 'b09-A: 0 violations recorded this run.';
+    PRINT 'b09-A: no violation persisted (collapsed race; raw backstop path).';
 
 -- Cleanup: remove ticket + B handles its booking.
 DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
