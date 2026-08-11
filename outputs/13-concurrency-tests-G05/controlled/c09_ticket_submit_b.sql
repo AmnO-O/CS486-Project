@@ -69,6 +69,6 @@ ELSE
     PRINT 'FAIL c09-B: ' + CAST(@ack_cnt AS VARCHAR(5)) + ' ack row(s) present.';
 
 -- Cleanup: remove the confirmed booking (approvals cascade).
-IF @bk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @bk)
-    DELETE FROM dbo.bookings WHERE booking_id = @bk;
-PRINT 'c09-B: cleanup done.';
+-- IF @bk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @bk)
+--     DELETE FROM dbo.bookings WHERE booking_id = @bk;
+-- PRINT 'c09-B: cleanup done.';

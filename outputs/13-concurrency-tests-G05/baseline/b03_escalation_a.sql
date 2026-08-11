@@ -54,5 +54,5 @@ ELSE
     PRINT 'b03-A: no persist overlap recorded this round.';
 
 -- Cleanup: restore M3 to advisory (fixture state used by c03).
-UPDATE dbo.maintenance SET impact_level = 'advisory' WHERE maintenance_id = @m3;
-PRINT 'b03-A: M3 restored to advisory.';
+-- UPDATE dbo.maintenance SET impact_level = 'advisory' WHERE maintenance_id = @m3;
+-- PRINT 'b03-A: M3 restored to advisory.';

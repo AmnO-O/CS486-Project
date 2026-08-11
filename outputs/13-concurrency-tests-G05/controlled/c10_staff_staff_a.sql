@@ -34,6 +34,6 @@ ELSE
 WAITFOR DELAY '00:00:06';   -- B attempts PB10b -> must 51003
 
 -- Restore fixture.
-DELETE FROM dbo.booking_approvals WHERE booking_id IN (@pb10a, @pb10b);
-UPDATE dbo.bookings SET status = 'pending' WHERE booking_id IN (@pb10a, @pb10b);
-PRINT 'c10-A: fixture restored.';
+-- DELETE FROM dbo.booking_approvals WHERE booking_id IN (@pb10a, @pb10b);
+-- UPDATE dbo.bookings SET status = 'pending' WHERE booking_id IN (@pb10a, @pb10b);
+-- PRINT 'c10-A: fixture restored.';

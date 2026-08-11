@@ -39,5 +39,5 @@ IF @q > 0
 ELSE
     PRINT 'b09-B: 0 violations at time of read.';
 
-DELETE FROM dbo.bookings WHERE booking_id = @b5;
-PRINT 'b09-B: cleanup done.';
+-- DELETE FROM dbo.bookings WHERE booking_id = @b5;
+-- PRINT 'b09-B: cleanup done.';

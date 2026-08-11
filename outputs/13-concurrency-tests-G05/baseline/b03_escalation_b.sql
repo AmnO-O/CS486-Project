@@ -47,5 +47,5 @@ ELSE
     PRINT 'b03-B: measured 0 (recording).';
 
 -- Cleanup: remove own booking.
-DELETE FROM dbo.bookings WHERE booking_id = @b3;
-PRINT 'b03-B: cleanup done.';
+-- DELETE FROM dbo.bookings WHERE booking_id = @b3;
+-- PRINT 'b03-B: cleanup done.';

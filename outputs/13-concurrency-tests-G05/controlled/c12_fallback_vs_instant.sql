@@ -60,8 +60,8 @@ ELSE
     PRINT 'FAIL c12-3: expected 51003, got rc=' + ISNULL(CAST(@rc2 AS VARCHAR(5)),'null');
 
 -- Cleanup both created bookings (approvals cascade).
-IF @pf IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @pf)
-    DELETE FROM dbo.bookings WHERE booking_id = @pf;
-IF @pi IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @pi)
-    DELETE FROM dbo.bookings WHERE booking_id = @pi;
-PRINT 'c12: cleanup done.';
+-- IF @pf IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @pf)
+--     DELETE FROM dbo.bookings WHERE booking_id = @pf;
+-- IF @pi IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @pi)
+--     DELETE FROM dbo.bookings WHERE booking_id = @pi;
+-- PRINT 'c12: cleanup done.';

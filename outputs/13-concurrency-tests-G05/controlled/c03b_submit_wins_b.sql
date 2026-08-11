@@ -52,6 +52,6 @@ ELSE
     PRINT 'FAIL c03b-B: expected 51002, got rc=' + ISNULL(CAST(@r2 AS VARCHAR(5)),'null');
 
 -- Cleanup: remove the confirmed booking of order-1.
-IF @b1 IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @b1)
-    DELETE FROM dbo.bookings WHERE booking_id = @b1;
-PRINT 'c03b-B: cleanup done.';
+-- IF @b1 IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @b1)
+--     DELETE FROM dbo.bookings WHERE booking_id = @b1;
+-- PRINT 'c03b-B: cleanup done.';

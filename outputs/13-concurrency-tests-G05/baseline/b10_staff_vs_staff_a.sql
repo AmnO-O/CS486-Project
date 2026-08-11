@@ -51,6 +51,6 @@ ELSE
     PRINT 'b10-A: 0 overlapping approved pairs recorded this run.';
 
 -- Restore fixture: remove approval rows, revert statuses to pending.
-DELETE FROM dbo.booking_approvals WHERE booking_id IN (@pb10a, @pb10b);
-UPDATE dbo.bookings SET status = 'pending' WHERE booking_id IN (@pb10a, @pb10b);
-PRINT 'b10-A: fixture restored.';
+-- DELETE FROM dbo.booking_approvals WHERE booking_id IN (@pb10a, @pb10b);
+-- UPDATE dbo.bookings SET status = 'pending' WHERE booking_id IN (@pb10a, @pb10b);
+-- PRINT 'b10-A: fixture restored.';

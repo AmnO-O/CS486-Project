@@ -49,5 +49,5 @@ ELSE
     PRINT 'b09-A: 0 violations recorded this run.';
 
 -- Cleanup: remove ticket + B handles its booking.
-DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
-PRINT 'b09-A: ticket removed.';
+-- DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
+-- PRINT 'b09-A: ticket removed.';

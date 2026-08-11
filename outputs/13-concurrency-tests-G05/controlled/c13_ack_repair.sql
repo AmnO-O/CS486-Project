@@ -51,5 +51,5 @@ ELSE
     PRINT 'FAIL c13: acks=' + CAST(@after AS VARCHAR(5)) + ' by_requester=' + CAST(@by_rq AS VARCHAR(5));
 
 -- Cleanup: booking delete cascades approvals+acks; maintenance stays.
-DELETE FROM dbo.bookings WHERE booking_id = @pb13;
-PRINT 'c13: cleanup done.';
+-- DELETE FROM dbo.bookings WHERE booking_id = @pb13;
+-- PRINT 'c13: cleanup done.';

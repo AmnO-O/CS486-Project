@@ -48,6 +48,6 @@ ELSE
     PRINT 'FAIL c05-B: retry: expected rc=0, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null');
 
 -- Cleanup: remove the ticket created in this session.
-IF @tk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.maintenance WHERE maintenance_id = @tk)
-    DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
-PRINT 'c05-B: cleanup done.';
+-- IF @tk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.maintenance WHERE maintenance_id = @tk)
+--     DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
+-- PRINT 'c05-B: cleanup done.';

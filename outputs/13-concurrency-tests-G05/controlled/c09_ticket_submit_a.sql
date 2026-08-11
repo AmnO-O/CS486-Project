@@ -62,6 +62,6 @@ ELSE
 
 -- Wait for B's submit-then-verify phase, then close the fixture.
 WAITFOR DELAY '00:00:11';
-IF @tk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.maintenance WHERE maintenance_id = @tk)
-    DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
-PRINT 'c09-A: cleanup done.';
+-- IF @tk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.maintenance WHERE maintenance_id = @tk)
+--     DELETE FROM dbo.maintenance WHERE maintenance_id = @tk;
+-- PRINT 'c09-A: cleanup done.';

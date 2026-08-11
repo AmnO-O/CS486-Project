@@ -39,6 +39,6 @@ IF @st = 'pending' AND @ap = 0
 ELSE
     PRINT 'FAIL c11: status=' + ISNULL(@st,'null') + ' approvals=' + CAST(@ap AS VARCHAR(5));
 
-IF @bk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @bk)
-    DELETE FROM dbo.bookings WHERE booking_id = @bk;
-PRINT 'c11: cleanup done.';
+-- IF @bk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @bk)
+--     DELETE FROM dbo.bookings WHERE booking_id = @bk;
+-- PRINT 'c11: cleanup done.';

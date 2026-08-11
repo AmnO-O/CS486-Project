@@ -65,5 +65,5 @@ ELSE
     PRINT 'b02-A: no persisted overlap this round (order-1 raced); recorded.';
 
 -- Restore fixture: remove the approval on PB2a.
-DELETE FROM dbo.booking_approvals WHERE booking_id = @pb2a;
-PRINT 'b02-A: fixture restored.';
+-- DELETE FROM dbo.booking_approvals WHERE booking_id = @pb2a;
+-- PRINT 'b02-A: fixture restored.';

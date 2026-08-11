@@ -39,5 +39,5 @@ ELSE
 -- Hold the escalated state long enough for B's submit #2 (~+6 s) to
 -- observe BR4, then restore the fixture for later scenarios.
 WAITFOR DELAY '00:00:10';
-UPDATE dbo.maintenance SET impact_level = 'advisory' WHERE maintenance_id = @m3;
-PRINT 'c03b-A: M3 restored to advisory.';
+-- UPDATE dbo.maintenance SET impact_level = 'advisory' WHERE maintenance_id = @m3;
+-- PRINT 'c03b-A: M3 restored to advisory.';

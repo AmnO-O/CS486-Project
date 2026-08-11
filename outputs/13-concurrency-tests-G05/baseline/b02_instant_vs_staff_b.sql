@@ -59,6 +59,6 @@ ELSE
     PRINT 'b02-B: no overlap persisted in this run; B inserts committed (recorded).';
 
 -- Cleanup: this session's rows.
-IF @b1 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b1;
-IF @b2 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b2;
-PRINT 'b02-B: cleanup done.';
+-- IF @b1 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b1;
+-- IF @b2 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b2;
+-- PRINT 'b02-B: cleanup done.';
