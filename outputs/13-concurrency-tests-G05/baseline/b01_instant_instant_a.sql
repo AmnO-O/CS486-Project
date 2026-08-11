@@ -54,6 +54,6 @@ ELSE
 
 -- Cleanup: remove both race bookings by window (pair session deletes
 -- its own overlapping row by window too; idempotent).
-DELETE FROM dbo.bookings WHERE space_id = @s1 AND requested_start_time = @w1;
-DELETE FROM dbo.bookings WHERE space_id = @s1 AND requested_start_time = DATEADD(minute, 30, @w1);
-PRINT 'b01-A: cleanup done.';
+-- DELETE FROM dbo.bookings WHERE space_id = @s1 AND requested_start_time = @w1;
+-- DELETE FROM dbo.bookings WHERE space_id = @s1 AND requested_start_time = DATEADD(minute, 30, @w1);
+-- PRINT 'b01-A: cleanup done.';

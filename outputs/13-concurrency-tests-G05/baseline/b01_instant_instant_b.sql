@@ -46,4 +46,4 @@ ELSE
     PRINT 'PASS b01-B: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=' + CAST(@q AS VARCHAR(10)) + ').';
 
 -- Cleanup left to session A (which deletes both overlapping bookings by window).
-PRINT 'b01-B: cleanup left to session A.';
+-- PRINT 'b01-B: cleanup left to session A.';
