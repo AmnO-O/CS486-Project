@@ -1,29 +1,29 @@
 ============================================================
- CS486 G05 Task 13 — AGGREGATED TEST SUITE RUN LOG (20260811-053826)
+ CS486 G05 Task 13 — AGGREGATED TEST SUITE RUN LOG (20260811-064942)
 ============================================================
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-audit_invariant.sql.log
+ SESSION LOG: 20260811-064942-audit_invariant.sql.log
 ------------------------------------------------------------
 PASS suite-audit: zero overlapping confirmed pairs AND zero confirmed-vs-OOS overlaps on TEST-13 spaces.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b01_instant_instant_a.sql.log
+ SESSION LOG: 20260811-064942-b01_instant_instant_a.sql.log
 ------------------------------------------------------------
-b01-A: holding confirmed booking 5245 uncommitted at W1.
-b01-A: committed booking 5245.
+b01-A: holding confirmed booking 5604 uncommitted at W1.
+b01-A: committed booking 5604.
 PASS b01-A: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=1).
 b01-A: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b01_instant_instant_b.sql.log
+ SESSION LOG: 20260811-064942-b01_instant_instant_b.sql.log
 ------------------------------------------------------------
-b01-B: committed overlapping confirmed booking 5246.
+b01-B: committed overlapping confirmed booking 5605.
 PASS b01-B: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=1).
 b01-B: cleanup left to session A.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b02_instant_vs_staff_a.sql.log
+ SESSION LOG: 20260811-064942-b02_instant_vs_staff_a.sql.log
 ------------------------------------------------------------
 b02-A: fiat approval of PB2a held in transaction...
 b02-A: PB2a approval committed.
@@ -31,55 +31,55 @@ PASS b02-A: VIOLATION-OBSERVED (overlapping confirmed bookings, Q_BR1=1).
 b02-A: fixture restored.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b02_instant_vs_staff_b.sql.log
+ SESSION LOG: 20260811-064942-b02_instant_vs_staff_b.sql.log
 ------------------------------------------------------------
-b02-B: inserted approved booking 5253 overlapping PB2a.
+b02-B: inserted approved booking 5612 overlapping PB2a.
 PASS b02-B: VIOLATION-OBSERVED (Q_BR1=1).
 b02-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b03_escalation_a.sql.log
+ SESSION LOG: 20260811-064942-b03_escalation_a.sql.log
 ------------------------------------------------------------
 b03-A: M3 escalated (out-of-service) after B committed its booking.
 b03-A: no persist overlap recorded this round.
 b03-A: M3 restored to advisory.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b03_escalation_b.sql.log
+ SESSION LOG: 20260811-064942-b03_escalation_b.sql.log
 ------------------------------------------------------------
-b03-B: confirmed booking 5260 committed while M3 was still advisory.
+b03-B: confirmed booking 5619 committed while M3 was still advisory.
 b03-B: M3 escalated while booking confirmed — Q audit next.
 PASS b03-B: Q_VIOLATION = 1 (1).
 b03-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b05_blocking_a.sql.log
+ SESSION LOG: 20260811-064942-b05_blocking_a.sql.log
 ------------------------------------------------------------
 b05-A: holding row lock on M3 (no app lock, no timeout contract).
 b05-A: released after 18 s.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b05_blocking_b.sql.log
+ SESSION LOG: 20260811-064942-b05_blocking_b.sql.log
 ------------------------------------------------------------
 PASS b05-B: uncontrolled blocking observed (B waited 18 s for A; no business code, no retry contract).
 b05-B: done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b09_ticket_vs_submit_a.sql.log
+ SESSION LOG: 20260811-064942-b09_ticket_vs_submit_a.sql.log
 ------------------------------------------------------------
-b09-A: OOS ticket 4391 committed.
+b09-A: OOS ticket 4504 committed.
 PASS b09-A: VIOLATION-OBSERVED (confirmed booking overlapping OOS ticket, Q=1).
 b09-A: ticket removed.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b09_ticket_vs_submit_b.sql.log
+ SESSION LOG: 20260811-064942-b09_ticket_vs_submit_b.sql.log
 ------------------------------------------------------------
-b09-B: confirmed booking 5273 committed.
+b09-B: confirmed booking 5632 committed.
 b09-B: 0 violations at time of read.
 b09-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b10_staff_vs_staff_a.sql.log
+ SESSION LOG: 20260811-064942-b10_staff_vs_staff_a.sql.log
 ------------------------------------------------------------
 b10-A: approval of PB10a held uncommitted...
 b10-A: after B, PB10a is approved.
@@ -87,49 +87,49 @@ PASS b10-A: VIOLATION-OBSERVED (staff-vs-staff overlapping approvals, Q_BR1=1).
 b10-A: fixture restored.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-b10_staff_vs_staff_b.sql.log
+ SESSION LOG: 20260811-064942-b10_staff_vs_staff_b.sql.log
 ------------------------------------------------------------
 b10-B: PB10b approved (its re-check saw PB10a still pending).
 PASS b10-B: VIOLATION-OBSERVED (Q_BR1=1).
 b10-B: cleanup left to A (fixture restore).
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c01_instant_a.sql.log
+ SESSION LOG: 20260811-064942-c01_instant_a.sql.log
 ------------------------------------------------------------
-PASS c01-A: conflict 51003 (loser side) as designed.
+PASS c01-A: instant approved (winner side).
 PASS c01-A: exactly one booking confirmed on the window (race serialized).
 PASS c01-A: audit Q_BR1 = 0 (no overlapping confirmed bookings).
 c01-A: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c01_instant_b.sql.log
+ SESSION LOG: 20260811-064942-c01_instant_b.sql.log
 ------------------------------------------------------------
-PASS c01-B: instant approved (winner side).
+PASS c01-B: conflict 51003 (loser side) as designed.
 PASS c01-B: exactly one booking confirmed on the window (race serialized).
 PASS c01-B: audit Q_BR1 = 0.
 c01-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c02_instant_staff_a.sql.log
+ SESSION LOG: 20260811-064942-c02_instant_staff_a.sql.log
 ------------------------------------------------------------
 PASS c02-A: approve(PB2a) rc=0 (order-1 approve wins).
 PASS c02-A: approve(PB2b) rc=51003 (conflict with confirmed instant).
 c02-A: fixture restored.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c02_instant_staff_b.sql.log
+ SESSION LOG: 20260811-064942-c02_instant_staff_b.sql.log
 ------------------------------------------------------------
 PASS c02-B: W2A instant submit rc=51003 (approved booking exists).
 PASS c02-B: W2B instant submit rc=0, instant=1 (order-2 submit wins).
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c03_escalation_a.sql.log
+ SESSION LOG: 20260811-064942-c03_escalation_a.sql.log
 ------------------------------------------------------------
 PASS c03-A: escalation rc=0 (M3 -> out-of-service).
 c03: M3 restored to advisory (fixture next in c03-B).
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c03_escalation_b.sql.log
+ SESSION LOG: 20260811-064942-c03_escalation_b.sql.log
 ------------------------------------------------------------
 PASS c03-B: instant submit rc=51002 (BR4: OOS overlap).
 PASS c03-B: PB3 still pending (escalation performs no booking DML, DD1).
@@ -137,41 +137,41 @@ PASS c03-B: approve(PB3) rc=51002 (BR4 on the W2 path).
 c03-B: done (fixture left as-is: PB3 pending, M3 advisory-restored in A).
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c03b_submit_wins_a.sql.log
+ SESSION LOG: 20260811-064942-c03b_submit_wins_a.sql.log
 ------------------------------------------------------------
 PASS c03b-A: escalation rc=0 after the booking was confirmed (DD1: no booking DML).
 c03b-A: M3 restored to advisory.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c03b_submit_wins_b.sql.log
+ SESSION LOG: 20260811-064942-c03b_submit_wins_b.sql.log
 ------------------------------------------------------------
 PASS c03b-B: submit #1 rc=0, instant=1 (M3 advisory).
 PASS c03b-B: submit #2 rc=51002 (escalated now blocks; submit-wins order proven).
 c03b-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c05_timeout_a.sql.log
+ SESSION LOG: 20260811-064942-c05_timeout_a.sql.log
 ------------------------------------------------------------
 c05-A: holding app lock on space_booking:... for 10 s.
 c05-A: lock released.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c05_timeout_b.sql.log
+ SESSION LOG: 20260811-064942-c05_timeout_b.sql.log
 ------------------------------------------------------------
 PASS c05-B: first report rc=51005 (app lock timeout, retryable).
-PASS c05-B: retry rc=0, ticket 4404 created (T7).
+PASS c05-B: retry rc=0, ticket 4517 created (T7).
 c05-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c09_ticket_submit_a.sql.log
+ SESSION LOG: 20260811-064942-c09_ticket_submit_a.sql.log
 ------------------------------------------------------------
-PASS c09-A: order-1 ticket rc=0 (maintenance_id=4407).
+PASS c09-A: order-1 ticket rc=0 (maintenance_id=4520).
 c09-A: order-1 ticket deleted (fixture for order-2 clean).
 PASS c09-A: order-2 ticket rc=0 (ticket creation does no booking DML).
 c09-A: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c09_ticket_submit_b.sql.log
+ SESSION LOG: 20260811-064942-c09_ticket_submit_b.sql.log
 ------------------------------------------------------------
 PASS c09-B: order-1 submit rc=51002 (BR4 against ticket).
 PASS c09-B: order-2 submit rc=0/instant=1 (submit-wins branch).
@@ -180,26 +180,26 @@ PASS c09-B: zero ack rows on the submit-wins booking.
 c09-B: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c10_staff_staff_a.sql.log
+ SESSION LOG: 20260811-064942-c10_staff_staff_a.sql.log
 ------------------------------------------------------------
 PASS c10-A: approve(PB10a) rc=0 (first wins).
 c10-A: fixture restored.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c10_staff_staff_b.sql.log
+ SESSION LOG: 20260811-064942-c10_staff_staff_b.sql.log
 ------------------------------------------------------------
 PASS c10-B: approve(PB10b) rc=51003 (overlap with the first approval).
 c10-B: done (fixture restored in A).
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c11_soft_gate.sql.log
+ SESSION LOG: 20260811-064942-c11_soft_gate.sql.log
 ------------------------------------------------------------
 PASS c11: rc=0, @instant_accepted=0 (soft gate -> fallback).
 PASS c11: booking stays pending with NO auto-approval row.
 c11: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c12_fallback_vs_instant.sql.log
+ SESSION LOG: 20260811-064942-c12_fallback_vs_instant.sql.log
 ------------------------------------------------------------
 PASS c12-1: fallback rc=0, instant=0 (pending).
 PASS c12-2: instant rc=0, instant=1 (pending does not block).
@@ -207,7 +207,7 @@ PASS c12-3: approve(fallback) rc=51003 (BR1).
 c12: cleanup done.
 
 ------------------------------------------------------------
- SESSION LOG: 20260811-053826-c13_ack_repair.sql.log
+ SESSION LOG: 20260811-064942-c13_ack_repair.sql.log
 ------------------------------------------------------------
 PASS c13: approve rc=0 (W2 repaired the missing acks, no 51004).
 PASS c13: ack row(s) exist for (PB13, M9), acknowledged_by = requester (1 row(s)).

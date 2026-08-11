@@ -1,3 +1,5 @@
+USE CampusSpaceDB;
+GO
 SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================
@@ -22,8 +24,8 @@ BEGIN TRANSACTION;
     IF @lock_rc <> 0   -- hold only if we own it
         ROLLBACK TRANSACTION;
     ELSE BEGIN
-        PRINT 'c05-A: holding app lock on space_booking:... for 10 s.';
-        WAITFOR DELAY '00:00:10';
+        PRINT 'c05-A: holding app lock on space_booking:... for 8 s.';
+        WAITFOR DELAY '00:00:08';
         COMMIT TRANSACTION;
     END
 PRINT 'c05-A: lock released.';

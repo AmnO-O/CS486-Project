@@ -1,3 +1,5 @@
+USE CampusSpaceDB;
+GO
 SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================

@@ -1,3 +1,5 @@
+USE CampusSpaceDB;
+GO
 SET QUOTED_IDENTIFIER ON;
 SET ANSI_NULLS ON;
 -- ============================================================
@@ -32,7 +34,7 @@ IF @r1 = 0 AND @o1 = 1
 ELSE
     PRINT 'FAIL c03b-B: expected 0/1, got rc=' + ISNULL(CAST(@r1 AS VARCHAR(5)),'null');
 
-WAITFOR DELAY '00:00:06';   -- A escalates at ~+4 s, restores at ~+10 s
+WAITFOR DELAY '00:00:03';   -- A escalates at ~+4 s, holds OOS until +14 s
 
 -- Submit #2 on a DIFFERENT window (M3 has no completion: overlaps all
 -- later times; #1's window is taken by the confirmed booking, so BR1
