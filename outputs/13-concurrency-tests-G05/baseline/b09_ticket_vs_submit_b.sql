@@ -13,7 +13,7 @@ DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requeste
 DECLARE @w5 DATETIME2 = DATEADD(day, 680, SYSDATETIME());
 DECLARE @b5 INT;
 
-WAITFOR DELAY '00:00:02';
+WAITFOR DELAY '00:00:01';
 INSERT INTO dbo.bookings
     (space_id, requester_id, requested_start_time, requested_end_time,
      purpose, expected_participants, status)
@@ -23,7 +23,7 @@ VALUES
 SET @b5 = SCOPE_IDENTITY();
 PRINT 'b09-B: confirmed booking ' + CAST(@b5 AS VARCHAR(12)) + ' committed.';
 
-WAITFOR DELAY '00:00:07';
+WAITFOR DELAY '00:00:05';
 DECLARE @q INT = (SELECT COUNT(*)
     FROM bookings b
     INNER JOIN dbo.maintenance m ON m.space_id = b.space_id

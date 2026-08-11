@@ -18,16 +18,17 @@ DECLARE @rq  INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.request
 DECLARE @w5  DATETIME2 = DATEADD(day, 680, SYSDATETIME());
 DECLARE @tk  INT;
 
+-- B inserts booking at ~+1 s while no OOS ticket exists yet;
+-- then A inserts OOS ticket at ~+3 s -> both committed -> Q violation.
+WAITFOR DELAY '00:00:03';
 BEGIN TRANSACTION;
     INSERT INTO dbo.maintenance
         (space_id, reporter_id, problem_description, start_time, status, impact_level)
     VALUES
         (@s5, @rq, N'TEST-13 b09 OOS ticket', DATEADD(hour, -1, @w5), 'open', 'out-of-service');
     SET @tk = SCOPE_IDENTITY();
-    PRINT 'b09-A: OOS ticket ' + CAST(@tk AS VARCHAR(12)) + ' held uncommitted...';
-    WAITFOR DELAY '00:00:04';
+    PRINT 'b09-A: OOS ticket ' + CAST(@tk AS VARCHAR(12)) + ' committed.';
 COMMIT TRANSACTION;
-PRINT 'b09-A: OOS ticket committed after B.obtain:';
 
 WAITFOR DELAY '00:00:02'; -- let B measure violation and cleanup first
 
