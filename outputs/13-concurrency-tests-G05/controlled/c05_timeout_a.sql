@@ -22,8 +22,8 @@ BEGIN TRANSACTION;
     IF @lock_rc <> 0   -- hold only if we own it
         ROLLBACK TRANSACTION;
     ELSE BEGIN
-        PRINT 'c05-A: holding app lock on space_booking:... for 20 s.';
-        WAITFOR DELAY '00:00:20';
+        PRINT 'c05-A: holding app lock on space_booking:... for 10 s.';
+        WAITFOR DELAY '00:00:10';
         COMMIT TRANSACTION;
     END
 PRINT 'c05-A: lock released.';

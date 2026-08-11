@@ -58,6 +58,7 @@ ELSE
     PRINT 'FAIL c01-A: overlapping confirmed bookings remain (' + CAST(@ovl AS VARCHAR(5)) + ').';
 
 -- Cleanup: remove this session's booking if it won.
+WAITFOR DELAY '00:00:03';
 IF @bk IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.bookings WHERE booking_id = @bk)
     DELETE FROM dbo.bookings WHERE booking_id = @bk;
 PRINT 'c01-A: cleanup done.';

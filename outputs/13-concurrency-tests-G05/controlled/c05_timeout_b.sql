@@ -31,7 +31,7 @@ IF @rc = 51005
 ELSE
     PRINT 'FAIL c05-B: expected 51005, got rc=' + ISNULL(CAST(@rc AS VARCHAR(5)),'null');
 
-WAITFOR DELAY '00:00:22';   -- A releases at ~20 s; lock free again
+WAITFOR DELAY '00:00:06';   -- A releases at ~10 s; lock free again
 
 -- Retry (T7): should succeed.
 EXEC dbo.usp_maintenance_report

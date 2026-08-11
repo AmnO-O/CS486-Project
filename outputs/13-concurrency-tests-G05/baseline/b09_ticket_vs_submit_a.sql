@@ -25,11 +25,11 @@ BEGIN TRANSACTION;
         (@s5, @rq, N'TEST-13 b09 OOS ticket', DATEADD(hour, -1, @w5), 'open', 'out-of-service');
     SET @tk = SCOPE_IDENTITY();
     PRINT 'b09-A: OOS ticket ' + CAST(@tk AS VARCHAR(12)) + ' held uncommitted...';
-    WAITFOR DELAY '00:00:08';
+    WAITFOR DELAY '00:00:04';
 COMMIT TRANSACTION;
 PRINT 'b09-A: OOS ticket committed after B.obtain:';
 
-WAITFOR DELAY '00:00:04'; -- let B measure violation and cleanup first
+WAITFOR DELAY '00:00:02'; -- let B measure violation and cleanup first
 
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings b

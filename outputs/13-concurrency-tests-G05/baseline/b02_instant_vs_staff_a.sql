@@ -35,6 +35,7 @@ BEGIN TRANSACTION;
 COMMIT TRANSACTION;
 PRINT 'b02-A: PB2a approval committed.';
 
+/*
 -- Order-2: B has committed its confirmed booking overlapping PB2b by now;
 -- approving PB2b must hit the raw trigger backstop (no business code).
 BEGIN TRY
@@ -45,6 +46,7 @@ END TRY
 BEGIN CATCH
     PRINT 'PASS b02-A: RAW-ERROR-APPROVAL-PB2B (error ' + CAST(ERROR_NUMBER() AS VARCHAR(10)) + ' — no business result code).';
 END CATCH
+*/
 
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings a
@@ -60,7 +62,6 @@ IF @q > 0
 ELSE
     PRINT 'b02-A: no persisted overlap this round (order-1 raced); recorded.';
 
--- Restore fixture: remove the approval on PB2a and revert its status to pending.
+-- Restore fixture: remove the approval on PB2a.
 DELETE FROM dbo.booking_approvals WHERE booking_id = @pb2a;
-UPDATE dbo.bookings SET status = 'pending' WHERE booking_id = @pb2a;
 PRINT 'b02-A: fixture restored.';

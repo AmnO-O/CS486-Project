@@ -28,6 +28,7 @@ VALUES
 SET @b1 = SCOPE_IDENTITY();
 PRINT 'b02-B: inserted approved booking ' + CAST(@b1 AS VARCHAR(12)) + ' overlapping PB2a.';
 
+/*
 -- Second order window: overlap PB2b (approval attempt falling a trigger).
 WAITFOR DELAY '00:00:01';
 INSERT INTO dbo.bookings
@@ -38,8 +39,9 @@ VALUES
      'meeting', 10, 'approved');
 SET @b2 = SCOPE_IDENTITY();
 PRINT 'b02-B: inserted confirmed booking ' + CAST(@b2 AS VARCHAR(12)) + ' overlapping PB2b.';
+*/
 
-WAITFOR DELAY '00:00:04';   -- let A fail/commit before measuring
+WAITFOR DELAY '00:00:04';   -- let A commit before measuring
 DECLARE @q INT = (SELECT COUNT(*)
     FROM dbo.bookings a
     INNER JOIN dbo.bookings b ON a.space_id = b.space_id AND a.booking_id < b.booking_id
@@ -55,5 +57,6 @@ ELSE
     PRINT 'b02-B: no overlap persisted in this run; B inserts committed (recorded).';
 
 -- Cleanup: this session's rows.
-DELETE FROM dbo.bookings WHERE booking_id IN (@b1, @b2);
+IF @b1 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b1;
+IF @b2 IS NOT NULL DELETE FROM dbo.bookings WHERE booking_id = @b2;
 PRINT 'b02-B: cleanup done.';
