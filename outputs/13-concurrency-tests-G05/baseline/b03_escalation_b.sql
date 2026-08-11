@@ -14,7 +14,7 @@ DECLARE @rq INT = (SELECT user_id FROM dbo.users WHERE email = N'test13.requeste
 DECLARE @w3 DATETIME2 = (SELECT start_time FROM dbo.maintenance WHERE space_id = @s3 AND problem_description = N'TEST-13 advisory M3');
 DECLARE @b3 INT;
 
-WAITFOR DELAY '00:00:02';
+WAITFOR DELAY '00:00:01';
 INSERT INTO dbo.bookings
     (space_id, requester_id, requested_start_time, requested_end_time,
      purpose, expected_participants, status)
@@ -24,7 +24,7 @@ VALUES
 SET @b3 = SCOPE_IDENTITY();
 PRINT 'b03-B: confirmed booking ' + CAST(@b3 AS VARCHAR(12)) + ' committed while M3 was still advisory.';
 
-WAITFOR DELAY '00:00:07';   -- let A commit its escalation first
+WAITFOR DELAY '00:00:05';   -- let A commit its escalation first
 
 DECLARE @prev VARCHAR(50) = (SELECT impact_level FROM dbo.maintenance WHERE maintenance_id =
     (SELECT TOP 1 maintenance_id FROM dbo.maintenance WHERE space_id = @s3 ORDER BY maintenance_id));

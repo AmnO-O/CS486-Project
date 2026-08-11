@@ -26,16 +26,14 @@ BEGIN
     THROW 53007, N'Task 13 b03: M3 not found.', 1;
 END
 
--- Escalate inside a held transaction so B's booking insert reads
--- M3 as still advisory.
+-- Escalate inside transaction after B inserts while M3 is advisory.
+WAITFOR DELAY '00:00:03';
 BEGIN TRANSACTION;
     UPDATE dbo.maintenance
     SET impact_level = 'out-of-service'
     WHERE maintenance_id = @m3;
-    PRINT 'b03-A: escalation held uncommitted...';
-    WAITFOR DELAY '00:00:08';
+    PRINT 'b03-A: M3 escalated (out-of-service) after B committed its booking.';
 COMMIT TRANSACTION;
-PRINT 'b03-A: M3 escalated (out-of-service) after B committed its booking.';
 
 WAITFOR DELAY '00:00:04'; -- let B measure violation and delete its booking first
 
